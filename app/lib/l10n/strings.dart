@@ -41,10 +41,11 @@ class Strings {
     },
     'choose_language': {'ps': 'ژبه وټاکئ', 'fa': 'زبان را انتخاب کنید', 'en': 'Choose your language'},
     'server_missing': {
-      'ps': 'سرور نه دی ټاکل شوی. د جوړولو پر وخت SUPABASE_URL او SUPABASE_ANON_KEY ورکړئ.',
-      'fa': 'سرور تنظیم نشده. هنگام ساخت SUPABASE_URL و SUPABASE_ANON_KEY را بدهید.',
-      'en': 'No server configured. Build with SUPABASE_URL and SUPABASE_ANON_KEY.',
+      'ps': 'د سرور پته او کیلي یو ځل ولیکئ (د Supabase پروژې له Settings → API څخه).',
+      'fa': 'آدرس و کلید سرور را یک بار بنویسید (از Settings → API پروژهٔ Supabase).',
+      'en': 'Enter your server address and key once (Supabase project → Settings → API).',
     },
+    'connect': {'ps': 'وصلول', 'fa': 'اتصال', 'en': 'Connect'},
 
     // ── Auth ──────────────────────────────────────────────────────────────
     'login': {'ps': 'ننوتل', 'fa': 'ورود', 'en': 'Log in'},

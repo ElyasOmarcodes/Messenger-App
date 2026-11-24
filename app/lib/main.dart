@@ -14,6 +14,7 @@ import 'services/messenger.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await AppConfig.load();
   if (AppConfig.configured) {
     await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
   }
@@ -75,21 +76,65 @@ class _Splash extends StatelessWidget {
       );
 }
 
-class _NoServer extends StatelessWidget {
+class _NoServer extends StatefulWidget {
   const _NoServer();
+
+  @override
+  State<_NoServer> createState() => _NoServerState();
+}
+
+class _NoServerState extends State<_NoServer> {
+  final _url = TextEditingController();
+  final _key = TextEditingController();
+  bool _busy = false;
+
+  Future<void> _connect() async {
+    final url = _url.text.trim();
+    if (!url.startsWith('http') || _key.text.trim().length < 20) return;
+    setState(() => _busy = true);
+    await AppConfig.save(url, _key.text);
+    await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
+    if (!mounted) return;
+    await AppScope.read(context).init();
+  }
 
   @override
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: Brand.lapis,
         body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(32),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              const PaighamLogo(size: 96),
-              const SizedBox(height: 20),
-              Text(context.tr('server_missing'),
-                  textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6)),
-            ]),
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 460),
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                const PaighamLogo(size: 88),
+                const SizedBox(height: 16),
+                Text(context.tr('server_missing'),
+                    textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.6)),
+                const SizedBox(height: 20),
+                Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Directionality(
+                      textDirection: TextDirection.ltr,
+                      child: Column(children: [
+                        TextField(controller: _url, decoration: const InputDecoration(labelText: 'Server URL', hintText: 'https://xxxx.supabase.co')),
+                        const SizedBox(height: 12),
+                        TextField(controller: _key, decoration: const InputDecoration(labelText: 'Anon / publishable key')),
+                        const SizedBox(height: 16),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: _busy ? null : _connect,
+                            child: Text(context.tr('connect')),
+                          ),
+                        ),
+                      ]),
+                    ),
+                  ),
+                ),
+              ]),
+            ),
           ),
         ),
       );
