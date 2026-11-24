@@ -189,7 +189,7 @@ class _NewChatSheetState extends State<_NewChatSheet> {
               const SizedBox(height: 14),
               FilledButton.icon(
                 onPressed: _busy ? null : _createGroup,
-                style: FilledButton.styleFrom(backgroundColor: Brand.saffron, foregroundColor: Brand.ink),
+                style: FilledButton.styleFrom(backgroundColor: Brand.accent, foregroundColor: Colors.white),
                 icon: const Icon(Icons.check_rounded),
                 label: Text(context.tr('create')),
               ),

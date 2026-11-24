@@ -59,7 +59,7 @@ class SettingsScreen extends StatelessWidget {
             children: [
               _Tile(
                 icon: Icons.alternate_email_rounded,
-                color: Brand.saffronDeep,
+                color: Brand.accentDeep,
                 title: context.tr('username'),
                 value: me?.username != null ? '@${me!.username}' : context.tr('not_set'),
                 onTap: () => _edit(context, 'username', me?.username ?? '', (v) => app.updateProfile(username: v),

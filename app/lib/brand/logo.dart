@@ -62,7 +62,7 @@ class _LogoPainter extends CustomPainter {
 
     // Eight-pointed star
     final star = starPath(c, r * 0.62, r * 0.36, 8, rotation: math.pi / 8);
-    canvas.drawPath(star, Paint()..color = Brand.saffron);
+    canvas.drawPath(star, Paint()..color = Brand.accent);
     canvas.drawCircle(c, r * 0.16, Paint()..color = background ? Colors.white : Brand.lapis);
   }
 
@@ -100,7 +100,7 @@ class GirihWallpaper extends StatelessWidget {
       child: CustomPaint(
         painter: _WallpaperPainter(
           color: dark ? const Color(0x14FFFFFF) : const Color(0x161F3F9E),
-          accent: dark ? const Color(0x10F2A516) : const Color(0x1AF2A516),
+          accent: dark ? const Color(0x142E9BF0) : const Color(0x1A2E9BF0),
         ),
         child: child,
       ),

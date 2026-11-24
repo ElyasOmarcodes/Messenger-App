@@ -116,7 +116,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       Text(context.tr('app_name'),
                           style: const TextStyle(color: Colors.white, fontSize: 38, fontWeight: FontWeight.w800, height: 1.2)),
                       Text(context.tr('tagline'),
-                          style: const TextStyle(color: Brand.saffron, fontSize: 16, fontWeight: FontWeight.w600)),
+                          style: const TextStyle(color: Brand.accent, fontSize: 16, fontWeight: FontWeight.w600)),
                       const SizedBox(height: 28),
                       Container(
                         width: double.infinity,

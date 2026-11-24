@@ -48,8 +48,8 @@ class CallsScreen extends StatelessWidget {
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                decoration: BoxDecoration(color: Brand.saffron, borderRadius: BorderRadius.circular(20)),
-                child: Text(context.tr('coming_soon'), style: const TextStyle(color: Brand.ink, fontWeight: FontWeight.w700, fontSize: 12.5)),
+                decoration: BoxDecoration(color: Brand.accent, borderRadius: BorderRadius.circular(20)),
+                child: Text(context.tr('coming_soon'), style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12.5)),
               ),
             ],
           ),

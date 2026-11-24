@@ -11,7 +11,7 @@ class Brand {
   /// Native form (identical in Pashto and Dari).
   static const String nameNative = 'پیغام';
 
-  static const String version = '0.2.0';
+  static const String version = '0.2.1';
 
   static const String fontFamily = 'Vazirmatn';
 
@@ -22,10 +22,10 @@ class Brand {
   static const Color lapisBright = Color(0xFF3D63D6);
   static const Color lapisMist = Color(0xFFE6ECFA);
 
-  // Saffron: Herat saffron gold, used for actions and highlights.
-  static const Color saffron = Color(0xFFF2A516);
-  static const Color saffronDeep = Color(0xFFD98A00);
-  static const Color saffronMist = Color(0xFFFFF3D9);
+  // Sky blue accent: actions (send, new chat), unread badges, read ticks.
+  static const Color accent = Color(0xFF2E9BF0);
+  static const Color accentDeep = Color(0xFF1677D2);
+  static const Color accentMist = Color(0xFFE3F1FD);
 
   // Pomegranate: Kandahar red, used for errors and destructive actions.
   static const Color pomegranate = Color(0xFFC6303E);
@@ -49,7 +49,7 @@ class Brand {
   /// Avatar colours, picked by hashing a user id.
   static const List<Color> avatarColors = [
     Color(0xFF1F3F9E), // lapis
-    Color(0xFFD98A00), // saffron
+    Color(0xFFD98A00), // accent
     Color(0xFF1E8C6E), // turquoise (Nishapur/Herat tiles)
     Color(0xFFC6303E), // pomegranate
     Color(0xFF6A3FA0), // grape
@@ -76,10 +76,10 @@ class Brand {
       onPrimary: dark ? night : Colors.white,
       primaryContainer: dark ? const Color(0xFF233A80) : lapisMist,
       onPrimaryContainer: dark ? Colors.white : lapisDeep,
-      secondary: saffron,
-      onSecondary: ink,
-      secondaryContainer: dark ? const Color(0xFF4A3608) : saffronMist,
-      onSecondaryContainer: dark ? saffron : const Color(0xFF5A3A00),
+      secondary: accent,
+      onSecondary: Colors.white,
+      secondaryContainer: dark ? const Color(0xFF123A5E) : accentMist,
+      onSecondaryContainer: dark ? accent : const Color(0xFF0B4A86),
       error: pomegranate,
       surface: dark ? nightSurface : Colors.white,
       onSurface: dark ? const Color(0xFFE7EAF3) : ink,
@@ -114,8 +114,8 @@ class Brand {
         ),
       ),
       floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: saffron,
-        foregroundColor: ink,
+        backgroundColor: accent,
+        foregroundColor: Colors.white,
         elevation: 3,
       ),
       navigationBarTheme: NavigationBarThemeData(

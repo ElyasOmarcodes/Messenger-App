@@ -54,7 +54,7 @@ class _HomeScreenState extends State<HomeScreen> {
       ..showSnackBar(
         SnackBar(
           content: Text('$who: ${app.previewOf(m)}', maxLines: 2, overflow: TextOverflow.ellipsis),
-          action: SnackBarAction(label: '›', textColor: Brand.saffron, onPressed: () => _openChat(chat)),
+          action: SnackBarAction(label: '›', textColor: Brand.accent, onPressed: () => _openChat(chat)),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -97,7 +97,7 @@ class _HomeScreenState extends State<HomeScreen> {
     final unread = app.totalUnread;
     final dests = _destinations(context);
     Widget badge(Widget icon, int i) =>
-        (i == 0 && unread > 0) ? Badge(label: Text(context.digits(unread)), backgroundColor: Brand.saffron, textColor: Brand.ink, child: icon) : icon;
+        (i == 0 && unread > 0) ? Badge(label: Text(context.digits(unread)), backgroundColor: Brand.accent, textColor: Colors.white, child: icon) : icon;
 
     if (_wide) return _buildWide(app, dests, badge);
 
@@ -194,7 +194,7 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
     final app = AppScope.of(context);
     final (label, color) = app.realtimeOnline
         ? (context.tr('connected'), const Color(0xFF5BE0A6))
-        : (context.tr('connecting'), Brand.saffron);
+        : (context.tr('connecting'), Brand.accent);
     return AppBar(
       toolbarHeight: 64,
       titleSpacing: 16,
@@ -246,7 +246,7 @@ class _EmptyPane extends StatelessWidget {
               const SizedBox(height: 16),
               Text(context.tr('app_name'), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
               const SizedBox(height: 4),
-              Text(context.tr('tagline'), style: const TextStyle(fontSize: 15, color: Brand.saffronDeep, fontWeight: FontWeight.w600)),
+              Text(context.tr('tagline'), style: const TextStyle(fontSize: 15, color: Brand.accentDeep, fontWeight: FontWeight.w600)),
               const SizedBox(height: 14),
               Text(context.tr('select_chat'), style: TextStyle(color: cs.onSurfaceVariant)),
             ],

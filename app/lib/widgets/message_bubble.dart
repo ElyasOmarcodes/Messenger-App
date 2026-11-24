@@ -262,7 +262,7 @@ class _StatusIcon extends StatelessWidget {
   Widget build(BuildContext context) => switch (status) {
         MsgStatus.sending => Icon(Icons.schedule_rounded, size: 15, color: color),
         MsgStatus.sent => Icon(Icons.done_rounded, size: 16, color: color),
-        MsgStatus.read => const Icon(Icons.done_all_rounded, size: 16, color: Brand.saffronDeep),
+        MsgStatus.read => const Icon(Icons.done_all_rounded, size: 16, color: Brand.accentDeep),
         MsgStatus.failed => const Icon(Icons.error_outline_rounded, size: 16, color: Brand.pomegranate),
       };
 }

@@ -11,7 +11,7 @@ The name is a working name. To change it, edit `app/lib/brand/brand.dart` (`name
 ## Story
 
 - **Lapis lazuli blue**: the deep blue stone mined in Badakhshan for 6,000 years. Our main colour.
-- **Saffron gold**: Herat saffron. Used for actions (send button, new chat), unread badges and read ticks.
+- **Sky blue**: the accent for actions (send button, new chat), unread badges and read ticks. The whole brand is blue.
 - **Eight-pointed star**: the geometric star of Afghan tile work, from the Blue Mosque in Mazar to the Herat Friday Mosque. It sits inside the speech bubble in the logo and forms the chat wallpaper.
 
 The palette deliberately avoids flag colours so the app stays neutral for every Afghan.
@@ -24,8 +24,8 @@ The palette deliberately avoids flag colours so the app stays neutral for every 
 | Lapis deep | `#142A6B` | Gradients, dark accents |
 | Lapis bright | `#3D63D6` | Gradient highlight |
 | Lapis mist | `#E6ECFA` | Selected items, outgoing bubble tint |
-| Saffron | `#F2A516` | Send button, FAB, unread badges |
-| Saffron deep | `#D98A00` | Read ticks, highlighted times |
+| Sky blue (accent) | `#2E9BF0` | Send button, FAB, unread badges, star in logo |
+| Accent deep | `#1677D2` | Read ticks, highlighted times |
 | Pomegranate | `#C6303E` | Errors, delete |
 | Turquoise | `#1E8C6E` | Prayer times, bot avatar |
 | Ink | `#141A2E` | Text |

@@ -133,7 +133,7 @@ class ChatTile extends StatelessWidget {
                             chatListTime(last.createdAt, context.lang, s),
                             style: TextStyle(
                               fontSize: 12,
-                              color: chat.unread > 0 ? Brand.saffronDeep : cs.onSurfaceVariant,
+                              color: chat.unread > 0 ? Brand.accentDeep : cs.onSurfaceVariant,
                               fontWeight: chat.unread > 0 ? FontWeight.w700 : FontWeight.w400,
                             ),
                           ),
@@ -144,7 +144,7 @@ class ChatTile extends StatelessWidget {
                       children: [
                         if (mine) ...[
                           Icon(read ? Icons.done_all_rounded : Icons.done_rounded,
-                              size: 16, color: read ? Brand.saffronDeep : cs.onSurfaceVariant),
+                              size: 16, color: read ? Brand.accentDeep : cs.onSurfaceVariant),
                           const SizedBox(width: 3),
                         ],
                         Expanded(
@@ -156,10 +156,10 @@ class ChatTile extends StatelessWidget {
                             margin: const EdgeInsetsDirectional.only(start: 6),
                             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 1),
                             constraints: const BoxConstraints(minWidth: 22),
-                            decoration: BoxDecoration(color: Brand.saffron, borderRadius: BorderRadius.circular(12)),
+                            decoration: BoxDecoration(color: Brand.accent, borderRadius: BorderRadius.circular(12)),
                             child: Text(context.digits(chat.unread),
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Brand.ink)),
+                                style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white)),
                           ),
                       ],
                     ),
