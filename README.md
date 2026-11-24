@@ -14,6 +14,9 @@
 - **خلک موندل** د ایمیل یا @کارن‌نوم له لارې، او ورسره چټ پیل کول.
 - **پیغامونه، انځورونه او فایلونه** (PDF، Word، Excel، ZIP، غږ، ویډیو… تر ۵۰ MB).
 - **ډلې** جوړول او غړي ورزیاتول.
+- **غږیز پیغامونه، ځواب (reply)، د ټولو لپاره ړنګول، د پروفایل انځور.**
+- **غږیز او ویډیويي زنګونه** (WebRTC).
+- د ټلګرام په څېر ډیزاین، **شپې بڼه (night mode)**، او لاندې تیرېدونکې مېنو.
 - **ژر رسېدل** (realtime)، او ✓ لېږل شوی / ✓✓ لوستل شوی نښې.
 - په هره وسیله ننوځئ، ټول پیغامونه مو هلته وي.
 - پښتو، دری او انګلیسي؛ روښانه او تیاره بڼه؛ لمریز کلیز.
@@ -31,17 +34,25 @@
 
 ## Screenshots
 
-| Welcome | Sign up | Email code | Find by email |
+| Welcome | Email | New account | Email code |
 |---|---|---|---|
-| <img src="docs/screenshots/01_welcome.png" width="190"> | <img src="docs/screenshots/02_signup.png" width="190"> | <img src="docs/screenshots/03_email_code.png" width="190"> | <img src="docs/screenshots/05_find_by_email.png" width="190"> |
+| <img src="docs/screenshots/01_welcome.png" width="190"> | <img src="docs/screenshots/02_email.png" width="190"> | <img src="docs/screenshots/03_your_info.png" width="190"> | <img src="docs/screenshots/04_code.png" width="190"> |
 
-| Photo + PDF sent | Incoming (Dari) | Received, replied | Read ticks |
+| Chats (light) | Chats (night) | Chat (night) | Chat (light) |
 |---|---|---|---|
-| <img src="docs/screenshots/06_sent_photo_file.png" width="190"> | <img src="docs/screenshots/07_incoming_dari.png" width="190"> | <img src="docs/screenshots/08_chat_dari_received.png" width="190"> | <img src="docs/screenshots/09_chat_read_ticks.png" width="190"> |
+| <img src="docs/screenshots/11_chats_light.png" width="190"> | <img src="docs/screenshots/07_chats_dark.png" width="190"> | <img src="docs/screenshots/08_chat_dark.png" width="190"> | <img src="docs/screenshots/09_chat_light.png" width="190"> |
 
-**Same account logged in on a computer — full history synced:**
+| Profile | My profile (night) | Settings | Contacts & calls |
+|---|---|---|---|
+| <img src="docs/screenshots/10_user_profile.png" width="190"> | <img src="docs/screenshots/05_my_profile_dark.png" width="190"> | <img src="docs/screenshots/12_settings.png" width="190"> | <img src="docs/screenshots/13_contacts.png" width="190"> |
 
-<img src="docs/screenshots/10_desktop_login_chat.png" width="820">
+| Voice note & reply | Deleted message | Incoming call | Video call |
+|---|---|---|---|
+| <img src="docs/screenshots/v3_14_voice_and_reply.png" width="190"> | <img src="docs/screenshots/v3_16_deleted_seen_by_other.png" width="190"> | <img src="docs/screenshots/v3_18_incoming_call.png" width="190"> | <img src="docs/screenshots/v3_20_in_call_maryam.png" width="190"> |
+
+**Desktop / web (night mode):**
+
+<img src="docs/screenshots/15_desktop_dark.png" width="820">
 
 ## Architecture
 

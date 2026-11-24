@@ -6,7 +6,7 @@ plugins {
 
 android {
     namespace = "af.paigham.messenger"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 37 // required by flutter_local_notifications and androidx.core
     ndkVersion = flutter.ndkVersion
 
     compileOptions {

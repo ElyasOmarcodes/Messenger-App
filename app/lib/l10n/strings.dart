@@ -164,7 +164,7 @@ class Strings {
     'rm_e2e': {'ps': 'له سره تر پایه کوډ کول', 'fa': 'رمزگذاری سرتاسری', 'en': 'End-to-end encryption'},
 
     // ── Settings ──────────────────────────────────────────────────────────
-    'profile': {'ps': 'پاڼه', 'fa': 'پروفایل', 'en': 'Profile'},
+    'profile': {'ps': 'پروفایل', 'fa': 'پروفایل', 'en': 'Profile'},
     'username': {'ps': 'کارن نوم', 'fa': 'نام کاربری', 'en': 'Username'},
     'username_hint': {
       'ps': 'یوازې انګلیسي توري، عدد او _ (۳ تر ۲۴)',
@@ -227,6 +227,61 @@ class Strings {
     'camera': {'ps': 'کمره', 'fa': 'دوربین', 'en': 'Camera'},
     'flip': {'ps': 'کمره اړول', 'fa': 'چرخاندن دوربین', 'en': 'Flip'},
     'end_call': {'ps': 'بندول', 'fa': 'قطع', 'en': 'End'},
+    'continue': {'ps': 'دوام', 'fa': 'ادامه', 'en': 'Continue'},
+    'notifications': {'ps': 'خبرتیاوې', 'fa': 'اعلان‌ها', 'en': 'Notifications'},
+    'notifications_body': {
+      'ps': 'کله چې اپ خلاص یا شاته وي، د نویو پیغامونو او زنګونو خبرتیا درځي. د بشپړ تړل شوي اپ لپاره خبرتیاوې (Push) د Firebase حساب سره فعالېږي.',
+      'fa': 'وقتی برنامه باز یا در پس‌زمینه است، برای پیام و تماس تازه اعلان می‌آید. اعلان برای برنامهٔ کاملاً بسته با حساب Firebase فعال می‌شود.',
+      'en': 'You get notifications for new messages and calls while the app is open or in the background. Push for a fully closed app is enabled with a Firebase account.',
+    },
+    // ── v0.4: Telegram-style screens ──────────────────────────────────────
+    'start_messaging': {'ps': 'خبرې پیل کړئ', 'fa': 'شروع گفتگو', 'en': 'Start Messaging'},
+    'welcome_points': {
+      'ps': 'ګړندي پیغامونه، انځورونه، غږیز پیغامونه او زنګونه.\nپه پښتو، دری او انګلیسي.',
+      'fa': 'پیام سریع، عکس، پیام صوتی و تماس.\nبه پشتو، دری و انگلیسی.',
+      'en': 'Fast messages, photos, voice notes and calls.\nIn Pashto, Dari and English.',
+    },
+    'your_email': {'ps': 'ستاسو ایمیل', 'fa': 'ایمیل شما', 'en': 'Your email'},
+    'your_email_sub': {
+      'ps': 'خپل ایمیل ولیکئ. که حساب نه لرئ، نوی به جوړ شي.',
+      'fa': 'ایمیل خود را بنویسید. اگر حساب ندارید، ساخته می‌شود.',
+      'en': "Enter your email. If you don't have an account, we'll create one.",
+    },
+    'enter_password': {'ps': 'پټنوم ولیکئ', 'fa': 'رمز را بنویسید', 'en': 'Enter your password'},
+    'enter_password_sub': {'ps': 'د {email} حساب', 'fa': 'حساب {email}', 'en': 'Account {email}'},
+    'your_info': {'ps': 'ستاسو معلومات', 'fa': 'اطلاعات شما', 'en': 'Your info'},
+    'your_info_sub': {
+      'ps': 'نوم او پټنوم ولیکئ. نوم مو ملګري ویني.',
+      'fa': 'نام و رمز را بنویسید. دوستان نام شما را می‌بینند.',
+      'en': 'Enter your name and a password. Friends will see your name.',
+    },
+    'check_email': {'ps': 'خپل ایمیل وګورئ', 'fa': 'ایمیل خود را ببینید', 'en': 'Check your email'},
+    'resend_in': {'ps': 'کوډ بیا ولېږئ ({s})', 'fa': 'ارسال دوباره ({s})', 'en': 'Resend code ({s})'},
+    'change_email': {'ps': 'ایمیل بدل کړئ', 'fa': 'تغییر ایمیل', 'en': 'Change email'},
+    'contacts': {'ps': 'اړیکې', 'fa': 'مخاطبین', 'en': 'Contacts'},
+    'profile_tab': {'ps': 'پروفایل', 'fa': 'پروفایل', 'en': 'Profile'},
+    'all': {'ps': 'ټول', 'fa': 'همه', 'en': 'All'},
+    'personal': {'ps': 'شخصي', 'fa': 'شخصی', 'en': 'Personal'},
+    'groups': {'ps': 'ډلې', 'fa': 'گروه‌ها', 'en': 'Groups'},
+    'unread': {'ps': 'نالوستي', 'fa': 'خوانده‌نشده', 'en': 'Unread'},
+    'add_contact': {'ps': 'نوې اړیکه', 'fa': 'مخاطب تازه', 'en': 'Add contact'},
+    'contacts_empty': {
+      'ps': 'هغه کسان چې ورسره خبرې کوئ دلته ښکاري.',
+      'fa': 'کسانی که با آن‌ها گفتگو می‌کنید این‌جا دیده می‌شوند.',
+      'en': 'People you chat with appear here.',
+    },
+    'info': {'ps': 'معلومات', 'fa': 'اطلاعات', 'en': 'Info'},
+    'media': {'ps': 'انځورونه', 'fa': 'عکس‌ها', 'en': 'Media'},
+    'files': {'ps': 'فایلونه', 'fa': 'فایل‌ها', 'en': 'Files'},
+    'message': {'ps': 'پیغام', 'fa': 'پیام', 'en': 'Message'},
+    'no_media': {'ps': 'تر اوسه هېڅ نشته', 'fa': 'هنوز چیزی نیست', 'en': 'Nothing here yet'},
+    'group_info': {'ps': 'د ډلې معلومات', 'fa': 'اطلاعات گروه', 'en': 'Group info'},
+    'admin': {'ps': 'مدیر', 'fa': 'مدیر', 'en': 'admin'},
+    'night_mode': {'ps': 'شپې بڼه', 'fa': 'حالت شب', 'en': 'Night mode'},
+    'appearance_sub': {'ps': 'رنګ او بڼه', 'fa': 'رنگ و نما', 'en': 'Colours and theme'},
+    'account': {'ps': 'حساب', 'fa': 'حساب', 'en': 'Account'},
+    'online_now': {'ps': 'وصل', 'fa': 'آنلاین', 'en': 'online'},
+    'tap_profile': {'ps': 'د معلوماتو لپاره کېکاږئ', 'fa': 'برای اطلاعات بزنید', 'en': 'tap for info'},
   };
 }
 

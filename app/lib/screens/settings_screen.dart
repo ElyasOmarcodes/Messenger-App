@@ -1,4 +1,3 @@
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../brand/brand.dart';
@@ -7,6 +6,7 @@ import '../config.dart';
 import '../l10n/strings.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
+import 'profile_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -16,6 +16,8 @@ class SettingsScreen extends StatelessWidget {
     final app = AppScope.of(context);
     final me = app.me;
     final cs = Theme.of(context).colorScheme;
+    final dark = app.themeMode == ThemeMode.dark ||
+        (app.themeMode == ThemeMode.system && MediaQuery.platformBrightnessOf(context) == Brightness.dark);
 
     String themeLabel(ThemeMode m) => switch (m) {
           ThemeMode.system => context.tr('theme_system'),
@@ -24,158 +26,103 @@ class SettingsScreen extends StatelessWidget {
         };
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(14, 14, 14, 28),
+      padding: const EdgeInsets.fromLTRB(12, 6, 12, 120),
       children: [
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(16),
-            child: Row(
-              children: [
-                IconButton(
-                  tooltip: context.tr('change_photo'),
-                  padding: EdgeInsets.zero,
-                  onPressed: () => _changePhoto(context, app),
-                  icon: Stack(children: [
-                    Avatar(seed: app.myId ?? '', label: me?.name ?? app.myEmail, imageUrl: me?.avatarUrl, size: 64),
-                    PositionedDirectional(
-                      bottom: 0,
-                      end: 0,
-                      child: Container(
-                        padding: const EdgeInsets.all(4),
-                        decoration: const BoxDecoration(color: Brand.accent, shape: BoxShape.circle),
-                        child: const Icon(Icons.photo_camera_rounded, size: 14, color: Colors.white),
-                      ),
-                    ),
-                  ]),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(me?.name ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-                      Directionality(
-                        textDirection: TextDirection.ltr,
-                        child: Text(app.myEmail, style: TextStyle(color: cs.onSurfaceVariant)),
-                      ),
-                    ],
-                  ),
-                ),
-                IconButton(
-                  tooltip: context.tr('edit_name'),
-                  onPressed: () => _edit(context, 'edit_name', me?.displayName ?? '', (v) => app.updateProfile(displayName: v)),
-                  icon: const Icon(Icons.edit_outlined),
-                ),
-              ],
-            ),
+        _Group(children: [
+          ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+            leading: Avatar(seed: app.myId ?? '', label: me?.name ?? app.myEmail, imageUrl: me?.avatarUrl, size: 56),
+            title: Text(me?.name ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+            subtitle: Directionality(textDirection: TextDirection.ltr, child: Text(app.myEmail, textAlign: TextAlign.start)),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen.me())),
           ),
-        ),
-        const SizedBox(height: 14),
-        Card(
-          child: Column(
-            children: [
-              _Tile(
-                icon: Icons.alternate_email_rounded,
-                color: Brand.accentDeep,
-                title: context.tr('username'),
-                value: me?.username != null ? '@${me!.username}' : context.tr('not_set'),
-                onTap: () => _edit(context, 'username', me?.username ?? '', (v) => app.updateProfile(username: v),
-                    hint: context.tr('username_hint'), ltr: true, errorKey: 'username_taken'),
-              ),
-              _Tile(
-                icon: Icons.translate_rounded,
-                color: cs.primary,
-                title: context.tr('language'),
-                value: app.lang.label,
-                onTap: () => _pick<AppLang>(context, context.tr('language'), AppLang.values, app.lang, (l) => l.label, app.setLang),
-              ),
-              _Tile(
-                icon: Icons.dark_mode_outlined,
-                color: const Color(0xFF6A3FA0),
-                title: context.tr('theme'),
-                value: themeLabel(app.themeMode),
-                onTap: () => _pick<ThemeMode>(context, context.tr('theme'), ThemeMode.values, app.themeMode, themeLabel, app.setTheme),
-              ),
-              _Tile(
-                icon: Icons.shield_outlined,
-                color: const Color(0xFF1E8C6E),
-                title: context.tr('privacy'),
-                onTap: () => _info(context, context.tr('privacy'), context.tr('privacy_body')),
-              ),
-              _Tile(
-                icon: Icons.dns_outlined,
-                color: const Color(0xFF0F7FA8),
-                title: context.tr('server'),
-                value: Uri.parse(AppConfig.supabaseUrl).host,
-                onTap: () {},
-              ),
-            ],
+        ]),
+        _Header(context.tr('appearance_sub')),
+        _Group(children: [
+          SwitchListTile(
+            secondary: const _Ico(Icons.dark_mode_rounded, Color(0xFF5B6BF5)),
+            title: Text(context.tr('night_mode'), style: const TextStyle(fontWeight: FontWeight.w600)),
+            value: dark,
+            onChanged: (v) => app.setTheme(v ? ThemeMode.dark : ThemeMode.light),
           ),
-        ),
-        const SizedBox(height: 14),
-        Card(
-          child: Column(
-            children: [
-              _Tile(
-                icon: Icons.info_outline_rounded,
-                color: cs.primary,
-                title: context.tr('about'),
-                value: '${context.digits(Brand.version)} · ${context.tr('prototype')}',
-                onTap: () {},
-              ),
-              _Tile(
-                icon: Icons.logout_rounded,
-                color: Brand.pomegranate,
-                title: context.tr('logout'),
-                danger: true,
-                onTap: () async {
-                  final ok = await showDialog<bool>(
-                    context: context,
-                    builder: (d) => AlertDialog(
-                      content: Text(d.tr('logout_q')),
-                      actions: [
-                        TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-                        TextButton(
-                            onPressed: () => Navigator.pop(d, true),
-                            child: Text(d.tr('logout'), style: const TextStyle(color: Brand.pomegranate))),
-                      ],
-                    ),
-                  );
-                  if (ok == true) await app.signOut();
-                },
-              ),
-            ],
+          _Tile(
+            icon: Icons.brightness_auto_rounded,
+            color: const Color(0xFF8E6CEF),
+            title: context.tr('theme'),
+            value: themeLabel(app.themeMode),
+            onTap: () => _pick<ThemeMode>(context, context.tr('theme'), ThemeMode.values, app.themeMode, themeLabel, app.setTheme),
           ),
-        ),
-        const SizedBox(height: 24),
+          _Tile(
+            icon: Icons.translate_rounded,
+            color: const Color(0xFF3390EC),
+            title: context.tr('language'),
+            value: app.lang.label,
+            onTap: () => _pick<AppLang>(context, context.tr('language'), AppLang.values, app.lang, (l) => l.label, app.setLang),
+          ),
+        ]),
+        _Header(context.tr('account')),
+        _Group(children: [
+          _Tile(
+            icon: Icons.notifications_rounded,
+            color: const Color(0xFFF0544C),
+            title: context.tr('notifications'),
+            onTap: () => _info(context, context.tr('notifications'), context.tr('notifications_body')),
+          ),
+          _Tile(
+            icon: Icons.lock_rounded,
+            color: const Color(0xFF31B545),
+            title: context.tr('privacy'),
+            onTap: () => _info(context, context.tr('privacy'), context.tr('privacy_body')),
+          ),
+          _Tile(
+            icon: Icons.dns_rounded,
+            color: const Color(0xFF2AA3C8),
+            title: context.tr('server'),
+            value: Uri.tryParse(AppConfig.supabaseUrl)?.host.split('.').first ?? '',
+            onTap: () {},
+          ),
+        ]),
+        _Header(context.tr('about')),
+        _Group(children: [
+          _Tile(
+            icon: Icons.info_rounded,
+            color: const Color(0xFF3390EC),
+            title: context.tr('about'),
+            value: context.digits(Brand.version),
+            onTap: () {},
+          ),
+          _Tile(
+            icon: Icons.logout_rounded,
+            color: Brand.pomegranate,
+            title: context.tr('logout'),
+            danger: true,
+            onTap: () async {
+              final ok = await showDialog<bool>(
+                context: context,
+                builder: (d) => AlertDialog(
+                  content: Text(d.tr('logout_q')),
+                  actions: [
+                    TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+                    TextButton(onPressed: () => Navigator.pop(d, true), child: Text(d.tr('logout'), style: const TextStyle(color: Brand.pomegranate))),
+                  ],
+                ),
+              );
+              if (ok == true) await app.signOut();
+            },
+          ),
+        ]),
+        const SizedBox(height: 22),
         Center(
-          child: Column(
-            children: [
-              const PaighamLogo(size: 40, background: false),
-              const SizedBox(height: 6),
-              Text('${context.tr('app_name')} ${context.digits(Brand.version)}',
-                  style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
-              Text(context.tr('made_for'), style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
-            ],
-          ),
+          child: Column(children: [
+            const PaighamLogo(size: 44),
+            const SizedBox(height: 8),
+            Text('${context.tr('app_name')} ${context.digits(Brand.version)}', style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
+            Text(context.tr('made_for'), style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
+          ]),
         ),
       ],
     );
-  }
-
-  Future<void> _changePhoto(BuildContext context, AppController app) async {
-    final files = await FilePicker.pickFiles(type: FileType.image);
-    if (files.isEmpty) return;
-    final f = files.first;
-    final size = await f.length();
-    if (size != null && size > 5 * 1024 * 1024) {
-      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('photo_too_big'))));
-      return;
-    }
-    final ok = await app.uploadAvatar(f.name, await f.readAsBytes());
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('err_generic'))));
-    }
   }
 
   Future<void> _pick<T>(BuildContext context, String title, List<T> values, T current, String Function(T) label, void Function(T) onPick) async {
@@ -184,41 +131,17 @@ class SettingsScreen extends StatelessWidget {
       builder: (ctx) => SimpleDialog(
         title: Text(title),
         children: [
-          for (final x in values)
-            ListTile(
-              leading: Icon(x == current ? Icons.radio_button_checked_rounded : Icons.radio_button_off_rounded,
-                  color: x == current ? Theme.of(ctx).colorScheme.primary : null),
-              title: Text(label(x)),
-              onTap: () => Navigator.pop(ctx, x),
-            ),
+          RadioGroup<T>(
+            groupValue: current,
+            onChanged: (v) => Navigator.pop(ctx, v),
+            child: Column(children: [
+              for (final x in values) RadioListTile<T>(value: x, title: Text(label(x))),
+            ]),
+          ),
         ],
       ),
     );
     if (v != null) onPick(v);
-  }
-
-  Future<void> _edit(BuildContext context, String titleKey, String initial, Future<bool> Function(String) save,
-      {String? hint, bool ltr = false, String errorKey = 'err_generic'}) async {
-    final c = TextEditingController(text: initial);
-    final v = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(ctx.tr(titleKey)),
-        content: Directionality(
-          textDirection: ltr ? TextDirection.ltr : Directionality.of(ctx),
-          child: TextField(controller: c, autofocus: true, maxLength: 40, decoration: InputDecoration(helperText: hint, helperMaxLines: 2)),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('cancel'))),
-          TextButton(onPressed: () => Navigator.pop(ctx, c.text), child: Text(ctx.tr('save'))),
-        ],
-      ),
-    );
-    if (v == null) return;
-    final ok = await save(v);
-    if (!ok && context.mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr(errorKey))));
-    }
   }
 
   void _info(BuildContext context, String title, String body) => showDialog<void>(
@@ -228,6 +151,43 @@ class SettingsScreen extends StatelessWidget {
           content: Text(body, style: const TextStyle(height: 1.6)),
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('ok')))],
         ),
+      );
+}
+
+class _Header extends StatelessWidget {
+  const _Header(this.text);
+  final String text;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(18, 18, 18, 8),
+        child: Text(text, style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700, fontSize: 14)),
+      );
+}
+
+class _Group extends StatelessWidget {
+  const _Group({required this.children});
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) => Card(
+        color: Theme.of(context).colorScheme.surfaceContainerLow,
+        clipBehavior: Clip.antiAlias,
+        child: Column(children: children),
+      );
+}
+
+class _Ico extends StatelessWidget {
+  const _Ico(this.icon, this.color);
+  final IconData icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: 34,
+        height: 34,
+        decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
+        child: Icon(icon, color: Colors.white, size: 20),
       );
 }
 
@@ -245,20 +205,15 @@ class _Tile extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     return ListTile(
       onTap: onTap,
-      leading: Container(
-        width: 36,
-        height: 36,
-        decoration: BoxDecoration(color: color.withValues(alpha: 0.12), borderRadius: BorderRadius.circular(10)),
-        child: Icon(icon, color: color, size: 20),
-      ),
+      leading: _Ico(icon, color),
       title: Text(title, style: TextStyle(fontWeight: FontWeight.w600, color: danger ? Brand.pomegranate : null)),
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           if (value != null)
             ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 170),
-              child: Text(value!, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13.5)),
+              constraints: const BoxConstraints(maxWidth: 150),
+              child: Text(value!, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14)),
             ),
           const SizedBox(width: 4),
           Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),

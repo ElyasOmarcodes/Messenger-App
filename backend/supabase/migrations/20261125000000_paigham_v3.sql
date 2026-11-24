@@ -124,3 +124,13 @@ language sql stable security definer set search_path = public as $$
   ) x;
 $$;
 revoke execute on function public.my_calls from anon;
+
+-- ── Sign-in flow: is this email new, waiting for its code, or active? ──────
+create or replace function public.email_status(e text) returns text
+language sql stable security definer set search_path = public, auth as $$
+  select coalesce(
+    (select case when u.email_confirmed_at is null then 'unconfirmed' else 'active' end
+       from auth.users u where lower(u.email) = lower(trim(e)) limit 1),
+    'new');
+$$;
+grant execute on function public.email_status(text) to anon, authenticated;

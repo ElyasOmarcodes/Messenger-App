@@ -40,3 +40,19 @@ widgets/                  Avatar, message bubble (text, photo, file)
 2. **Next:** push notifications (FCM / APNs), voice notes, message delete/edit/reply, profile photos, online status.
 3. **Then:** voice/video calls (WebRTC + own TURN server), end-to-end encryption, channels.
 4. **Own server:** self-host Supabase (Docker) in our data centre, custom SMTP, then Play Store / App Store.
+
+## Database updates
+
+Run each file in `backend/supabase/migrations/` once, in order, in the Supabase SQL Editor:
+
+1. `20261124000000_paigham_core.sql`: accounts, chats, messages, files
+2. `20261125000000_paigham_v3.sql`: profile photos, replies, delete, voice notes, calls, sign-in check (`email_status`)
+
+## Calls behind mobile networks
+
+Calls connect directly between phones using free STUN servers. On some mobile networks (carrier-grade NAT) a direct path is impossible and a TURN relay is needed. When we have our own server, install `coturn` on it and build with
+`--dart-define=TURN_URL=turn:turn.example.af:3478 --dart-define=TURN_USER=... --dart-define=TURN_PASS=...`.
+
+## Push notifications to a closed app
+
+Notifications currently work while the app is open or in the background. Waking a fully closed app requires Firebase Cloud Messaging (Android) and APNs (iPhone). This needs a Firebase project owned by the Paigham team; once created, add `google-services.json` and a small Supabase Edge Function that sends a push when a message is inserted.

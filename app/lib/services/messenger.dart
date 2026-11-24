@@ -20,7 +20,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   bool ready = false;
 
   AppLang lang = AppLang.ps;
-  ThemeMode themeMode = ThemeMode.light;
+  ThemeMode themeMode = ThemeMode.system;
 
   SupabaseClient get _sb => Supabase.instance.client;
   Session? get session => AppConfig.configured ? _sb.auth.currentSession : null;
@@ -59,7 +59,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     avatarBaseUrl = '${AppConfig.supabaseUrl}/storage/v1/object/public/avatars';
     _prefs = await SharedPreferences.getInstance();
     lang = AppLang.fromCode(_prefs.getString('lang'));
-    themeMode = ThemeMode.values.byName(_prefs.getString('theme') ?? 'light');
+    themeMode = ThemeMode.values.byName(_prefs.getString('theme') ?? 'system');
     if (AppConfig.configured) {
       _authSub = _sb.auth.onAuthStateChange.listen((st) {
         if (st.event == AuthChangeEvent.signedIn || st.event == AuthChangeEvent.initialSession) {
@@ -96,6 +96,15 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       return 'err_network';
     }
     return 'err_generic';
+  }
+
+  /// 'new', 'unconfirmed' or 'active' (decides which sign-in page comes next).
+  Future<String?> emailStatus(String email) async {
+    try {
+      return await _sb.rpc('email_status', params: {'e': email.trim().toLowerCase()}) as String;
+    } catch (e) {
+      return null;
+    }
   }
 
   /// Creates the account; the server emails a 6-digit code.

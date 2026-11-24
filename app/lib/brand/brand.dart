@@ -5,57 +5,55 @@ import 'package:flutter/material.dart';
 class Brand {
   Brand._();
 
-  /// Product name. Latin form is used for store listings and file names.
   static const String nameLatin = 'Paigham';
-
-  /// Native form (identical in Pashto and Dari).
   static const String nameNative = 'پیغام';
-
-  static const String version = '0.3.0';
-
+  static const String version = '0.4.0';
   static const String fontFamily = 'Vazirmatn';
 
-  // ── Core palette ──────────────────────────────────────────────────────────
-  // Lapis lazuli: the deep blue stone mined in Badakhshan for 6,000 years.
-  static const Color lapis = Color(0xFF1F3F9E);
-  static const Color lapisDeep = Color(0xFF142A6B);
-  static const Color lapisBright = Color(0xFF3D63D6);
-  static const Color lapisMist = Color(0xFFE6ECFA);
+  // ── Paigham Blue ─────────────────────────────────────────────────────────
+  static const Color blue = Color(0xFF3390EC); // primary: buttons, links, unread badges
+  static const Color blueDeep = Color(0xFF2470C2); // pressed states, read ticks on light
+  static const Color blueBright = Color(0xFF5EB5F7); // accent on dark backgrounds
+  static const Color blueMist = Color(0xFFE5F1FD); // selected rows, chips
 
-  // Sky blue accent: actions (send, new chat), unread badges, read ticks.
-  static const Color accent = Color(0xFF2E9BF0);
-  static const Color accentDeep = Color(0xFF1677D2);
-  static const Color accentMist = Color(0xFFE3F1FD);
+  // Older names kept so every screen follows the new palette.
+  static const Color lapis = blue;
+  static const Color lapisDeep = blueDeep;
+  static const Color lapisBright = blueBright;
+  static const Color lapisMist = blueMist;
+  static const Color accent = blue;
+  static const Color accentDeep = blueDeep;
+  static const Color accentMist = blueMist;
 
-  // Pomegranate: Kandahar red, used for errors and destructive actions.
-  static const Color pomegranate = Color(0xFFC6303E);
+  static const Color pomegranate = Color(0xFFE5484D); // errors, delete, end call
+  static const Color green = Color(0xFF31B545); // online, accept call
 
-  // Neutrals
-  static const Color ink = Color(0xFF141A2E);
-  static const Color slate = Color(0xFF5B6478);
-  static const Color paper = Color(0xFFF5F7FC);
-
-  // Dark mode surfaces
-  static const Color night = Color(0xFF0C1222);
-  static const Color nightSurface = Color(0xFF141C31);
-  static const Color nightRaised = Color(0xFF1C2640);
-
-  // Chat bubbles
-  static const Color bubbleOutLight = Color(0xFFDCE5FF);
+  // ── Light theme ──────────────────────────────────────────────────────────
+  static const Color ink = Color(0xFF0F1419);
+  static const Color slate = Color(0xFF707579);
+  static const Color paper = Colors.white;
+  static const Color lightChatBg = Color(0xFFDCE7F1);
+  static const Color bubbleOutLight = Color(0xFFDDEEFE);
   static const Color bubbleInLight = Colors.white;
-  static const Color bubbleOutDark = Color(0xFF2A428C);
-  static const Color bubbleInDark = Color(0xFF1C2640);
+
+  // ── Night theme (navy, easy on the eyes) ─────────────────────────────────
+  static const Color night = Color(0xFF17212B); // page background
+  static const Color nightSurface = Color(0xFF1E2C3A); // bars, cards
+  static const Color nightRaised = Color(0xFF242F3D); // inputs, sheets
+  static const Color nightChatBg = Color(0xFF0E1621);
+  static const Color bubbleOutDark = Color(0xFF2B5278);
+  static const Color bubbleInDark = Color(0xFF182533);
 
   /// Avatar colours, picked by hashing a user id.
   static const List<Color> avatarColors = [
-    Color(0xFF1F3F9E), // lapis
-    Color(0xFFD98A00), // accent
-    Color(0xFF1E8C6E), // turquoise (Nishapur/Herat tiles)
-    Color(0xFFC6303E), // pomegranate
-    Color(0xFF6A3FA0), // grape
-    Color(0xFF0F7FA8), // Band-e-Amir blue
-    Color(0xFF8A5A2B), // walnut
-    Color(0xFF3B7D2E), // pistachio leaf
+    Color(0xFFE17076), // coral
+    Color(0xFFF5A64B), // apricot
+    Color(0xFFA695E7), // violet
+    Color(0xFF7BC862), // green
+    Color(0xFF6EC9CB), // teal
+    Color(0xFF65AADD), // sky
+    Color(0xFFEE7AAE), // pink
+    Color(0xFF5B8DEF), // blue
   ];
 
   static Color avatarColor(String seed) {
@@ -68,27 +66,30 @@ class Brand {
 
   static ThemeData theme(Brightness brightness) {
     final dark = brightness == Brightness.dark;
-    final scheme = ColorScheme.fromSeed(
-      seedColor: lapis,
-      brightness: brightness,
-    ).copyWith(
-      primary: dark ? const Color(0xFF8FA8FF) : lapis,
-      onPrimary: dark ? night : Colors.white,
-      primaryContainer: dark ? const Color(0xFF233A80) : lapisMist,
-      onPrimaryContainer: dark ? Colors.white : lapisDeep,
-      secondary: accent,
+    final bg = dark ? night : paper;
+    final surface = dark ? nightSurface : Colors.white;
+    final onSurface = dark ? const Color(0xFFF5F5F5) : ink;
+    final muted = dark ? const Color(0xFF8B9BAA) : slate;
+    final primary = dark ? blueBright : blue;
+
+    final scheme = ColorScheme.fromSeed(seedColor: blue, brightness: brightness).copyWith(
+      primary: primary,
+      onPrimary: Colors.white,
+      primaryContainer: dark ? const Color(0xFF2B5278) : blueMist,
+      onPrimaryContainer: dark ? Colors.white : blueDeep,
+      secondary: primary,
       onSecondary: Colors.white,
-      secondaryContainer: dark ? const Color(0xFF123A5E) : accentMist,
-      onSecondaryContainer: dark ? accent : const Color(0xFF0B4A86),
+      secondaryContainer: dark ? const Color(0xFF2B5278) : blueMist,
+      onSecondaryContainer: dark ? Colors.white : blueDeep,
       error: pomegranate,
-      surface: dark ? nightSurface : Colors.white,
-      onSurface: dark ? const Color(0xFFE7EAF3) : ink,
-      onSurfaceVariant: dark ? const Color(0xFFA4ACC2) : slate,
-      surfaceContainerLowest: dark ? night : paper,
-      surfaceContainerLow: dark ? nightSurface : const Color(0xFFF0F3FA),
-      surfaceContainer: dark ? nightRaised : const Color(0xFFEAEEF7),
-      surfaceContainerHigh: dark ? const Color(0xFF222D4A) : const Color(0xFFE3E8F4),
-      outlineVariant: dark ? const Color(0xFF2A3452) : const Color(0xFFDDE2EE),
+      surface: surface,
+      onSurface: onSurface,
+      onSurfaceVariant: muted,
+      surfaceContainerLowest: bg,
+      surfaceContainerLow: dark ? nightRaised : const Color(0xFFF4F4F5),
+      surfaceContainer: dark ? nightRaised : const Color(0xFFEFEFF0),
+      surfaceContainerHigh: dark ? const Color(0xFF2C3846) : const Color(0xFFE7E8EA),
+      outlineVariant: dark ? const Color(0xFF101921) : const Color(0xFFE4E6E8),
     );
 
     final base = ThemeData(
@@ -96,75 +97,87 @@ class Brand {
       colorScheme: scheme,
       brightness: brightness,
       fontFamily: fontFamily,
-      scaffoldBackgroundColor: dark ? night : paper,
+      scaffoldBackgroundColor: bg,
+      splashFactory: InkSparkle.splashFactory,
     );
 
     return base.copyWith(
       appBarTheme: AppBarTheme(
-        backgroundColor: dark ? nightSurface : lapis,
-        foregroundColor: Colors.white,
+        backgroundColor: surface,
+        foregroundColor: onSurface,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
-        scrolledUnderElevation: 0,
+        scrolledUnderElevation: 0.5,
+        shadowColor: Colors.black26,
         centerTitle: false,
-        titleTextStyle: const TextStyle(
-          fontFamily: fontFamily,
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-          color: Colors.white,
-        ),
+        titleTextStyle: TextStyle(fontFamily: fontFamily, fontSize: 20, fontWeight: FontWeight.w700, color: onSurface),
+        iconTheme: IconThemeData(color: dark ? const Color(0xFFB8C4D0) : const Color(0xFF5E6368)),
       ),
-      floatingActionButtonTheme: const FloatingActionButtonThemeData(
-        backgroundColor: accent,
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
+        backgroundColor: primary,
         foregroundColor: Colors.white,
-        elevation: 3,
-      ),
-      navigationBarTheme: NavigationBarThemeData(
-        backgroundColor: dark ? nightSurface : Colors.white,
-        indicatorColor: dark ? const Color(0xFF233A80) : lapisMist,
-        labelTextStyle: WidgetStateProperty.resolveWith(
-          (s) => TextStyle(
-            fontFamily: fontFamily,
-            fontSize: 12,
-            fontWeight: s.contains(WidgetState.selected) ? FontWeight.w700 : FontWeight.w500,
-          ),
-        ),
-      ),
-      navigationRailTheme: NavigationRailThemeData(
-        backgroundColor: dark ? nightSurface : Colors.white,
-        indicatorColor: dark ? const Color(0xFF233A80) : lapisMist,
+        elevation: 4,
+        shape: const CircleBorder(),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
-          backgroundColor: dark ? const Color(0xFF8FA8FF) : lapis,
-          foregroundColor: dark ? night : Colors.white,
-          minimumSize: const Size(64, 50),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+          backgroundColor: primary,
+          foregroundColor: Colors.white,
+          minimumSize: const Size(64, 52),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
           textStyle: const TextStyle(fontFamily: fontFamily, fontSize: 16, fontWeight: FontWeight.w700),
         ),
       ),
-      inputDecorationTheme: InputDecorationTheme(
-        filled: true,
-        fillColor: dark ? nightRaised : const Color(0xFFF0F3FA),
-        border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(14),
-          borderSide: BorderSide.none,
+      textButtonTheme: TextButtonThemeData(
+        style: TextButton.styleFrom(
+          foregroundColor: primary,
+          textStyle: const TextStyle(fontFamily: fontFamily, fontSize: 15, fontWeight: FontWeight.w600),
         ),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      ),
+      inputDecorationTheme: InputDecorationTheme(
+        filled: false,
+        labelStyle: TextStyle(color: muted),
+        floatingLabelStyle: TextStyle(color: primary),
+        border: UnderlineInputBorder(borderSide: BorderSide(color: dark ? const Color(0xFF2E3D4C) : const Color(0xFFDADCE0))),
+        enabledBorder: UnderlineInputBorder(borderSide: BorderSide(color: dark ? const Color(0xFF2E3D4C) : const Color(0xFFDADCE0))),
+        focusedBorder: UnderlineInputBorder(borderSide: BorderSide(color: primary, width: 2)),
+        contentPadding: const EdgeInsets.symmetric(vertical: 12),
       ),
       cardTheme: CardThemeData(
         elevation: 0,
-        color: dark ? nightSurface : Colors.white,
+        color: surface,
         margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(18),
-          side: BorderSide(color: scheme.outlineVariant),
-        ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       ),
-      dividerTheme: DividerThemeData(color: scheme.outlineVariant, thickness: 1, space: 1),
+      listTileTheme: ListTileThemeData(iconColor: muted),
+      dividerTheme: DividerThemeData(color: scheme.outlineVariant, thickness: 0.6, space: 0.6),
       snackBarTheme: SnackBarThemeData(
         behavior: SnackBarBehavior.floating,
-        backgroundColor: dark ? nightRaised : ink,
+        backgroundColor: dark ? nightRaised : const Color(0xE6232D36),
         contentTextStyle: const TextStyle(fontFamily: fontFamily, color: Colors.white),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+      ),
+      popupMenuTheme: PopupMenuThemeData(
+        color: dark ? nightRaised : Colors.white,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      ),
+      chipTheme: ChipThemeData(
+        shape: const StadiumBorder(),
+        side: BorderSide.none,
+        backgroundColor: dark ? nightRaised : const Color(0xFFF1F2F4),
+        selectedColor: dark ? const Color(0xFF2B5278) : blueMist,
+        labelStyle: TextStyle(fontFamily: fontFamily, color: onSurface, fontWeight: FontWeight.w600),
       ),
     );
   }

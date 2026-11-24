@@ -33,41 +33,54 @@ class _LogoPainter extends CustomPainter {
     final s = size.width;
     if (background) {
       final rect = Offset.zero & size;
-      final rrect = RRect.fromRectAndRadius(rect, Radius.circular(s * 0.24));
-      final paint = Paint()
-        ..shader = const LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Brand.lapisBright, Brand.lapis, Brand.lapisDeep],
-        ).createShader(rect);
-      canvas.drawRRect(rrect, paint);
+      canvas.drawPath(
+        squirclePath(rect),
+        Paint()
+          ..shader = const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [Color(0xFF6CC3FF), Brand.blue, Color(0xFF2468D8)],
+          ).createShader(rect),
+      );
     }
-
-    // Speech bubble
-    final bubble = Path();
-    final c = Offset(s * 0.5, s * 0.47);
-    final r = s * (background ? 0.30 : 0.40);
-    bubble.addOval(Rect.fromCircle(center: c, radius: r));
-    // tail
+    final ink = background ? Colors.white : Brand.blue;
+    final c = Offset(s * 0.5, s * 0.48);
+    final r = s * (background ? 0.27 : 0.40);
+    // Rounded speech bubble with a soft tail.
+    final bubble = Path()..addOval(Rect.fromCircle(center: c, radius: r));
     final tail = Path()
-      ..moveTo(c.dx - r * 0.62, c.dy + r * 0.55)
-      ..lineTo(c.dx - r * 0.95, c.dy + r * 1.18)
-      ..lineTo(c.dx - r * 0.05, c.dy + r * 0.92)
+      ..moveTo(c.dx - r * 0.70, c.dy + r * 0.40)
+      ..quadraticBezierTo(c.dx - r * 0.86, c.dy + r * 1.02, c.dx - r * 1.08, c.dy + r * 1.12)
+      ..quadraticBezierTo(c.dx - r * 0.46, c.dy + r * 1.12, c.dx - r * 0.10, c.dy + r * 0.90)
       ..close();
-    final full = Path.combine(PathOperation.union, bubble, tail);
+    canvas.drawPath(Path.combine(PathOperation.union, bubble, tail), Paint()..color = ink);
+    // Eight-pointed star (Afghan tile motif).
     canvas.drawPath(
-      full,
-      Paint()..color = background ? Colors.white : Brand.lapis,
+      starPath(c, r * 0.56, r * 0.32, 8, rotation: math.pi / 8),
+      Paint()..color = background ? Brand.blue : Colors.white,
     );
-
-    // Eight-pointed star
-    final star = starPath(c, r * 0.62, r * 0.36, 8, rotation: math.pi / 8);
-    canvas.drawPath(star, Paint()..color = Brand.accent);
-    canvas.drawCircle(c, r * 0.16, Paint()..color = background ? Colors.white : Brand.lapis);
   }
 
   @override
   bool shouldRepaint(covariant _LogoPainter old) => old.background != background;
+}
+
+/// Samsung One UI style "squircle" (superellipse, n = 5).
+Path squirclePath(Rect r, {double n = 5}) {
+  final path = Path();
+  final a = r.width / 2, b = r.height / 2, cx = r.center.dx, cy = r.center.dy;
+  for (var i = 0; i <= 120; i++) {
+    final t = i / 120 * 2 * math.pi;
+    final ct = math.cos(t), st = math.sin(t);
+    final x = cx + a * ct.sign * math.pow(ct.abs(), 2 / n);
+    final y = cy + b * st.sign * math.pow(st.abs(), 2 / n);
+    if (i == 0) {
+      path.moveTo(x, y);
+    } else {
+      path.lineTo(x, y);
+    }
+  }
+  return path..close();
 }
 
 Path starPath(Offset c, double outer, double inner, int points, {double rotation = 0}) {
@@ -96,10 +109,12 @@ class GirihWallpaper extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     return Container(
-      color: dark ? const Color(0xFF0A1020) : const Color(0xFFE9EEF8),
+      clipBehavior: Clip.hardEdge,
+      decoration: BoxDecoration(color: dark ? Brand.nightChatBg : Brand.lightChatBg),
       child: CustomPaint(
+        willChange: false,
         painter: _WallpaperPainter(
-          color: dark ? const Color(0x14FFFFFF) : const Color(0x161F3F9E),
+          color: dark ? const Color(0x0FFFFFFF) : const Color(0x1A3390EC),
           accent: dark ? const Color(0x142E9BF0) : const Color(0x1A2E9BF0),
         ),
         child: child,

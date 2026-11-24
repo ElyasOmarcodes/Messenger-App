@@ -18,6 +18,7 @@ import '../widgets/message_bubble.dart';
 import '../services/voice_io.dart';
 import 'call_screen.dart';
 import 'new_chat_sheet.dart';
+import 'profile_screen.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key, required this.chatId, this.embedded = false});
@@ -122,6 +123,17 @@ class _ChatScreenState extends State<ChatScreen> {
       durationMs: ms,
       ext: _recExt,
       replyTo: reply,
+    );
+  }
+
+  void _openInfo(AppController app, Chat chat) {
+    final peer = chat.isGroup ? null : chat.peer(app.myId ?? '');
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => chat.isGroup
+            ? ProfileScreen.group(chatId: chat.id)
+            : ProfileScreen.user(profile: peer!, chatId: chat.id),
+      ),
     );
   }
 
@@ -262,47 +274,51 @@ class _ChatScreenState extends State<ChatScreen> {
         automaticallyImplyLeading: !widget.embedded,
         titleSpacing: widget.embedded ? 16 : 0,
         toolbarHeight: 62,
-        title: Row(
-          children: [
-            Avatar(
-              seed: chat.isGroup
-                  ? chat.id
-                  : (chat.peer(app.myId ?? '')?.id ?? chat.id),
-              label: title,
-              group: chat.isGroup,
-              imageUrl: chat.isGroup
-                  ? null
-                  : chat.peer(app.myId ?? '')?.avatarUrl,
-              size: 40,
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 17,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                  Text(
-                    _subtitle(app, chat),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w400,
-                      color: Color(0xCCFFFFFF),
-                    ),
-                  ),
-                ],
+        title: InkWell(
+          borderRadius: BorderRadius.circular(12),
+          onTap: () => _openInfo(app, chat),
+          child: Row(
+            children: [
+              Avatar(
+                seed: chat.isGroup
+                    ? chat.id
+                    : (chat.peer(app.myId ?? '')?.id ?? chat.id),
+                label: title,
+                group: chat.isGroup,
+                imageUrl: chat.isGroup
+                    ? null
+                    : chat.peer(app.myId ?? '')?.avatarUrl,
+                size: 40,
               ),
-            ),
-          ],
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    Text(
+                      _subtitle(app, chat),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w400,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           if (!chat.isGroup) ...[
