@@ -1,12 +1,26 @@
 import 'dart:typed_data';
 
+/// Public URL of a profile photo in the "avatars" bucket (set at startup).
+String avatarBaseUrl = '';
+
 class Profile {
-  Profile({required this.id, required this.email, required this.displayName, this.username, this.lastReadAt, this.role});
+  Profile({
+    required this.id,
+    required this.email,
+    required this.displayName,
+    this.username,
+    this.avatarPath,
+    this.lastReadAt,
+    this.role,
+  });
 
   final String id;
   final String email;
   final String displayName;
   final String? username;
+  final String? avatarPath;
+
+  String? get avatarUrl => avatarPath == null ? null : '$avatarBaseUrl/$avatarPath';
   final DateTime? lastReadAt; // only set inside a chat's member list
   final String? role;
 
@@ -17,12 +31,13 @@ class Profile {
         email: (j['email'] as String?) ?? '',
         displayName: (j['display_name'] as String?) ?? '',
         username: j['username'] as String?,
+        avatarPath: j['avatar_path'] as String?,
         lastReadAt: j['last_read_at'] == null ? null : DateTime.parse(j['last_read_at'] as String).toLocal(),
         role: j['role'] as String?,
       );
 }
 
-enum MsgKind { text, image, file }
+enum MsgKind { text, image, file, voice }
 
 enum MsgStatus { sending, sent, read, failed }
 
@@ -38,6 +53,9 @@ class Message {
     this.fileName,
     this.fileSize,
     this.mimeType,
+    this.replyTo,
+    this.deletedAt,
+    this.durationMs,
     this.localBytes,
     this.pending = false,
     this.failed = false,
@@ -53,6 +71,11 @@ class Message {
   final String? fileName;
   final int? fileSize;
   final String? mimeType;
+  final String? replyTo;
+  final DateTime? deletedAt;
+  final int? durationMs;
+
+  bool get deleted => deletedAt != null;
 
   /// Bytes of a file we are uploading (shown before the upload finishes).
   final Uint8List? localBytes;
@@ -70,7 +93,54 @@ class Message {
         fileName: j['file_name'] as String?,
         fileSize: (j['file_size'] as num?)?.toInt(),
         mimeType: j['mime_type'] as String?,
+        replyTo: j['reply_to'] as String?,
+        deletedAt: j['deleted_at'] == null ? null : DateTime.parse(j['deleted_at'] as String).toLocal(),
+        durationMs: (j['duration_ms'] as num?)?.toInt(),
       );
+}
+
+class CallRecord {
+  CallRecord({
+    required this.id,
+    required this.chatId,
+    required this.video,
+    required this.status,
+    required this.outgoing,
+    required this.peerName,
+    this.peerAvatar,
+    required this.peerId,
+    required this.createdAt,
+    this.answeredAt,
+    this.endedAt,
+  });
+
+  final String id, chatId, status, peerName, peerId;
+  final String? peerAvatar;
+  final bool video, outgoing;
+  final DateTime createdAt;
+  final DateTime? answeredAt, endedAt;
+
+  Duration? get duration => (answeredAt != null && endedAt != null) ? endedAt!.difference(answeredAt!) : null;
+
+  static DateTime? _t(Object? v) => v == null ? null : DateTime.parse(v as String).toLocal();
+
+  factory CallRecord.fromJson(Map<String, dynamic> j) {
+    final outgoing = j['outgoing'] as bool;
+    final name = (j['peer_name'] as String?) ?? '';
+    return CallRecord(
+      id: j['id'] as String,
+      chatId: j['chat_id'] as String,
+      video: j['video'] as bool,
+      status: j['status'] as String,
+      outgoing: outgoing,
+      peerName: name.isEmpty ? ((j['peer_email'] as String?) ?? '').split('@').first : name,
+      peerAvatar: j['peer_avatar'] as String?,
+      peerId: (outgoing ? j['callee_id'] : j['caller_id']) as String,
+      createdAt: _t(j['created_at'])!,
+      answeredAt: _t(j['answered_at']),
+      endedAt: _t(j['ended_at']),
+    );
+  }
 }
 
 class Chat {

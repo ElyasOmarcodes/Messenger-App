@@ -116,7 +116,13 @@ class ChatTile extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
           child: Row(
             children: [
-              Avatar(seed: chat.isGroup ? chat.id : (chat.peer(app.myId ?? '')?.id ?? chat.id), label: title, group: chat.isGroup, size: 54),
+              Avatar(
+                seed: chat.isGroup ? chat.id : (chat.peer(app.myId ?? '')?.id ?? chat.id),
+                label: title,
+                group: chat.isGroup,
+                imageUrl: chat.isGroup ? null : chat.peer(app.myId ?? '')?.avatarUrl,
+                size: 54,
+              ),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(

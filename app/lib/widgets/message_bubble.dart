@@ -1,3 +1,6 @@
+import 'dart:async';
+
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -22,7 +25,7 @@ TextDirection textDirOf(String s, TextDirection fallback) {
 }
 
 class MessageBubble extends StatelessWidget {
-  const MessageBubble({super.key, required this.chat, required this.message, this.senderName, this.tail = true});
+  const MessageBubble({super.key, required this.chat, required this.message, this.senderName, this.tail = true, this.onReply});
 
   final Chat chat;
   final Message message;
@@ -30,6 +33,7 @@ class MessageBubble extends StatelessWidget {
   /// Shown above the first message of a run in groups.
   final String? senderName;
   final bool tail;
+  final void Function(Message)? onReply;
 
   @override
   Widget build(BuildContext context) {
@@ -57,12 +61,8 @@ class MessageBubble extends StatelessWidget {
     return Align(
       alignment: out ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
       child: GestureDetector(
-        onLongPress: m.body.isEmpty
-            ? null
-            : () {
-                Clipboard.setData(ClipboardData(text: m.body));
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('copied'))));
-              },
+        onLongPress: m.deleted || m.pending ? null : () => _menu(context, app, out),
+        onSecondaryTap: m.deleted || m.pending ? null : () => _menu(context, app, out),
         onTap: m.failed ? () => app.retry(chat, m) : null,
         child: Container(
           margin: EdgeInsets.only(top: tail ? 6 : 2),
@@ -88,6 +88,20 @@ class MessageBubble extends StatelessWidget {
                   child: Text(senderName!,
                       style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: Brand.avatarColor(m.senderId))),
                 ),
+              if (m.replyTo != null && !m.deleted) _ReplyQuote(chat: chat, id: m.replyTo!),
+              if (m.deleted)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    Icon(Icons.block_rounded, size: 16, color: metaColor),
+                    const SizedBox(width: 6),
+                    Text(context.tr('deleted'), style: TextStyle(fontStyle: FontStyle.italic, color: metaColor)),
+                    const SizedBox(width: 10),
+                    meta,
+                  ]),
+                )
+              else ...[
+              if (m.kind == MsgKind.voice) VoicePlayer(message: m, color: fg, meta: metaColor),
               if (isImage) _ImageContent(message: m),
               if (m.kind == MsgKind.file) _FileContent(message: m, color: fg, meta: metaColor),
               if (m.body.isNotEmpty || m.kind == MsgKind.text)
@@ -108,6 +122,7 @@ class MessageBubble extends StatelessWidget {
                   padding: EdgeInsets.fromLTRB(8, 4, 8, isImage ? 2 : 0),
                   child: Align(alignment: AlignmentDirectional.centerEnd, child: meta),
                 ),
+              ],
               if (m.failed)
                 Padding(
                   padding: const EdgeInsets.only(top: 4),
@@ -116,6 +131,208 @@ class MessageBubble extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+extension on MessageBubble {
+  void _menu(BuildContext context, AppController app, bool out) {
+    final m = message;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (onReply != null)
+              ListTile(
+                leading: const Icon(Icons.reply_rounded),
+                title: Text(ctx.tr('reply')),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  onReply!(m);
+                },
+              ),
+            if (m.body.isNotEmpty)
+              ListTile(
+                leading: const Icon(Icons.copy_rounded),
+                title: Text(ctx.tr('copy')),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Clipboard.setData(ClipboardData(text: m.body));
+                  ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('copied'))));
+                },
+              ),
+            if (out && !m.failed)
+              ListTile(
+                leading: const Icon(Icons.delete_outline_rounded, color: Brand.pomegranate),
+                title: Text(ctx.tr('delete'), style: const TextStyle(color: Brand.pomegranate)),
+                onTap: () async {
+                  Navigator.pop(ctx);
+                  final ok = await showDialog<bool>(
+                    context: context,
+                    builder: (d) => AlertDialog(
+                      content: Text(d.tr('delete_q')),
+                      actions: [
+                        TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+                        TextButton(onPressed: () => Navigator.pop(d, true), child: Text(d.tr('delete'), style: const TextStyle(color: Brand.pomegranate))),
+                      ],
+                    ),
+                  );
+                  if (ok == true) await app.deleteMessage(chat, m);
+                },
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Small quoted block above a reply.
+class _ReplyQuote extends StatelessWidget {
+  const _ReplyQuote({required this.chat, required this.id});
+  final Chat chat;
+  final String id;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final q = app.messageById(chat.id, id);
+    final who = q == null ? '' : (q.senderId == app.myId ? context.tr('you') : (app.memberById(chat, q.senderId)?.name ?? ''));
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsetsDirectional.fromSTEB(10, 6, 10, 6),
+      decoration: BoxDecoration(
+        color: Brand.accent.withValues(alpha: 0.10),
+        borderRadius: BorderRadius.circular(10),
+        border: const BorderDirectional(start: BorderSide(color: Brand.accent, width: 3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(who, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w700, color: Brand.accentDeep)),
+          Text(q == null ? '…' : app.previewOf(q), maxLines: 2, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 13)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Play/pause button with a progress bar for voice notes.
+class VoicePlayer extends StatefulWidget {
+  const VoicePlayer({super.key, required this.message, required this.color, required this.meta});
+  final Message message;
+  final Color color;
+  final Color meta;
+
+  @override
+  State<VoicePlayer> createState() => _VoicePlayerState();
+}
+
+class _VoicePlayerState extends State<VoicePlayer> {
+  final _player = AudioPlayer();
+  final List<StreamSubscription<dynamic>> _subs = [];
+  Duration _pos = Duration.zero;
+  Duration? _dur;
+  bool _playing = false;
+  bool _loading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final ms = widget.message.durationMs;
+    if (ms != null) _dur = Duration(milliseconds: ms);
+    _subs.add(_player.onPositionChanged.listen((p) => setState(() => _pos = p)));
+    _subs.add(_player.onDurationChanged.listen((d) => setState(() => _dur = d)));
+    _subs.add(_player.onPlayerComplete.listen((_) => setState(() {
+          _playing = false;
+          _pos = Duration.zero;
+        })));
+  }
+
+  @override
+  void dispose() {
+    for (final s in _subs) {
+      s.cancel();
+    }
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _toggle() async {
+    if (_playing) {
+      await _player.pause();
+      setState(() => _playing = false);
+      return;
+    }
+    final m = widget.message;
+    setState(() => _loading = true);
+    try {
+      if (_pos > Duration.zero) {
+        await _player.resume();
+      } else if (m.localBytes != null) {
+        await _player.play(BytesSource(m.localBytes!, mimeType: m.mimeType));
+      } else if (m.filePath != null) {
+        final url = await AppScope.read(context).fileUrl(m.filePath!);
+        if (url != null) await _player.play(UrlSource(url, mimeType: m.mimeType));
+      }
+      setState(() => _playing = true);
+    } catch (_) {}
+    if (mounted) setState(() => _loading = false);
+  }
+
+  String _fmt(Duration d) => '${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}';
+
+  @override
+  Widget build(BuildContext context) {
+    final total = _dur ?? Duration.zero;
+    final progress = total.inMilliseconds == 0 ? 0.0 : (_pos.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+    return SizedBox(
+      width: 230,
+      child: Row(
+        children: [
+          Material(
+            color: Brand.accent,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: widget.message.pending || _loading ? null : _toggle,
+              child: SizedBox(
+                width: 44,
+                height: 44,
+                child: _loading || widget.message.pending
+                    ? const Padding(padding: EdgeInsets.all(12), child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white))
+                    : Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 28),
+              ),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress,
+                    minHeight: 5,
+                    backgroundColor: widget.meta.withValues(alpha: 0.25),
+                    color: Brand.accentDeep,
+                  ),
+                ),
+                const SizedBox(height: 5),
+                Text(
+                  localDigits(_fmt(_playing || _pos > Duration.zero ? _pos : total), context.lang),
+                  style: TextStyle(fontSize: 12, color: widget.meta),
+                ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }

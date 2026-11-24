@@ -29,6 +29,12 @@ class AppConfig {
     await p.setString('server_key', supabaseAnonKey);
   }
 
+  /// Optional TURN relay for calls behind strict mobile networks
+  /// (e.g. --dart-define=TURN_URL=turn:turn.example.af:3478).
+  static const turnUrl = String.fromEnvironment('TURN_URL');
+  static const turnUser = String.fromEnvironment('TURN_USER');
+  static const turnPass = String.fromEnvironment('TURN_PASS');
+
   /// Storage bucket for photos and files.
   static const attachmentsBucket = 'attachments';
 

@@ -1,3 +1,4 @@
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../brand/brand.dart';
@@ -30,7 +31,23 @@ class SettingsScreen extends StatelessWidget {
             padding: const EdgeInsets.all(16),
             child: Row(
               children: [
-                Avatar(seed: app.myId ?? '', label: me?.name ?? app.myEmail, size: 64),
+                IconButton(
+                  tooltip: context.tr('change_photo'),
+                  padding: EdgeInsets.zero,
+                  onPressed: () => _changePhoto(context, app),
+                  icon: Stack(children: [
+                    Avatar(seed: app.myId ?? '', label: me?.name ?? app.myEmail, imageUrl: me?.avatarUrl, size: 64),
+                    PositionedDirectional(
+                      bottom: 0,
+                      end: 0,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(color: Brand.accent, shape: BoxShape.circle),
+                        child: const Icon(Icons.photo_camera_rounded, size: 14, color: Colors.white),
+                      ),
+                    ),
+                  ]),
+                ),
                 const SizedBox(width: 14),
                 Expanded(
                   child: Column(
@@ -144,6 +161,21 @@ class SettingsScreen extends StatelessWidget {
         ),
       ],
     );
+  }
+
+  Future<void> _changePhoto(BuildContext context, AppController app) async {
+    final files = await FilePicker.pickFiles(type: FileType.image);
+    if (files.isEmpty) return;
+    final f = files.first;
+    final size = await f.length();
+    if (size != null && size > 5 * 1024 * 1024) {
+      if (context.mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('photo_too_big'))));
+      return;
+    }
+    final ok = await app.uploadAvatar(f.name, await f.readAsBytes());
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('err_generic'))));
+    }
   }
 
   Future<void> _pick<T>(BuildContext context, String title, List<T> values, T current, String Function(T) label, void Function(T) onPick) async {

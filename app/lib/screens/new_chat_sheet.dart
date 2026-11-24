@@ -180,7 +180,7 @@ class _NewChatSheetState extends State<_NewChatSheet> {
                 children: [
                   for (final m in _members)
                     InputChip(
-                      avatar: Avatar(seed: m.id, label: m.name, size: 24),
+                      avatar: Avatar(seed: m.id, label: m.name, imageUrl: m.avatarUrl, size: 24),
                       label: Text(m.name),
                       onDeleted: () => setState(() => _members.remove(m)),
                     ),

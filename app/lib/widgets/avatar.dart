@@ -4,12 +4,13 @@ import '../brand/brand.dart';
 
 /// Round avatar: initials on a brand colour, or a group icon.
 class Avatar extends StatelessWidget {
-  const Avatar({super.key, required this.seed, required this.label, this.size = 52, this.group = false});
+  const Avatar({super.key, required this.seed, required this.label, this.size = 52, this.group = false, this.imageUrl});
 
   final String seed;
   final String label;
   final double size;
   final bool group;
+  final String? imageUrl;
 
   String get _initials {
     final parts = label.trim().split(RegExp(r'\s+')).where((p) => p.isNotEmpty).toList();
@@ -21,6 +22,17 @@ class Avatar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final c = Brand.avatarColor(seed);
+    if (imageUrl != null) {
+      return ClipOval(
+        child: Image.network(
+          imageUrl!,
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, _, _) => Avatar(seed: seed, label: label, size: size, group: group),
+        ),
+      );
+    }
     return Container(
       width: size,
       height: size,

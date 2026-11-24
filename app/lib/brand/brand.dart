@@ -11,7 +11,7 @@ class Brand {
   /// Native form (identical in Pashto and Dari).
   static const String nameNative = 'پیغام';
 
-  static const String version = '0.2.1';
+  static const String version = '0.3.0';
 
   static const String fontFamily = 'Vazirmatn';
 

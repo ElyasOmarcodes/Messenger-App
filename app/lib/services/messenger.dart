@@ -8,13 +8,14 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
+import 'notifier.dart';
 
 /// Result of an auth call: null on success, otherwise a translation key.
 typedef AuthError = String?;
 
 /// Central app state: account, chats, messages, realtime and settings.
 /// Backend: Supabase (Postgres + Auth + Realtime + Storage).
-class AppController extends ChangeNotifier {
+class AppController extends ChangeNotifier with WidgetsBindingObserver {
   late SharedPreferences _prefs;
   bool ready = false;
 
@@ -44,7 +45,18 @@ class AppController extends ChangeNotifier {
 
   Strings get s => Strings(lang);
 
+  /// True while the app is visible; otherwise new messages raise a system notification.
+  bool foreground = true;
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    foreground = state == AppLifecycleState.resumed;
+    if (foreground && myId != null) _scheduleReload();
+  }
+
   Future<void> init() async {
+    WidgetsBinding.instance.addObserver(this);
+    avatarBaseUrl = '${AppConfig.supabaseUrl}/storage/v1/object/public/avatars';
     _prefs = await SharedPreferences.getInstance();
     lang = AppLang.fromCode(_prefs.getString('lang'));
     themeMode = ThemeMode.values.byName(_prefs.getString('theme') ?? 'light');
@@ -198,6 +210,12 @@ class AppController extends ChangeNotifier {
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
+          table: 'messages',
+          callback: (p) => _onMessageUpdate(Message.fromJson(p.newRecord)),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
           table: 'chat_members',
           callback: (p) => _onMemberUpdate(p.newRecord),
         )
@@ -206,6 +224,12 @@ class AppController extends ChangeNotifier {
           schema: 'public',
           table: 'chat_members',
           callback: (_) => _scheduleReload(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'profiles',
+          callback: (_) => _scheduleReload(), // name or photo changed
         )
         .subscribe((status, [err]) {
       final online = status == RealtimeSubscribeStatus.subscribed;
@@ -235,9 +259,53 @@ class AppController extends ChangeNotifier {
         chat.unread++;
       }
       _incoming.add(m);
+      if (!foreground || openChatId != m.chatId) _notify(chat, m);
     }
     _sortChats();
     notifyListeners();
+  }
+
+  void _notify(Chat chat, Message m) {
+    if (foreground) return; // in-app banner is shown instead
+    final sender = memberById(chat, m.senderId)?.name ?? '';
+    Notifier.instance.show(
+      id: chat.id.hashCode & 0x7fffffff,
+      title: chat.isGroup ? '${chatTitle(chat)} · $sender' : sender,
+      body: previewOf(m),
+      payload: 'chat:${chat.id}',
+    );
+  }
+
+  void _onMessageUpdate(Message m) {
+    final list = _messages[m.chatId];
+    if (list != null) {
+      final i = list.indexWhere((x) => x.id == m.id);
+      if (i >= 0) list[i] = m;
+    }
+    final chat = chatById(m.chatId);
+    if (chat != null && chat.lastMessage?.id == m.id) chat.lastMessage = m;
+    notifyListeners();
+  }
+
+  Message? messageById(String chatId, String id) {
+    for (final m in _messages[chatId] ?? const <Message>[]) {
+      if (m.id == id) return m;
+    }
+    return null;
+  }
+
+  /// "Delete for everyone": the server blanks the message; others see a placeholder.
+  Future<void> deleteMessage(Chat chat, Message m) async {
+    if (m.senderId != myId) return;
+    try {
+      await _sb.rpc('delete_message', params: {'m': m.id});
+      final path = m.filePath;
+      if (path != null) {
+        try {
+          await _sb.storage.from(AppConfig.attachmentsBucket).remove([path]);
+        } catch (_) {}
+      }
+    } catch (_) {}
   }
 
   void _onMemberUpdate(Map<String, dynamic> row) {
@@ -247,7 +315,7 @@ class AppController extends ChangeNotifier {
     chat.members = [
       for (final m in chat.members)
         m.id == row['user_id']
-            ? Profile(id: m.id, email: m.email, displayName: m.displayName, username: m.username, lastReadAt: at, role: m.role)
+            ? Profile(id: m.id, email: m.email, displayName: m.displayName, username: m.username, avatarPath: m.avatarPath, lastReadAt: at, role: m.role)
             : m,
     ];
     notifyListeners();
@@ -385,7 +453,8 @@ class AppController extends ChangeNotifier {
     return MsgStatus.sent;
   }
 
-  Message _local(Chat chat, MsgKind kind, String body, {String? name, int? size, String? mime, Uint8List? bytes}) {
+  Message _local(Chat chat, MsgKind kind, String body,
+      {String? name, int? size, String? mime, Uint8List? bytes, String? replyTo, int? durationMs}) {
     final m = Message(
       id: 'local-${DateTime.now().microsecondsSinceEpoch}',
       chatId: chat.id,
@@ -396,6 +465,8 @@ class AppController extends ChangeNotifier {
       fileName: name,
       fileSize: size,
       mimeType: mime,
+      replyTo: replyTo,
+      durationMs: durationMs,
       localBytes: bytes,
       pending: true,
     );
@@ -419,11 +490,37 @@ class AppController extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> sendText(Chat chat, String text) async {
+  Future<void> sendText(Chat chat, String text, {String? replyTo}) async {
     final body = text.trim();
     if (body.isEmpty) return;
-    final local = _local(chat, MsgKind.text, body.length > 4000 ? body.substring(0, 4000) : body);
-    await _insert(chat, local, {'body': local.body});
+    final local = _local(chat, MsgKind.text, body.length > 4000 ? body.substring(0, 4000) : body, replyTo: replyTo);
+    await _insert(chat, local, {'body': local.body, 'reply_to': ?replyTo});
+  }
+
+  /// Uploads a recorded voice note and posts it.
+  Future<void> sendVoice(Chat chat, {required Uint8List bytes, required int durationMs, required String ext, String? replyTo}) async {
+    if (bytes.isEmpty) return;
+    final mime = ext == 'm4a' ? 'audio/mp4' : (ext == 'wav' ? 'audio/wav' : 'audio/webm');
+    final name = 'voice-${DateTime.now().millisecondsSinceEpoch}.$ext';
+    final local = _local(chat, MsgKind.voice, '', name: name, size: bytes.length, mime: mime, bytes: bytes, replyTo: replyTo, durationMs: durationMs);
+    final path = '${chat.id}/$name';
+    try {
+      await _sb.storage.from(AppConfig.attachmentsBucket).uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mime));
+    } catch (_) {
+      local
+        ..pending = false
+        ..failed = true;
+      notifyListeners();
+      return;
+    }
+    await _insert(chat, local, {
+      'file_path': path,
+      'file_name': name,
+      'file_size': bytes.length,
+      'mime_type': mime,
+      'duration_ms': durationMs,
+      'reply_to': ?replyTo,
+    });
   }
 
   Future<void> _insert(Chat chat, Message local, Map<String, dynamic> fields) async {
@@ -444,11 +541,11 @@ class AppController extends ChangeNotifier {
 
   /// Uploads a photo or file to private storage, then posts the message.
   /// Returns a translation key for client-side errors.
-  Future<String?> sendFile(Chat chat, {required String name, required Uint8List bytes, String caption = ''}) async {
+  Future<String?> sendFile(Chat chat, {required String name, required Uint8List bytes, String caption = '', String? replyTo}) async {
     if (bytes.length > AppConfig.maxFileBytes) return 'too_big';
     final mime = mimeFor(name);
     final kind = mime.startsWith('image/') ? MsgKind.image : MsgKind.file;
-    final local = _local(chat, kind, caption, name: name, size: bytes.length, mime: mime, bytes: bytes);
+    final local = _local(chat, kind, caption, name: name, size: bytes.length, mime: mime, bytes: bytes, replyTo: replyTo);
     final safe = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
     final path = '${chat.id}/${DateTime.now().millisecondsSinceEpoch}-$safe';
     try {
@@ -466,6 +563,7 @@ class AppController extends ChangeNotifier {
       'file_name': name,
       'file_size': bytes.length,
       'mime_type': mime,
+      'reply_to': ?replyTo,
     });
     return null;
   }
@@ -474,7 +572,9 @@ class AppController extends ChangeNotifier {
     if (!m.failed) return;
     _messages[chat.id]?.remove(m);
     if (m.kind == MsgKind.text) {
-      await sendText(chat, m.body);
+      await sendText(chat, m.body, replyTo: m.replyTo);
+    } else if (m.kind == MsgKind.voice && m.localBytes != null) {
+      await sendVoice(chat, bytes: m.localBytes!, durationMs: m.durationMs ?? 0, ext: (m.fileName ?? 'x.webm').split('.').last, replyTo: m.replyTo);
     } else if (m.localBytes != null) {
       await sendFile(chat, name: m.fileName ?? 'file', bytes: m.localBytes!, caption: m.body);
     }
@@ -493,7 +593,8 @@ class AppController extends ChangeNotifier {
     }
   }
 
-  String previewOf(Message m) => switch (m.kind) {
+  String previewOf(Message m) => m.deleted ? '🚫 ${s.get('deleted')}' : switch (m.kind) {
+        MsgKind.voice => '🎤 ${s.get('voice_message')}',
         MsgKind.image => '📷 ${m.body.isEmpty ? s.get('photo') : m.body}',
         MsgKind.file => '📎 ${m.fileName ?? s.get('file')}',
         MsgKind.text => m.body,
@@ -506,6 +607,27 @@ class AppController extends ChangeNotifier {
         if (displayName != null) 'display_name': displayName.trim(),
         if (username != null) 'username': username.trim().isEmpty ? null : username.trim().toLowerCase().replaceAll('@', ''),
       }).eq('id', myId!);
+      await _loadProfile();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Uploads a new profile photo (public bucket "avatars", folder = user id).
+  Future<bool> uploadAvatar(String name, Uint8List bytes) async {
+    if (bytes.length > 5 * 1024 * 1024) return false;
+    final ext = name.contains('.') ? name.split('.').last.toLowerCase() : 'jpg';
+    final path = '${myId!}/avatar-${DateTime.now().millisecondsSinceEpoch}.$ext';
+    try {
+      await _sb.storage.from('avatars').uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mimeFor(name)));
+      final old = me?.avatarPath;
+      await _sb.from('profiles').update({'avatar_path': path}).eq('id', myId!);
+      if (old != null) {
+        try {
+          await _sb.storage.from('avatars').remove([old]);
+        } catch (_) {}
+      }
       await _loadProfile();
       return true;
     } catch (_) {

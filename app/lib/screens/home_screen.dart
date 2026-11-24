@@ -7,7 +7,9 @@ import '../brand/logo.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/messenger.dart';
+import 'call_screen.dart';
 import 'calls_screen.dart';
+import '../services/notifier.dart';
 import 'chat_screen.dart';
 import 'chats_screen.dart';
 import 'new_chat_sheet.dart';
@@ -32,7 +34,15 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _sub ??= AppScope.read(context).incoming.listen(_onIncoming);
+    if (_sub == null) {
+      _sub = AppScope.read(context).incoming.listen(_onIncoming);
+      CallScope.read(context).start();
+      Notifier.instance.onTap = (payload) {
+        if (!mounted || !payload.startsWith('chat:')) return;
+        final chat = AppScope.read(context).chatById(payload.substring(5));
+        if (chat != null) _openChat(chat);
+      };
+    }
   }
 
   @override
@@ -53,8 +63,16 @@ class _HomeScreenState extends State<HomeScreen> {
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('$who: ${app.previewOf(m)}', maxLines: 2, overflow: TextOverflow.ellipsis),
-          action: SnackBarAction(label: '›', textColor: Brand.accent, onPressed: () => _openChat(chat)),
+          content: Text(
+            '$who: ${app.previewOf(m)}',
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+          ),
+          action: SnackBarAction(
+            label: '›',
+            textColor: Brand.accent,
+            onPressed: () => _openChat(chat),
+          ),
           duration: const Duration(seconds: 3),
         ),
       );
@@ -70,7 +88,8 @@ class _HomeScreenState extends State<HomeScreen> {
       });
       AppScope.read(context).openChat(chat.id);
     } else {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChatScreen(chatId: chat.id)));
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => ChatScreen(chatId: chat.id)));
     }
   }
 
@@ -79,33 +98,62 @@ class _HomeScreenState extends State<HomeScreen> {
     if (chat != null && mounted) _openChat(chat);
   }
 
-  List<({IconData icon, IconData active, String label})> _destinations(BuildContext context) => [
-        (icon: Icons.chat_bubble_outline_rounded, active: Icons.chat_bubble_rounded, label: context.tr('chats')),
-        (icon: Icons.call_outlined, active: Icons.call_rounded, label: context.tr('calls')),
-        (icon: Icons.settings_outlined, active: Icons.settings_rounded, label: context.tr('settings')),
-      ];
+  List<({IconData icon, IconData active, String label})> _destinations(
+    BuildContext context,
+  ) => [
+    (
+      icon: Icons.chat_bubble_outline_rounded,
+      active: Icons.chat_bubble_rounded,
+      label: context.tr('chats'),
+    ),
+    (
+      icon: Icons.call_outlined,
+      active: Icons.call_rounded,
+      label: context.tr('calls'),
+    ),
+    (
+      icon: Icons.settings_outlined,
+      active: Icons.settings_rounded,
+      label: context.tr('settings'),
+    ),
+  ];
 
   Widget _tabBody() => switch (_tab) {
-        0 => ChatsScreen(onOpen: _openChat, selectedId: _wide ? _selectedChat : null),
-        1 => const CallsScreen(),
-        _ => const SettingsScreen(),
-      };
+    0 => ChatsScreen(
+      onOpen: _openChat,
+      selectedId: _wide ? _selectedChat : null,
+    ),
+    1 => const CallsScreen(),
+    _ => const SettingsScreen(),
+  };
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final unread = app.totalUnread;
     final dests = _destinations(context);
-    Widget badge(Widget icon, int i) =>
-        (i == 0 && unread > 0) ? Badge(label: Text(context.digits(unread)), backgroundColor: Brand.accent, textColor: Colors.white, child: icon) : icon;
+    Widget badge(Widget icon, int i) => (i == 0 && unread > 0)
+        ? Badge(
+            label: Text(context.digits(unread)),
+            backgroundColor: Brand.accent,
+            textColor: Colors.white,
+            child: icon,
+          )
+        : icon;
 
     if (_wide) return _buildWide(app, dests, badge);
 
     return Scaffold(
-      appBar: _tab == 0 ? HomeAppBar(onNewChat: _newChat) : AppBar(title: Text(dests[_tab].label)),
+      appBar: _tab == 0
+          ? HomeAppBar(onNewChat: _newChat)
+          : AppBar(title: Text(dests[_tab].label)),
       body: _tabBody(),
       floatingActionButton: _tab == 0
-          ? FloatingActionButton(onPressed: _newChat, tooltip: context.tr('new_chat'), child: const Icon(Icons.edit_rounded))
+          ? FloatingActionButton(
+              onPressed: _newChat,
+              tooltip: context.tr('new_chat'),
+              child: const Icon(Icons.edit_rounded),
+            )
           : null,
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
@@ -128,7 +176,9 @@ class _HomeScreenState extends State<HomeScreen> {
     Widget Function(Widget, int) badge,
   ) {
     final cs = Theme.of(context).colorScheme;
-    final selected = _selectedChat == null ? null : app.chatById(_selectedChat!);
+    final selected = _selectedChat == null
+        ? null
+        : app.chatById(_selectedChat!);
     return Scaffold(
       body: Row(
         children: [
@@ -165,7 +215,9 @@ class _HomeScreenState extends State<HomeScreen> {
           SizedBox(
             width: 380,
             child: Scaffold(
-              appBar: _tab == 0 ? HomeAppBar(onNewChat: _newChat, compact: true) : AppBar(title: Text(dests[_tab].label)),
+              appBar: _tab == 0
+                  ? HomeAppBar(onNewChat: _newChat, compact: true)
+                  : AppBar(title: Text(dests[_tab].label)),
               body: _tabBody(),
             ),
           ),
@@ -173,7 +225,11 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: selected == null
                 ? _EmptyPane(color: cs.surfaceContainerLowest)
-                : ChatScreen(key: ValueKey(selected.id), chatId: selected.id, embedded: true),
+                : ChatScreen(
+                    key: ValueKey(selected.id),
+                    chatId: selected.id,
+                    embedded: true,
+                  ),
           ),
         ],
       ),
@@ -207,12 +263,33 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(context.tr('app_name'), style: const TextStyle(fontSize: 21, fontWeight: FontWeight.w800, height: 1.2)),
+              Text(
+                context.tr('app_name'),
+                style: const TextStyle(
+                  fontSize: 21,
+                  fontWeight: FontWeight.w800,
+                  height: 1.2,
+                ),
+              ),
               Row(
                 children: [
-                  Container(width: 7, height: 7, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                  Container(
+                    width: 7,
+                    height: 7,
+                    decoration: BoxDecoration(
+                      color: color,
+                      shape: BoxShape.circle,
+                    ),
+                  ),
                   const SizedBox(width: 5),
-                  Text(label, style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500, color: Color(0xCCFFFFFF))),
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w500,
+                      color: Color(0xCCFFFFFF),
+                    ),
+                  ),
                 ],
               ),
             ],
@@ -220,7 +297,12 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
         ],
       ),
       actions: [
-        if (compact) IconButton(onPressed: onNewChat, icon: const Icon(Icons.add_comment_outlined), tooltip: context.tr('new_chat')),
+        if (compact)
+          IconButton(
+            onPressed: onNewChat,
+            icon: const Icon(Icons.add_comment_outlined),
+            tooltip: context.tr('new_chat'),
+          ),
         const SizedBox(width: 6),
       ],
     );
@@ -238,17 +320,36 @@ class _EmptyPane extends StatelessWidget {
       child: Center(
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 32),
-          decoration: BoxDecoration(color: cs.surface.withValues(alpha: 0.92), borderRadius: BorderRadius.circular(28)),
+          decoration: BoxDecoration(
+            color: cs.surface.withValues(alpha: 0.92),
+            borderRadius: BorderRadius.circular(28),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               const PaighamLogo(size: 88),
               const SizedBox(height: 16),
-              Text(context.tr('app_name'), style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w800)),
+              Text(
+                context.tr('app_name'),
+                style: const TextStyle(
+                  fontSize: 28,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
               const SizedBox(height: 4),
-              Text(context.tr('tagline'), style: const TextStyle(fontSize: 15, color: Brand.accentDeep, fontWeight: FontWeight.w600)),
+              Text(
+                context.tr('tagline'),
+                style: const TextStyle(
+                  fontSize: 15,
+                  color: Brand.accentDeep,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
               const SizedBox(height: 14),
-              Text(context.tr('select_chat'), style: TextStyle(color: cs.onSurfaceVariant)),
+              Text(
+                context.tr('select_chat'),
+                style: TextStyle(color: cs.onSurfaceVariant),
+              ),
             ],
           ),
         ),
