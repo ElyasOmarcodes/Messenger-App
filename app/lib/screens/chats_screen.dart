@@ -1,28 +1,94 @@
+import 'dart:async';
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 
+import '../brand/logo.dart';
 import '../l10n/afghan_date.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
+import 'stories.dart';
 
 enum _Filter { all, personal, groups, unread }
 
+/// The chat list with a Telegram-style dynamic header:
+/// the stories row folds into small rings beside the title as you scroll,
+/// and the search box + filter chips slide away when scrolling down and
+/// come back as soon as you scroll up. The list runs under the frosted header.
 class ChatsScreen extends StatefulWidget {
-  const ChatsScreen({super.key, required this.onOpen, this.selectedId});
+  const ChatsScreen({super.key, required this.onOpen, this.selectedId, this.onNewChat, this.wide = false});
   final void Function(Chat) onOpen;
   final String? selectedId;
-
-  /// Kept for older callers; the search field is always visible now.
-  static void focusSearch(BuildContext context) {}
+  final VoidCallback? onNewChat;
+  final bool wide;
 
   @override
   State<ChatsScreen> createState() => _ChatsScreenState();
 }
 
-class _ChatsScreenState extends State<ChatsScreen> {
+class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStateMixin {
   String _query = '';
   _Filter _filter = _Filter.all;
+  final _scroll = ScrollController();
+
+  /// How much of the search + chips block is hidden (0 = fully shown).
+  final _hide = ValueNotifier<double>(0);
+  double _last = 0;
+  late final AnimationController _snap = AnimationController(vsync: this, duration: const Duration(milliseconds: 200))
+    ..addListener(() => _hide.value = _snapFrom + (_snapTo - _snapFrom) * Curves.easeOut.transform(_snap.value));
+  double _snapFrom = 0, _snapTo = 0;
+
+  static const _toolbarH = 56.0;
+  static const _storiesH = 98.0;
+  static const _chipsH = 98.0;
+
+  @override
+  void initState() {
+    super.initState();
+    _scroll.addListener(_onScroll);
+  }
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    _hide.dispose();
+    _snap.dispose();
+    _snapTimer?.cancel();
+    super.dispose();
+  }
+
+  double _dir = 0;
+  Timer? _snapTimer;
+
+  /// The chips may hide only as far as the list has scrolled past them,
+  /// so no empty gap ever opens between the header and the first chat.
+  double _maxHide(double o) => (o - _storiesH).clamp(0.0, _chipsH);
+
+  void _onScroll() {
+    final o = _scroll.offset;
+    final d = o - _last;
+    _last = o;
+    if (d != 0) _dir = d.sign;
+    _snapTimer?.cancel();
+    if (_snap.isAnimating) _snap.stop();
+    _hide.value = (_hide.value + d).clamp(0.0, _maxHide(o));
+  }
+
+  bool _onScrollEnd(ScrollEndNotification n) {
+    _snapTimer?.cancel();
+    _snapTimer = Timer(const Duration(milliseconds: 180), () {
+      if (!mounted || !_scroll.hasClients) return;
+      final h = _hide.value;
+      if (h <= 0 || h >= _chipsH || (_dir > 0 && h >= _maxHide(_scroll.offset))) return;
+      _snapFrom = h;
+      // Scrolling down tucks the chips away (as far as the list allows); scrolling up brings them back.
+      _snapTo = _dir > 0 ? _maxHide(_scroll.offset) : 0;
+      _snap.forward(from: 0);
+    });
+    return false;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -47,87 +113,191 @@ class _ChatsScreenState extends State<ChatsScreen> {
 
     final groupsUnread = app.chats.where((c) => c.isGroup).fold<int>(0, (n, c) => n + c.unread);
     final personalUnread = app.totalUnread - groupsUnread;
+    final topInset = MediaQuery.paddingOf(context).top;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final glass = (dark ? const Color(0xFF17212B) : Colors.white).withValues(alpha: 0.88);
+    final full = topInset + _toolbarH + _storiesH + _chipsH;
 
-    return RefreshIndicator(
-      onRefresh: app.reloadChats,
-      child: CustomScrollView(
-        slivers: [
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
-              child: TextField(
-                onChanged: (v) => setState(() => _query = v),
-                decoration: InputDecoration(
-                  hintText: context.tr('search'),
-                  prefixIcon: const Icon(Icons.search_rounded),
-                  filled: true,
-                  fillColor: cs.surfaceContainerLow,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 11),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
-                ),
-              ),
+    final chipsBlock = Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Padding(
+          padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
+          child: TextField(
+            onChanged: (v) => setState(() => _query = v),
+            decoration: InputDecoration(
+              hintText: context.tr('search'),
+              prefixIcon: const Icon(Icons.search_rounded),
+              filled: true,
+              fillColor: cs.surfaceContainerLow,
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(vertical: 10),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
+              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
+              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
             ),
           ),
-          SliverToBoxAdapter(
-            child: SizedBox(
-              height: 44,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.symmetric(horizontal: 12),
-                children: [
-                  _chip(context, _Filter.all, 'all', app.totalUnread),
-                  _chip(context, _Filter.personal, 'personal', personalUnread),
-                  _chip(context, _Filter.groups, 'groups', groupsUnread),
-                  _chip(context, _Filter.unread, 'unread', 0),
+        ),
+        SizedBox(
+          height: 44,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 10),
+            children: [
+              _chip(context, _Filter.all, 'all', app.totalUnread),
+              _chip(context, _Filter.personal, 'personal', personalUnread),
+              _chip(context, _Filter.groups, 'groups', groupsUnread),
+              _chip(context, _Filter.unread, 'unread', 0),
+            ],
+          ),
+        ),
+      ],
+    );
+
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: NotificationListener<ScrollEndNotification>(
+            onNotification: _onScrollEnd,
+            child: RefreshIndicator(
+              edgeOffset: full,
+              onRefresh: () async {
+                await Future.wait([app.reloadChats(), app.loadStories()]);
+              },
+              child: CustomScrollView(
+                controller: _scroll,
+                physics: const AlwaysScrollableScrollPhysics(),
+                slivers: [
+                  SliverToBoxAdapter(child: SizedBox(height: full)),
+                  if (!app.chatsLoaded)
+                    const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
+                  else if (list.isEmpty)
+                    SliverFillRemaining(
+                      hasScrollBody: false,
+                      child: Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Container(
+                              width: 96,
+                              height: 96,
+                              decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), shape: BoxShape.circle),
+                              child: Icon(Icons.forum_rounded, size: 48, color: cs.primary),
+                            ),
+                            const SizedBox(height: 16),
+                            Text(context.tr(q.isEmpty ? 'no_chats' : 'no_results'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                            if (q.isEmpty && _filter == _Filter.all)
+                              Padding(
+                                padding: const EdgeInsets.only(top: 6),
+                                child: Text(
+                                  context.tr('no_chats_sub'),
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(color: cs.onSurfaceVariant),
+                                ),
+                              ),
+                            const SizedBox(height: 90),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    SliverPadding(
+                      padding: const EdgeInsets.only(bottom: 120),
+                      sliver: SliverList.builder(
+                        itemCount: list.length,
+                        itemBuilder: (_, i) => ChatTile(chat: list[i], selected: list[i].id == widget.selectedId, onTap: () => widget.onOpen(list[i])),
+                      ),
+                    ),
                 ],
               ),
             ),
           ),
-          if (!app.chatsLoaded)
-            const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
-          else if (list.isEmpty)
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Padding(
-                padding: const EdgeInsets.all(32),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 96,
-                      height: 96,
-                      decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), shape: BoxShape.circle),
-                      child: Icon(Icons.forum_rounded, size: 48, color: cs.primary),
-                    ),
-                    const SizedBox(height: 16),
-                    Text(context.tr(q.isEmpty ? 'no_chats' : 'no_results'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                    if (q.isEmpty && _filter == _Filter.all)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 6),
-                        child: Text(context.tr('no_chats_sub'), textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
+        ),
+        // Frosted header drawn over the list.
+        Positioned(
+          top: 0,
+          left: 0,
+          right: 0,
+          child: ListenableBuilder(
+            listenable: Listenable.merge([_scroll, _hide]),
+            builder: (context, _) {
+              final o = _scroll.hasClients ? _scroll.offset.clamp(0.0, double.infinity) : 0.0;
+              final t = (o / _storiesH).clamp(0.0, 1.0);
+              final storiesNow = _storiesH * (1 - t);
+              final hide = _hide.value;
+              final height = topInset + _toolbarH + storiesNow + _chipsH - hide;
+              return ClipRect(
+                child: BackdropFilter(
+                  filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                  child: Container(
+                    height: height,
+                    decoration: BoxDecoration(
+                      color: glass,
+                      border: Border(
+                        bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: hide >= _chipsH ? 1 : 0.6), width: 0.6),
                       ),
-                    const SizedBox(height: 90),
-                  ],
+                    ),
+                    child: Stack(
+                      clipBehavior: Clip.hardEdge,
+                      children: [
+                        // Stories row: slides up, shrinks and fades while folding.
+                        Positioned(
+                          top: topInset + _toolbarH,
+                          left: 0,
+                          right: 0,
+                          height: storiesNow,
+                          child: ClipRect(
+                            child: OverflowBox(
+                              alignment: Alignment.topCenter,
+                              minHeight: _storiesH,
+                              maxHeight: _storiesH,
+                              child: Transform.translate(
+                                offset: Offset(0, -o.clamp(0.0, _storiesH) * 0.45),
+                                child: IgnorePointer(
+                                  ignoring: t > 0.6,
+                                  child: Opacity(
+                                    opacity: (1 - t * 1.6).clamp(0.0, 1.0),
+                                    child: Transform.scale(scale: 1 - 0.3 * t, alignment: Alignment.topCenter, child: const StoriesStrip()),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                        // Search + chips ride on the bottom edge.
+                        Positioned(
+                          top: topInset + _toolbarH + storiesNow - hide,
+                          left: 0,
+                          right: 0,
+                          height: _chipsH,
+                          child: Opacity(opacity: (1 - hide / _chipsH).clamp(0.0, 1.0), child: chipsBlock),
+                        ),
+                        Positioned(
+                          top: 0,
+                          left: 0,
+                          right: 0,
+                          height: topInset + _toolbarH,
+                          child: Container(
+                            color: glass.withValues(alpha: t),
+                            padding: EdgeInsets.only(top: topInset),
+                            child: _Toolbar(
+                              t: t,
+                              wide: widget.wide,
+                              onNewChat: widget.onNewChat,
+                              onScrollTop: () => _scroll.animateTo(0, duration: const Duration(milliseconds: 350), curve: Curves.easeOutCubic),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
-              ),
-            )
-          else
-            SliverPadding(
-              padding: const EdgeInsets.only(bottom: 110),
-              sliver: SliverList.builder(
-                itemCount: list.length,
-                itemBuilder: (_, i) => ChatTile(
-                  chat: list[i],
-                  selected: list[i].id == widget.selectedId,
-                  onTap: () => widget.onOpen(list[i]),
-                ),
-              ),
-            ),
-        ],
-      ),
+              );
+            },
+          ),
+        ),
+      ],
     );
   }
 
@@ -140,17 +310,112 @@ class _ChatsScreenState extends State<ChatsScreen> {
         selected: sel,
         showCheckmark: false,
         onSelected: (_) => setState(() => _filter = f),
-        label: Row(mainAxisSize: MainAxisSize.min, children: [
-          Text(context.tr(key), style: TextStyle(color: sel ? cs.primary : cs.onSurface, fontWeight: FontWeight.w700)),
-          if (count > 0) ...[
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(color: sel ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(10)),
-              child: Text(context.digits(count), style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800)),
+        label: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              context.tr(key),
+              style: TextStyle(color: sel ? cs.primary : cs.onSurface, fontWeight: FontWeight.w700),
             ),
+            if (count > 0) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                decoration: BoxDecoration(color: sel ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(10)),
+                child: Text(
+                  context.digits(count),
+                  style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800),
+                ),
+              ),
+            ],
           ],
-        ]),
+        ),
+      ),
+    );
+  }
+}
+
+class _Toolbar extends StatelessWidget {
+  const _Toolbar({required this.t, required this.wide, required this.onNewChat, required this.onScrollTop});
+  final double t;
+  final bool wide;
+  final VoidCallback? onNewChat;
+  final VoidCallback onScrollTop;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final shown = [
+      if (app.myStories != null && app.myStories!.stories.isNotEmpty) app.myStories!,
+      for (final u in storyOrder(app))
+        if (u.user.id != app.myId) u,
+    ].take(3).toList();
+    final fold = ((t - 0.4) / 0.6).clamp(0.0, 1.0);
+    return Padding(
+      padding: const EdgeInsetsDirectional.only(start: 16, end: 6),
+      child: Row(
+        children: [
+          if (!wide) ...[const PaighamLogo(size: 32), const SizedBox(width: 10)],
+          Flexible(
+            child: GestureDetector(
+              onTap: onScrollTop,
+              child: Text(
+                app.realtimeOnline ? context.tr('app_name') : context.tr('connecting'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: app.realtimeOnline ? 22 : 18, fontWeight: FontWeight.w800, color: cs.onSurface),
+              ),
+            ),
+          ),
+          // Folded stories: small overlapping rings beside the title.
+          if (shown.isNotEmpty && fold > 0)
+            Opacity(
+              opacity: fold,
+              child: Transform.scale(
+                scale: 0.6 + 0.4 * fold,
+                child: Semantics(
+                  button: true,
+                  label: context.tr('stories'),
+                  excludeSemantics: true,
+                  onTap: () => openStories(context, shown.first),
+                  child: GestureDetector(
+                    onTap: () => openStories(context, shown.first),
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.only(start: 10),
+                      child: SizedBox(
+                        width: 30.0 + (shown.length - 1) * 18,
+                        height: 30,
+                        child: Stack(
+                          children: [
+                            for (var i = shown.length - 1; i >= 0; i--)
+                              PositionedDirectional(
+                                start: i * 18.0,
+                                child: Container(
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    border: Border.all(color: cs.surface, width: 1.5),
+                                  ),
+                                  child: StoryRing(
+                                    profile: shown[i].user,
+                                    size: 27,
+                                    unseen: !shown[i].allSeen && shown[i].user.id != app.myId,
+                                    seen: shown[i].allSeen || shown[i].user.id == app.myId,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          const Spacer(),
+          IconButton(tooltip: context.tr('add_story'), onPressed: () => addStory(context), icon: const Icon(Icons.add_a_photo_outlined)),
+          if (wide && onNewChat != null) IconButton(onPressed: onNewChat, icon: const Icon(Icons.edit_outlined), tooltip: context.tr('new_chat')),
+        ],
       ),
     );
   }
@@ -194,7 +459,7 @@ class ChatTile extends StatelessWidget {
                 seed: chat.isGroup ? chat.id : (peer?.id ?? chat.id),
                 label: title,
                 group: chat.isGroup,
-                imageUrl: peer?.avatarUrl,
+                imageUrl: chat.isGroup ? chat.avatarUrl : peer?.avatarUrl,
                 size: 58,
               ),
               const SizedBox(width: 12),
@@ -202,50 +467,71 @@ class ChatTile extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(children: [
-                      if (chat.isGroup) Padding(padding: const EdgeInsetsDirectional.only(end: 4), child: Icon(Icons.groups_rounded, size: 17, color: cs.onSurface)),
-                      Expanded(
-                        child: Text(title, maxLines: 1, overflow: TextOverflow.ellipsis, style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700)),
-                      ),
-                      if (mine) ...[
-                        Icon(read ? Icons.done_all_rounded : Icons.done_rounded, size: 17, color: cs.primary),
-                        const SizedBox(width: 3),
+                    Row(
+                      children: [
+                        if (chat.isGroup)
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(end: 4),
+                            child: Icon(Icons.groups_rounded, size: 17, color: cs.onSurface),
+                          ),
+                        Expanded(
+                          child: Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        if (mine) ...[Icon(read ? Icons.done_all_rounded : Icons.done_rounded, size: 17, color: cs.primary), const SizedBox(width: 3)],
+                        if (last != null)
+                          Text(
+                            chatListTime(last.createdAt, context.lang, s),
+                            style: TextStyle(fontSize: 12.5, color: chat.unread > 0 ? cs.primary : cs.onSurfaceVariant),
+                          ),
                       ],
-                      if (last != null)
-                        Text(chatListTime(last.createdAt, context.lang, s),
-                            style: TextStyle(fontSize: 12.5, color: chat.unread > 0 ? cs.primary : cs.onSurfaceVariant)),
-                    ]),
+                    ),
                     const SizedBox(height: 4),
-                    Row(children: [
-                      Expanded(
-                        child: Text.rich(
-                          TextSpan(children: [
-                            if (who.isNotEmpty) TextSpan(text: who, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600)),
-                            if (last != null && app.previewIcon(last) != null)
-                              WidgetSpan(
-                                alignment: PlaceholderAlignment.middle,
-                                child: Padding(
-                                  padding: const EdgeInsetsDirectional.only(end: 4),
-                                  child: Icon(app.previewIcon(last), size: 16, color: cs.primary),
-                                ),
-                              ),
-                            TextSpan(text: preview),
-                          ]),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 14.5, color: cs.onSurfaceVariant),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text.rich(
+                            TextSpan(
+                              children: [
+                                if (who.isNotEmpty)
+                                  TextSpan(
+                                    text: who,
+                                    style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600),
+                                  ),
+                                if (last != null && app.previewIcon(last) != null)
+                                  WidgetSpan(
+                                    alignment: PlaceholderAlignment.middle,
+                                    child: Padding(
+                                      padding: const EdgeInsetsDirectional.only(end: 4),
+                                      child: Icon(app.previewIcon(last), size: 16, color: cs.primary),
+                                    ),
+                                  ),
+                                TextSpan(text: preview),
+                              ],
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(fontSize: 14.5, color: cs.onSurfaceVariant),
+                          ),
                         ),
-                      ),
-                      if (chat.unread > 0)
-                        Container(
-                          margin: const EdgeInsetsDirectional.only(start: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
-                          constraints: const BoxConstraints(minWidth: 24),
-                          decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(12)),
-                          child: Text(context.digits(chat.unread),
-                              textAlign: TextAlign.center, style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white)),
-                        ),
-                    ]),
+                        if (chat.unread > 0)
+                          Container(
+                            margin: const EdgeInsetsDirectional.only(start: 8),
+                            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                            constraints: const BoxConstraints(minWidth: 24),
+                            decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(12)),
+                            child: Text(
+                              context.digits(chat.unread),
+                              textAlign: TextAlign.center,
+                              style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white),
+                            ),
+                          ),
+                      ],
+                    ),
                   ],
                 ),
               ),

@@ -45,7 +45,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final f = files.first;
     final size = await f.length();
     if (size != null && size > 5 * 1024 * 1024) return _toast('photo_too_big');
-    final ok = await app.uploadAvatar(f.name, await f.readAsBytes());
+    final bytes = await f.readAsBytes();
+    final chat = widget._kind == _Kind.group ? app.chatById(widget.chatId!) : null;
+    final ok = chat != null ? await app.setGroupPhoto(chat, f.name, bytes) : await app.uploadAvatar(f.name, bytes);
     if (!ok && mounted) _toast('err_generic');
   }
 
@@ -102,6 +104,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         subtitle = '${context.digits(chat?.members.length ?? 0)} ${context.tr('members')}';
         seed = widget.chatId!;
         group = true;
+        photo = chat?.avatarUrl;
     }
 
     return Scaffold(
@@ -114,10 +117,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           // ── Header ──
           Center(
             child: GestureDetector(
-              onTap: widget._kind == _Kind.me ? () => _changePhoto(app) : null,
+              onTap: widget._kind != _Kind.user ? () => _changePhoto(app) : null,
               child: Stack(children: [
                 Avatar(seed: seed, label: title, imageUrl: photo, group: group, size: 112),
-                if (widget._kind == _Kind.me)
+                if (widget._kind != _Kind.user)
                   PositionedDirectional(
                     bottom: 2,
                     end: 2,

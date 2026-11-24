@@ -37,9 +37,10 @@ widgets/                  Avatar, message bubble (text, photo, file)
 ## Roadmap
 
 1. **Now:** email accounts, 1:1 and group chats, photos and files, read receipts, all platforms.
-2. **Next:** push notifications (FCM / APNs), voice notes, message delete/edit/reply, profile photos, online status.
-3. **Then:** voice/video calls (WebRTC + own TURN server), end-to-end encryption, channels.
-4. **Own server:** self-host Supabase (Docker) in our data centre, custom SMTP, then Play Store / App Store.
+2. **Done since:** voice notes, reply, edit, delete, reactions, pins, albums, location, contacts, stories, profile and group photos, calls.
+3. **Next:** push notifications (FCM / APNs), online status, channels.
+4. **Then:** own TURN server for calls, end-to-end encryption.
+5. **Own server:** self-host Supabase (Docker) in our data centre, custom SMTP, then Play Store / App Store.
 
 ## Database updates
 
@@ -47,6 +48,7 @@ Run each file in `backend/supabase/migrations/` once, in order, in the Supabase 
 
 1. `20261124000000_paigham_core.sql`: accounts, chats, messages, files
 2. `20261125000000_paigham_v3.sql`: profile photos, replies, delete, voice notes, calls, sign-in check (`email_status`)
+3. `20261126000000_paigham_v5.sql`: message edit, reactions, pinned messages, albums, location and contact messages, group photos, and 24-hour stories (`stories`, `story_views`, `story_feed`, `story_viewers`, private `stories` bucket)
 
 ## Calls behind mobile networks
 

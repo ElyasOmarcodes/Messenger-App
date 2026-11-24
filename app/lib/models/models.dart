@@ -37,7 +37,7 @@ class Profile {
       );
 }
 
-enum MsgKind { text, image, file, voice }
+enum MsgKind { text, image, file, voice, album, location, contact }
 
 enum MsgStatus { sending, sent, read, failed }
 
@@ -56,7 +56,10 @@ class Message {
     this.replyTo,
     this.deletedAt,
     this.durationMs,
+    this.editedAt,
+    this.meta,
     this.localBytes,
+    this.localAlbum,
     this.pending = false,
     this.failed = false,
   });
@@ -74,8 +77,40 @@ class Message {
   final String? replyTo;
   final DateTime? deletedAt;
   final int? durationMs;
+  final DateTime? editedAt;
+
+  /// Extra data: image size {w,h}, album {items:[{path,w,h}]},
+  /// location {lat,lng,label}, contact {name,phone,email,user_id}.
+  final Map<String, dynamic>? meta;
+
+  /// Album images being uploaded (shown before the upload finishes).
+  final List<Uint8List>? localAlbum;
 
   bool get deleted => deletedAt != null;
+  bool get edited => editedAt != null;
+
+  double? get width => (meta?['w'] as num?)?.toDouble();
+  double? get height => (meta?['h'] as num?)?.toDouble();
+  List<Map<String, dynamic>> get albumItems =>
+      ((meta?['items'] as List?) ?? const []).cast<Map<String, dynamic>>();
+
+  Message copyWith({String? body, DateTime? editedAt, DateTime? deletedAt}) => Message(
+        id: id,
+        chatId: chatId,
+        senderId: senderId,
+        kind: kind,
+        body: body ?? this.body,
+        createdAt: createdAt,
+        filePath: filePath,
+        fileName: fileName,
+        fileSize: fileSize,
+        mimeType: mimeType,
+        replyTo: replyTo,
+        deletedAt: deletedAt ?? this.deletedAt,
+        durationMs: durationMs,
+        editedAt: editedAt ?? this.editedAt,
+        meta: meta,
+      );
 
   /// Bytes of a file we are uploading (shown before the upload finishes).
   final Uint8List? localBytes;
@@ -96,6 +131,43 @@ class Message {
         replyTo: j['reply_to'] as String?,
         deletedAt: j['deleted_at'] == null ? null : DateTime.parse(j['deleted_at'] as String).toLocal(),
         durationMs: (j['duration_ms'] as num?)?.toInt(),
+        editedAt: j['edited_at'] == null ? null : DateTime.parse(j['edited_at'] as String).toLocal(),
+        meta: j['meta'] == null ? null : Map<String, dynamic>.from(j['meta'] as Map),
+      );
+}
+
+/// One story (24-hour status).
+class StoryItem {
+  StoryItem({required this.id, required this.kind, this.mediaPath, required this.body, this.bg, required this.createdAt, required this.seen, this.views});
+  final String id, kind, body;
+  final String? mediaPath, bg;
+  final DateTime createdAt;
+  bool seen;
+  final int? views;
+
+  factory StoryItem.fromJson(Map<String, dynamic> j) => StoryItem(
+        id: j['id'] as String,
+        kind: j['kind'] as String,
+        mediaPath: j['media_path'] as String?,
+        body: (j['body'] as String?) ?? '',
+        bg: j['bg'] as String?,
+        createdAt: DateTime.parse(j['created_at'] as String).toLocal(),
+        seen: (j['seen'] as bool?) ?? false,
+        views: (j['views'] as num?)?.toInt(),
+      );
+}
+
+/// All active stories of one person.
+class StoryUser {
+  StoryUser({required this.user, required this.stories, required this.allSeen});
+  final Profile user;
+  final List<StoryItem> stories;
+  bool allSeen;
+
+  factory StoryUser.fromJson(Map<String, dynamic> j) => StoryUser(
+        user: Profile.fromJson(j['user'] as Map<String, dynamic>),
+        stories: (j['stories'] as List).map((e) => StoryItem.fromJson(e as Map<String, dynamic>)).toList(),
+        allSeen: (j['all_seen'] as bool?) ?? false,
       );
 }
 
@@ -152,6 +224,8 @@ class Chat {
     required this.members,
     this.lastMessage,
     this.unread = 0,
+    this.avatarPath,
+    this.pinnedMessageId,
   });
 
   final String id;
@@ -161,6 +235,10 @@ class Chat {
   List<Profile> members;
   Message? lastMessage;
   int unread;
+  String? avatarPath;
+  String? pinnedMessageId;
+
+  String? get avatarUrl => avatarPath == null ? null : '$avatarBaseUrl/$avatarPath';
 
   /// The other person in a direct chat.
   Profile? peer(String me) {
@@ -180,6 +258,8 @@ class Chat {
         members: ((j['members'] as List?) ?? const []).map((e) => Profile.fromJson(e as Map<String, dynamic>)).toList(),
         lastMessage: j['last_message'] == null ? null : Message.fromJson(j['last_message'] as Map<String, dynamic>),
         unread: (j['unread'] as num?)?.toInt() ?? 0,
+        avatarPath: j['avatar_path'] as String?,
+        pinnedMessageId: j['pinned_message_id'] as String?,
       );
 }
 

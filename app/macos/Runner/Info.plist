@@ -6,6 +6,10 @@
 	<string>Paigham uses the microphone for voice messages and calls.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Paigham uses the camera for video calls.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Paigham sends your location only when you share it in a chat.</string>
+	<key>NSLocationUsageDescription</key>
+	<string>Paigham sends your location only when you share it in a chat.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Paigham lets you send photos from your library.</string>
 	<key>CFBundleDevelopmentRegion</key>

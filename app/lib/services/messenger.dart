@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -182,6 +183,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> _onSignedIn() async {
     await _loadProfile();
     await reloadChats();
+    unawaited(loadStories());
     _subscribe();
   }
 
@@ -221,6 +223,24 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
           schema: 'public',
           table: 'messages',
           callback: (p) => _onMessageUpdate(Message.fromJson(p.newRecord)),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'message_reactions',
+          callback: (p) => _onReaction(p.eventType, p.newRecord, p.oldRecord),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'stories',
+          callback: (_) => loadStories(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'chats',
+          callback: (_) => _scheduleReload(),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
@@ -381,6 +401,17 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     return chatById(id);
   }
 
+  /// Opens (or creates) the one-to-one chat with a user id.
+  Future<Chat?> openDirect(String userId) async {
+    try {
+      final id = await _sb.rpc('start_direct_chat', params: {'other': userId}) as String;
+      await reloadChats();
+      return chatById(id);
+    } catch (_) {
+      return null;
+    }
+  }
+
   Future<Chat?> createGroup(String title, List<Profile> members) async {
     final id = await _sb.rpc('create_group', params: {
       'title': title.trim(),
@@ -406,6 +437,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   List<Message>? messagesOf(String chatId) => _messages[chatId];
 
   Future<void> loadMessages(String chatId) async {
+    unawaited(_loadReactions(chatId));
     try {
       final rows = await _sb
           .from('messages')
@@ -605,7 +637,10 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   String previewOf(Message m) => m.deleted ? s.get('deleted') : switch (m.kind) {
         MsgKind.voice => s.get('voice_message'),
         MsgKind.image => m.body.isEmpty ? s.get('photo') : m.body,
+        MsgKind.album => m.body.isEmpty ? s.get('album_n', {'n': localDigits('${m.albumItems.length}', lang)}) : m.body,
         MsgKind.file => m.fileName ?? s.get('file'),
+        MsgKind.location => s.get('location'),
+        MsgKind.contact => '${s.get('contact')}: ${m.meta?['name'] ?? ''}',
         MsgKind.text => m.body,
       };
 
@@ -615,9 +650,325 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       : switch (m.kind) {
           MsgKind.voice => Icons.mic_rounded,
           MsgKind.image => Icons.photo_rounded,
+          MsgKind.album => Icons.photo_library_rounded,
           MsgKind.file => Icons.insert_drive_file_rounded,
+          MsgKind.location => Icons.location_on_rounded,
+          MsgKind.contact => Icons.person_rounded,
           MsgKind.text => null,
         };
+
+  // ── Reactions ────────────────────────────────────────────────────────────
+  /// messageId → (userId → emoji)
+  final Map<String, Map<String, String>> reactions = {};
+
+  Future<void> _loadReactions(String chatId) async {
+    try {
+      final rows = await _sb.from('message_reactions').select('message_id,user_id,emoji').eq('chat_id', chatId);
+      for (final r in rows) {
+        reactions.putIfAbsent(r['message_id'] as String, () => {})[r['user_id'] as String] = r['emoji'] as String;
+      }
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  void _onReaction(PostgresChangeEvent type, Map<String, dynamic> row, Map<String, dynamic> old) {
+    if (type == PostgresChangeEvent.delete) {
+      final mid = old['message_id'] as String?;
+      final uid = old['user_id'] as String?;
+      if (mid != null && uid != null) reactions[mid]?.remove(uid);
+    } else {
+      reactions.putIfAbsent(row['message_id'] as String, () => {})[row['user_id'] as String] = row['emoji'] as String;
+    }
+    notifyListeners();
+  }
+
+  /// Same emoji again removes the reaction; another emoji replaces it.
+  Future<void> react(Chat chat, Message m, String emoji) async {
+    final mine = reactions[m.id]?[myId];
+    final map = reactions.putIfAbsent(m.id, () => {});
+    try {
+      if (mine == emoji) {
+        map.remove(myId);
+        notifyListeners();
+        await _sb.from('message_reactions').delete().eq('message_id', m.id).eq('user_id', myId!);
+      } else {
+        map[myId!] = emoji;
+        notifyListeners();
+        await _sb.from('message_reactions').upsert({'message_id': m.id, 'chat_id': chat.id, 'user_id': myId, 'emoji': emoji});
+      }
+    } catch (_) {}
+  }
+
+  // ── Edit, pin, forward ───────────────────────────────────────────────────
+  Future<bool> editMessage(Chat chat, Message m, String text) async {
+    final body = text.trim();
+    if (body.isEmpty || m.senderId != myId) return false;
+    final list = _messages[chat.id];
+    final i = list?.indexWhere((x) => x.id == m.id) ?? -1;
+    if (i >= 0) list![i] = m.copyWith(body: body, editedAt: DateTime.now());
+    notifyListeners();
+    try {
+      await _sb.rpc('edit_message', params: {'m': m.id, 'new_body': body});
+      return true;
+    } catch (_) {
+      if (i >= 0) list![i] = m;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> pinMessage(Chat chat, Message? m) async {
+    chat.pinnedMessageId = m?.id;
+    notifyListeners();
+    try {
+      await _sb.from('chats').update({'pinned_message_id': m?.id}).eq('id', chat.id);
+    } catch (_) {}
+  }
+
+  /// Copies a message (and its files) into another chat.
+  Future<bool> forward(Message m, Chat target) async {
+    try {
+      Future<String> copy(String path) async {
+        final name = path.split('/').last;
+        final dst = '${target.id}/${DateTime.now().microsecondsSinceEpoch}-$name';
+        await _sb.storage.from(AppConfig.attachmentsBucket).copy(path, dst);
+        return dst;
+      }
+
+      Map<String, dynamic>? meta = m.meta == null ? null : Map<String, dynamic>.from(m.meta!);
+      if (m.kind == MsgKind.album) {
+        meta!['items'] = [
+          for (final it in m.albumItems) {...it, 'path': await copy(it['path'] as String)},
+        ];
+      }
+      final row = await _sb
+          .from('messages')
+          .insert({
+            'chat_id': target.id,
+            'sender_id': myId,
+            'kind': m.kind.name,
+            'body': m.body,
+            'file_path': m.filePath == null ? null : await copy(m.filePath!),
+            'file_name': m.fileName,
+            'file_size': m.fileSize,
+            'mime_type': m.mimeType,
+            'duration_ms': m.durationMs,
+            'meta': meta,
+          })
+          .select()
+          .single();
+      final saved = Message.fromJson(row);
+      _messages[target.id]?.add(saved);
+      target.lastMessage = saved;
+      target.lastMessageAt = saved.createdAt;
+      _sortChats();
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ── Photos, albums, location, contacts ───────────────────────────────────
+  static Future<({int w, int h})> imageSize(Uint8List bytes) async {
+    try {
+      final codec = await ui.instantiateImageCodec(bytes);
+      final frame = await codec.getNextFrame();
+      final r = (w: frame.image.width, h: frame.image.height);
+      frame.image.dispose();
+      return r;
+    } catch (_) {
+      return (w: 4, h: 3);
+    }
+  }
+
+  /// One photo becomes an image message; several become one album.
+  Future<String?> sendPhotos(Chat chat, List<({String name, Uint8List bytes})> photos, {String caption = '', String? replyTo}) async {
+    if (photos.isEmpty) return null;
+    if (photos.any((p) => p.bytes.length > AppConfig.maxFileBytes)) return 'too_big';
+    final sizes = [for (final p in photos) await imageSize(p.bytes)];
+    if (photos.length == 1) {
+      final p = photos.first;
+      final mime = mimeFor(p.name);
+      final local = _local(chat, MsgKind.image, caption, name: p.name, size: p.bytes.length, mime: mime, bytes: p.bytes, replyTo: replyTo);
+      final path = '${chat.id}/${DateTime.now().millisecondsSinceEpoch}-${_safe(p.name)}';
+      if (!await _upload(local, path, p.bytes, mime)) return null;
+      await _insert(chat, local, {
+        'body': caption,
+        'file_path': path,
+        'file_name': p.name,
+        'file_size': p.bytes.length,
+        'mime_type': mime,
+        'meta': {'w': sizes.first.w, 'h': sizes.first.h},
+        'reply_to': ?replyTo,
+      });
+      return null;
+    }
+    final local = Message(
+      id: 'local-${DateTime.now().microsecondsSinceEpoch}',
+      chatId: chat.id,
+      senderId: myId!,
+      kind: MsgKind.album,
+      body: caption,
+      createdAt: DateTime.now(),
+      replyTo: replyTo,
+      meta: {'items': [for (final z in sizes) {'w': z.w, 'h': z.h}]},
+      localAlbum: [for (final p in photos) p.bytes],
+      pending: true,
+    );
+    _messages.putIfAbsent(chat.id, () => []).add(local);
+    notifyListeners();
+    final items = <Map<String, dynamic>>[];
+    for (var i = 0; i < photos.length; i++) {
+      final p = photos[i];
+      final path = '${chat.id}/${DateTime.now().millisecondsSinceEpoch}-$i-${_safe(p.name)}';
+      if (!await _upload(local, path, p.bytes, mimeFor(p.name))) return null;
+      items.add({'path': path, 'w': sizes[i].w, 'h': sizes[i].h});
+    }
+    await _insert(chat, local, {'body': caption, 'meta': {'items': items}, 'reply_to': ?replyTo});
+    return null;
+  }
+
+  String _safe(String name) => name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
+
+  Future<bool> _upload(Message local, String path, Uint8List bytes, String mime) async {
+    try {
+      await _sb.storage.from(AppConfig.attachmentsBucket).uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mime));
+      return true;
+    } catch (_) {
+      local
+        ..pending = false
+        ..failed = true;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  Future<void> sendLocation(Chat chat, double lat, double lng, {String? replyTo}) async {
+    final meta = {'lat': lat, 'lng': lng};
+    final local = Message(
+      id: 'local-${DateTime.now().microsecondsSinceEpoch}',
+      chatId: chat.id,
+      senderId: myId!,
+      kind: MsgKind.location,
+      body: '',
+      createdAt: DateTime.now(),
+      meta: meta,
+      replyTo: replyTo,
+      pending: true,
+    );
+    _messages.putIfAbsent(chat.id, () => []).add(local);
+    notifyListeners();
+    await _insert(chat, local, {'meta': meta, 'reply_to': ?replyTo});
+  }
+
+  Future<void> sendContact(Chat chat, {required String name, String? phone, String? email, String? userId, String? replyTo}) async {
+    final meta = {'name': name, 'phone': ?phone, 'email': ?email, 'user_id': ?userId};
+    final local = Message(
+      id: 'local-${DateTime.now().microsecondsSinceEpoch}',
+      chatId: chat.id,
+      senderId: myId!,
+      kind: MsgKind.contact,
+      body: '',
+      createdAt: DateTime.now(),
+      meta: meta,
+      replyTo: replyTo,
+      pending: true,
+    );
+    _messages.putIfAbsent(chat.id, () => []).add(local);
+    notifyListeners();
+    await _insert(chat, local, {'meta': meta, 'reply_to': ?replyTo});
+  }
+
+  Future<bool> setGroupPhoto(Chat chat, String name, Uint8List bytes) async {
+    try {
+      final path = '${chat.id}/group-${DateTime.now().millisecondsSinceEpoch}.${name.split('.').last.toLowerCase()}';
+      await _sb.storage.from('avatars').uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mimeFor(name)));
+      await _sb.from('chats').update({'avatar_path': path}).eq('id', chat.id);
+      chat.avatarPath = path;
+      notifyListeners();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  // ── Stories ──────────────────────────────────────────────────────────────
+  List<StoryUser> stories = [];
+
+  StoryUser? get myStories {
+    for (final u in stories) {
+      if (u.user.id == myId) return u;
+    }
+    return null;
+  }
+
+  Future<void> loadStories() async {
+    if (myId == null) return;
+    try {
+      final data = await _sb.rpc('story_feed') as List<dynamic>;
+      stories = data.map((e) => StoryUser.fromJson(e as Map<String, dynamic>)).toList();
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<bool> postStory({Uint8List? image, String? imageName, String text = '', String? bg}) async {
+    try {
+      String? path;
+      if (image != null) {
+        path = '${myId!}/${DateTime.now().millisecondsSinceEpoch}-${_safe(imageName ?? 'story.jpg')}';
+        await _sb.storage.from('stories').uploadBinary(path, image, fileOptions: FileOptions(contentType: mimeFor(imageName ?? 'x.jpg')));
+      }
+      await _sb.from('stories').insert({
+        'kind': image != null ? 'image' : 'text',
+        'media_path': path,
+        'body': text.trim(),
+        'bg': bg,
+      });
+      await loadStories();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> markStorySeen(StoryItem st) async {
+    if (st.seen) return;
+    st.seen = true;
+    try {
+      await _sb.from('story_views').insert({'story_id': st.id});
+    } catch (_) {}
+  }
+
+  Future<void> deleteStory(StoryItem st) async {
+    try {
+      await _sb.from('stories').delete().eq('id', st.id);
+      if (st.mediaPath != null) await _sb.storage.from('stories').remove([st.mediaPath!]);
+    } catch (_) {}
+    await loadStories();
+  }
+
+  Future<List<Profile>> storyViewers(StoryItem st) async {
+    try {
+      final data = await _sb.rpc('story_viewers', params: {'s': st.id}) as List<dynamic>;
+      return data.map((e) => Profile.fromJson(e as Map<String, dynamic>)).toList();
+    } catch (_) {
+      return [];
+    }
+  }
+
+  final Map<String, String> _storyUrls = {};
+  Future<String?> storyUrl(String path) async {
+    final c = _storyUrls[path];
+    if (c != null) return c;
+    try {
+      final url = await _sb.storage.from('stories').createSignedUrl(path, 60 * 60 * 24);
+      _storyUrls[path] = url;
+      return url;
+    } catch (_) {
+      return null;
+    }
+  }
 
   // ── Profile & settings ───────────────────────────────────────────────────
   Future<bool> updateProfile({String? displayName, String? username}) async {

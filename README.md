@@ -15,6 +15,10 @@
 - **پیغامونه، انځورونه او فایلونه** (PDF، Word، Excel، ZIP، غږ، ویډیو… تر ۵۰ MB).
 - **ډلې** جوړول او غړي ورزیاتول.
 - **غږیز پیغامونه، ځواب (reply)، د ټولو لپاره ړنګول، د پروفایل انځور.**
+- **کیسې (Stories):** انځور یا رنګین متن د ۲۴ ساعتو لپاره؛ کتونکي، ځواب، ړنګول.
+- **د پیغام سمول، غبرګونونه (reactions)، پورته نښلول (pin)، بل چا ته لېږل (forward).**
+- **ګڼ انځورونه (album)، ځای (location)، اړیکه (contact)**، او بشپړه د ایموجي تخته.
+- د ټلګرام په څېر: سره نښتي پیغامونه، د ځواب لپاره کش کول، د غږ تڼۍ (نیول، کش کول، قفل)، د ړنګولو د دوړو انیمیشن.
 - **غږیز او ویډیويي زنګونه** (WebRTC).
 - د ټلګرام په څېر ډیزاین، **شپې بڼه (night mode)**، او لاندې تیرېدونکې مېنو.
 - **ژر رسېدل** (realtime)، او ✓ لېږل شوی / ✓✓ لوستل شوی نښې.
@@ -33,6 +37,22 @@
 </div>
 
 ## Screenshots
+
+**v0.5 — stories, albums, emoji, message menu:**
+
+| Home + stories | Scrolled (header folds) | Joined bubbles | Emoji panel |
+|---|---|---|---|
+| <img src="docs/screenshots/v5_01_home_stories.png" width="190"> | <img src="docs/screenshots/v5_02_home_scrolled.png" width="190"> | <img src="docs/screenshots/v5_03_chat_grouped.png" width="190"> | <img src="docs/screenshots/v5_04_emoji.png" width="190"> |
+
+| Attach | Album + location | Message menu | Hold to record |
+|---|---|---|---|
+| <img src="docs/screenshots/v5_05_attach.png" width="190"> | <img src="docs/screenshots/v5_06_album_location.png" width="190"> | <img src="docs/screenshots/v5_07_message_menu.png" width="190"> | <img src="docs/screenshots/v5_08_voice_hold.png" width="190"> |
+
+| Story | New text story | Home (night, Dari) | Chat (night) |
+|---|---|---|---|
+| <img src="docs/screenshots/v5_09_story.png" width="190"> | <img src="docs/screenshots/v5_10_story_composer.png" width="190"> | <img src="docs/screenshots/v5_11_home_dark.png" width="190"> | <img src="docs/screenshots/v5_12_chat_dark.png" width="190"> |
+
+**Earlier versions:**
 
 | Welcome | Email | New account | Email code |
 |---|---|---|---|
