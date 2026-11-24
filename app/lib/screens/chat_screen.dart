@@ -356,7 +356,12 @@ class _ChatScreenState extends State<ChatScreen> {
               child: items == null
                   ? const Center(child: CircularProgressIndicator())
                   : items.isEmpty
-                  ? Center(child: SystemChip(text: context.tr('say_hello')))
+                  ? Center(
+                          child: Column(mainAxisSize: MainAxisSize.min, children: [
+                            Icon(Icons.waving_hand_rounded, size: 56, color: Colors.white.withValues(alpha: 0.9)),
+                            SystemChip(text: context.tr('say_hello')),
+                          ]),
+                        )
                   : ListView.builder(
                       reverse: true,
                       padding: const EdgeInsets.fromLTRB(12, 8, 12, 8),

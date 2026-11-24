@@ -7,7 +7,7 @@ class Brand {
 
   static const String nameLatin = 'Paigham';
   static const String nameNative = 'پیغام';
-  static const String version = '0.4.0';
+  static const String version = '0.4.1';
   static const String fontFamily = 'Vazirmatn';
 
   // ── Paigham Blue ─────────────────────────────────────────────────────────

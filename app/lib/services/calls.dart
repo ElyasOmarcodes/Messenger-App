@@ -114,7 +114,7 @@ class CallController extends ChangeNotifier {
     Notifier.instance.show(
       id: 7,
       title: peer?.name ?? 'Paigham',
-      body: video ? '📹 ${app.s.get('incoming_video')}' : '📞 ${app.s.get('incoming_voice')}',
+      body: app.s.get(video ? 'incoming_video' : 'incoming_voice'),
       payload: 'call:$id',
       call: true,
     );

@@ -100,9 +100,9 @@ class Strings {
     'no_results': {'ps': 'هېڅ ونه موندل شو', 'fa': 'چیزی پیدا نشد', 'en': 'Nothing found'},
     'no_chats': {'ps': 'تر اوسه چټ نشته', 'fa': 'هنوز گفتگویی نیست', 'en': 'No chats yet'},
     'no_chats_sub': {
-      'ps': 'د ✏️ تڼۍ کېکاږئ او د ملګري ایمیل ولیکئ.',
-      'fa': 'دکمهٔ ✏️ را بزنید و ایمیل دوست‌تان را بنویسید.',
-      'en': "Tap ✏️ and enter a friend's email.",
+      'ps': 'د «نوی چټ» تڼۍ کېکاږئ او د ملګري ایمیل ولیکئ.',
+      'fa': 'دکمهٔ «گفتگوی تازه» را بزنید و ایمیل دوست‌تان را بنویسید.',
+      'en': "Tap “New chat” and enter a friend's email.",
     },
     'new_chat': {'ps': 'نوی چټ', 'fa': 'گفتگوی تازه', 'en': 'New chat'},
     'you': {'ps': 'تاسو', 'fa': 'شما', 'en': 'You'},
@@ -147,7 +147,7 @@ class Strings {
     'send_failed': {'ps': 'ونه لېږل شو. د بیا هڅې لپاره کېکاږئ', 'fa': 'ارسال نشد. برای تلاش دوباره بزنید', 'en': 'Not sent. Tap to retry'},
     'coming_soon': {'ps': 'دا برخه ډېر ژر راځي', 'fa': 'این بخش به‌زودی می‌آید', 'en': 'Coming soon'},
     'group_created': {'ps': 'ډله جوړه شوه', 'fa': 'گروه ساخته شد', 'en': 'Group created'},
-    'say_hello': {'ps': 'سلام ووایاست 👋', 'fa': 'سلام کنید 👋', 'en': 'Say hello 👋'},
+    'say_hello': {'ps': 'سلام ووایاست', 'fa': 'سلام کنید', 'en': 'Say hello'},
 
     // ── Calls ─────────────────────────────────────────────────────────────
     'calls_title': {'ps': 'غږیز او ویډیويي زنګونه', 'fa': 'تماس صوتی و تصویری', 'en': 'Voice & video calls'},
@@ -218,9 +218,9 @@ class Strings {
     'call_busy': {'ps': 'تاسو اوس په بل زنګ کې یاست', 'fa': 'شما در تماس دیگری هستید', 'en': 'You are already in a call'},
     'no_calls': {'ps': 'تر اوسه زنګ نشته', 'fa': 'هنوز تماسی نیست', 'en': 'No calls yet'},
     'no_calls_sub': {
-      'ps': 'په یوه چټ کې د 📞 یا 📹 تڼۍ کېکاږئ.',
-      'fa': 'در یک گفتگو دکمهٔ 📞 یا 📹 را بزنید.',
-      'en': 'Open a chat and tap 📞 or 📹.',
+      'ps': 'یو چټ پرانیزئ او د زنګ تڼۍ کېکاږئ.',
+      'fa': 'یک گفتگو را باز کنید و دکمهٔ تماس را بزنید.',
+      'en': 'Open a chat and tap the call button.',
     },
     'missed': {'ps': 'له لاسه وتلی', 'fa': 'از دست رفته', 'en': 'Missed'},
     'mute': {'ps': 'غږ بند', 'fa': 'بی‌صدا', 'en': 'Mute'},

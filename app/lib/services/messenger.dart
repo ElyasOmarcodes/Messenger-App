@@ -450,7 +450,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     } catch (_) {}
   }
 
-  /// ✓ sent; ✓✓ read (direct: by the other person, group: by anyone).
+  /// One tick = sent; two ticks = read (direct: by the other person, group: by anyone).
   MsgStatus statusOf(Chat chat, Message m) {
     if (m.failed) return MsgStatus.failed;
     if (m.pending) return MsgStatus.sending;
@@ -602,12 +602,22 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  String previewOf(Message m) => m.deleted ? '🚫 ${s.get('deleted')}' : switch (m.kind) {
-        MsgKind.voice => '🎤 ${s.get('voice_message')}',
-        MsgKind.image => '📷 ${m.body.isEmpty ? s.get('photo') : m.body}',
-        MsgKind.file => '📎 ${m.fileName ?? s.get('file')}',
+  String previewOf(Message m) => m.deleted ? s.get('deleted') : switch (m.kind) {
+        MsgKind.voice => s.get('voice_message'),
+        MsgKind.image => m.body.isEmpty ? s.get('photo') : m.body,
+        MsgKind.file => m.fileName ?? s.get('file'),
         MsgKind.text => m.body,
       };
+
+  /// Icon shown before a message preview (chat list, reply quotes).
+  IconData? previewIcon(Message m) => m.deleted
+      ? Icons.block_rounded
+      : switch (m.kind) {
+          MsgKind.voice => Icons.mic_rounded,
+          MsgKind.image => Icons.photo_rounded,
+          MsgKind.file => Icons.insert_drive_file_rounded,
+          MsgKind.text => null,
+        };
 
   // ── Profile & settings ───────────────────────────────────────────────────
   Future<bool> updateProfile({String? displayName, String? username}) async {

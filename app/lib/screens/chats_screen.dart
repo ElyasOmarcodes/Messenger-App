@@ -221,6 +221,14 @@ class ChatTile extends StatelessWidget {
                         child: Text.rich(
                           TextSpan(children: [
                             if (who.isNotEmpty) TextSpan(text: who, style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600)),
+                            if (last != null && app.previewIcon(last) != null)
+                              WidgetSpan(
+                                alignment: PlaceholderAlignment.middle,
+                                child: Padding(
+                                  padding: const EdgeInsetsDirectional.only(end: 4),
+                                  child: Icon(app.previewIcon(last), size: 16, color: cs.primary),
+                                ),
+                              ),
                             TextSpan(text: preview),
                           ]),
                           maxLines: 1,
