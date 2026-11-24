@@ -1,63 +1,42 @@
 # Architecture and roadmap
 
-## Code layout (`app/lib/`)
+## Why Supabase
+
+| Need | Supabase | Firebase | Own server now |
+|---|---|---|---|
+| Email accounts with codes | ✓ built in | ✓ | build it ourselves |
+| Realtime messages | ✓ | ✓ | build it |
+| File storage | ✓ | ✓ | build it |
+| Windows + Linux apps | ✓ (pure Dart SDK) | weak desktop support | ✓ |
+| Open source, self-hostable later | ✓ | ✗ (locked in) | ✓ |
+| Free to start | ✓ | ✓ | ✗ (server cost) |
+
+Supabase is the only option that is free today **and** can move to our own server later without rewriting the app.
+
+## App code (`app/lib/`)
 
 ```
-main.dart                 App entry: theme, language, onboarding vs home
-brand/brand.dart          Name, colours, theme (single place to rebrand)
-brand/logo.dart           Logo + star wallpaper painters
-l10n/strings.dart         Pashto / Dari / English strings, digit conversion
-l10n/afghan_date.dart     Solar Hijri calendar, Pashto & Dari month names
-models/models.dart        Profile, Chat, Message, IDs
-services/relay.dart       Transport (ntfy.sh today, our server later)
-services/messenger.dart   App state: chats, sending, receipts, bot, storage
-services/apis.dart        Weather, prayer times, rates, Quran clients
-screens/                  Onboarding, home, chat list, chat, services, calls, settings
-widgets/                  Avatar, message bubble
+main.dart                 Supabase init, theme, language, auth gate
+config.dart               Server URL/key (from --dart-define)
+brand/                    Name, colours, theme, logo
+l10n/                     Pashto / Dari / English strings, Afghan calendar
+models/models.dart        Profile, Chat, Message
+services/messenger.dart   Auth, chats, realtime, sending text/files, read receipts
+screens/                  Account screens, chats, chat, new chat, calls, settings
+widgets/                  Avatar, message bubble (text, photo, file)
 ```
 
-State lives in one `AppController` (a `ChangeNotifier`) exposed through `AppScope`. Data is stored on the device with `shared_preferences` (localStorage on web).
+## Database (`backend/supabase/migrations/`)
 
-## Wire protocol v1
-
-Messages are JSON strings published to ntfy topics:
-
-| Topic | Who listens |
-|---|---|
-| `pgm1-u-<userId>` | The user's inbox (direct messages, receipts) |
-| `pgm1-g-<groupId>` | Every member of a group |
-| `pgm1-g-lobby` | Everyone (public lobby) |
-
-```json
-{"v":1,"t":"m","id":"<msgId>","f":"<senderId>","n":"<senderName>","x":"text","ts":1795498328000,"g":"<groupId?>","gn":"<groupName?>"}
-{"v":1,"t":"a","f":"<senderId>","ids":["<msgId>"],"s":"d|r"}      // delivered / read receipt
-{"v":1,"t":"j","id":"<id>","f":"<senderId>","n":"<name>","g":"<groupId>"}  // joined group
-```
-
-The client keeps the last event time and reconnects with `since=<time>`, de-duplicating by message id, so nothing is lost or shown twice after a reconnect.
-
-## Known limits of the prototype
-
-- **No end-to-end encryption yet.** Topic names are random and hard to guess, but anyone who knows an ID can read that inbox. Do not send sensitive information.
-- No phone-number verification; the phone field is only stored on the device.
-- One device per account; history lives on the device.
-- **ntfy.sh free tier limits: 250 messages per day and about 60 requests per 5 minutes per IP address.** Afghan mobile operators put many customers behind one shared IP, so the free relay is only for testing with a few people. Before inviting real users, run our own ntfy server (open source; a small VPS is enough) and change the address in Settings. The app already retries refused sends and resends failed messages after reconnecting.
-- Calls, voice notes, photos and push notifications are not built yet.
+- `profiles` — one row per account (created by a trigger on sign-up)
+- `chats`, `chat_members` (with `last_read_at` for read receipts), `messages`
+- Storage bucket `attachments` (private), path `<chat_id>/<time>-<file name>`
+- RPCs: `find_user` (exact email/@username only — never lists users), `start_direct_chat`, `create_group`, `add_group_member`, `my_chats` (whole chat list in one request)
+- Row Level Security on every table and on storage: only chat members can read a chat's messages and files. Verified: a third account sees nothing.
 
 ## Roadmap
 
-**Phase 1 (this version):** brand, three languages, text chat, groups, lobby, bot, services, builds for every platform.
-
-**Phase 2: own server**
-- Self-host ntfy (or a custom Dart/Go server) on our own machine; switch the address in Settings.
-- Sign-in with SMS (Afghan carriers: Roshan, AWCC, Etisalat, MTN/Salaam).
-- End-to-end encryption (Signal protocol / X25519 + AES-GCM).
-- Push notifications (UnifiedPush via ntfy on Android, APNs on iPhone).
-
-**Phase 3: media and calls**
-- Photos, files and voice notes with compression tuned for slow networks.
-- Voice and video calls (WebRTC with our own TURN server).
-- Channels anyone can create, multi-device sync, backups.
-
-**Phase 4: stores**
-- Google Play, Apple App Store, Microsoft Store; a website for direct APK download.
+1. **Now:** email accounts, 1:1 and group chats, photos and files, read receipts, all platforms.
+2. **Next:** push notifications (FCM / APNs), voice notes, message delete/edit/reply, profile photos, online status.
+3. **Then:** voice/video calls (WebRTC + own TURN server), end-to-end encryption, channels.
+4. **Own server:** self-host Supabase (Docker) in our data centre, custom SMTP, then Play Store / App Store.

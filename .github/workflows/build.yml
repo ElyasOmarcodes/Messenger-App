@@ -30,6 +30,9 @@ concurrency:
 
 env:
   FLUTTER_VERSION: '3.47.9'
+  # Server address: Settings > Secrets and variables > Actions > Variables
+  # (SUPABASE_URL, SUPABASE_ANON_KEY). The anon key is public by design.
+  SERVER: --dart-define=SUPABASE_URL=${{ vars.SUPABASE_URL }} --dart-define=SUPABASE_ANON_KEY=${{ vars.SUPABASE_ANON_KEY }}
 
 defaults:
   run:
@@ -90,13 +93,13 @@ jobs:
           PAIGHAM_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
           flutter pub get
-          flutter build apk --release --build-number=${{ github.run_number }}
-          flutter build appbundle --release --build-number=${{ github.run_number }}
+          flutter build apk --release --build-number=${{ github.run_number }} $SERVER
+          flutter build appbundle --release --build-number=${{ github.run_number }} $SERVER
           mkdir -p ../dist
           cp build/app/outputs/flutter-apk/app-release.apk "../dist/Paigham-$VERSION-android.apk"
           cp build/app/outputs/bundle/release/app-release.aab "../dist/Paigham-$VERSION-android.aab"
           # Smaller per-CPU APKs (about a third of the size) for slow connections
-          flutter build apk --release --split-per-abi --build-number=${{ github.run_number }}
+          flutter build apk --release --split-per-abi --build-number=${{ github.run_number }} $SERVER
           cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "../dist/Paigham-$VERSION-android-arm64.apk"
           cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "../dist/Paigham-$VERSION-android-armv7.apk"
       - uses: actions/upload-artifact@v4
@@ -120,12 +123,12 @@ jobs:
       - name: Build
         run: |
           flutter pub get
-          flutter build web --release --no-web-resources-cdn --no-wasm-dry-run
+          flutter build web --release --no-web-resources-cdn --no-wasm-dry-run $SERVER
           mkdir -p ../dist
           (cd build/web && zip -qr "../../../dist/Paigham-$VERSION-web.zip" .)
           # Second build for GitHub Pages, which serves the site from /<repo>/
           flutter build web --release --no-web-resources-cdn --no-wasm-dry-run \
-            --base-href "/${{ github.event.repository.name }}/" -o ../pages
+            --base-href "/${{ github.event.repository.name }}/" -o ../pages $SERVER
       - uses: actions/upload-artifact@v4
         with:
           name: paigham-web
@@ -150,7 +153,7 @@ jobs:
       - name: Build
         run: |
           flutter pub get
-          flutter build windows --release --build-number=${{ github.run_number }}
+          flutter build windows --release --build-number=${{ github.run_number }} $SERVER
           mkdir -p ../dist
           cd build/windows/x64/runner/Release
           7z a -tzip "../../../../../../dist/Paigham-$VERSION-windows-x64.zip" . > /dev/null
@@ -177,7 +180,7 @@ jobs:
       - name: Build
         run: |
           flutter pub get
-          flutter build linux --release --build-number=${{ github.run_number }}
+          flutter build linux --release --build-number=${{ github.run_number }} $SERVER
           mkdir -p ../dist
           tar -czf "../dist/Paigham-$VERSION-linux-x64.tar.gz" -C build/linux/x64/release/bundle .
       - uses: actions/upload-artifact@v4
@@ -201,7 +204,7 @@ jobs:
       - name: Build
         run: |
           flutter pub get
-          flutter build macos --release --build-number=${{ github.run_number }}
+          flutter build macos --release --build-number=${{ github.run_number }} $SERVER
           mkdir -p ../dist
           ditto -c -k --keepParent build/macos/Build/Products/Release/Paigham.app "../dist/Paigham-$VERSION-macos.zip"
       - uses: actions/upload-artifact@v4
@@ -225,7 +228,7 @@ jobs:
       - name: Build
         run: |
           flutter pub get
-          flutter build ios --release --no-codesign --build-number=${{ github.run_number }}
+          flutter build ios --release --no-codesign --build-number=${{ github.run_number }} $SERVER
           mkdir -p ../dist Payload
           cp -R build/ios/iphoneos/Runner.app Payload/
           zip -qr "../dist/Paigham-$VERSION-ios-unsigned.ipa" Payload

@@ -3,14 +3,20 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'brand/brand.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
 import 'brand/logo.dart';
+import 'config.dart';
 import 'l10n/strings.dart';
 import 'screens/home_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'services/messenger.dart';
 
-void main() {
+Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  if (AppConfig.configured) {
+    await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
+  }
   final controller = AppController();
   runApp(PaighamApp(controller: controller));
   controller.init();
@@ -44,11 +50,13 @@ class PaighamApp extends StatelessWidget {
                 _CupertinoFallbackDelegate(),
               ],
               builder: (context, child) => LangScope(lang: lang, child: child!),
-              home: !controller.ready
-                  ? const _Splash()
-                  : controller.profile == null
-                      ? const OnboardingScreen()
-                      : const HomeScreen(),
+              home: !AppConfig.configured
+                  ? const _NoServer()
+                  : !controller.ready
+                      ? const _Splash()
+                      : controller.session == null
+                          ? const OnboardingScreen()
+                          : const HomeScreen(),
             ),
           );
         },
@@ -64,6 +72,26 @@ class _Splash extends StatelessWidget {
   Widget build(BuildContext context) => const Scaffold(
         backgroundColor: Brand.lapis,
         body: Center(child: PaighamLogo(size: 120)),
+      );
+}
+
+class _NoServer extends StatelessWidget {
+  const _NoServer();
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        backgroundColor: Brand.lapis,
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(32),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              const PaighamLogo(size: 96),
+              const SizedBox(height: 20),
+              Text(context.tr('server_missing'),
+                  textAlign: TextAlign.center, style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6)),
+            ]),
+          ),
+        ),
       );
 }
 

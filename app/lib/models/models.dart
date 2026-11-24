@@ -1,142 +1,121 @@
-import 'dart:math';
-
-/// Alphabet without look-alike characters (no 0/o, 1/l/i).
-const _idAlphabet = '23456789abcdefghjkmnpqrstuvwxyz';
-
-String randomId(int length) {
-  final r = Random.secure();
-  return List.generate(length, (_) => _idAlphabet[r.nextInt(_idAlphabet.length)]).join();
-}
-
-/// Normalises user-typed IDs: "K7M2Q-9XA3F" -> "k7m2q9xa3f".
-String normalizeId(String raw) => raw.toLowerCase().replaceAll(RegExp('[^a-z0-9]'), '');
-
-bool isValidUserId(String id) => RegExp('^[$_idAlphabet]{10}\$').hasMatch(id);
-
-/// "k7m2q9xa3f" -> "K7M2Q-9XA3F"
-String prettyId(String id) =>
-    id.length == 10 ? '${id.substring(0, 5)}-${id.substring(5)}'.toUpperCase() : id.toUpperCase();
+import 'dart:typed_data';
 
 class Profile {
-  Profile({required this.id, required this.name, this.phone = '', required this.createdAt});
+  Profile({required this.id, required this.email, required this.displayName, this.username, this.lastReadAt, this.role});
 
   final String id;
-  String name;
-  String phone;
-  final DateTime createdAt;
+  final String email;
+  final String displayName;
+  final String? username;
+  final DateTime? lastReadAt; // only set inside a chat's member list
+  final String? role;
 
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'name': name,
-        'phone': phone,
-        'createdAt': createdAt.millisecondsSinceEpoch,
-      };
+  String get name => displayName.trim().isEmpty ? email.split('@').first : displayName;
 
   factory Profile.fromJson(Map<String, dynamic> j) => Profile(
         id: j['id'] as String,
-        name: j['name'] as String,
-        phone: (j['phone'] as String?) ?? '',
-        createdAt: DateTime.fromMillisecondsSinceEpoch(j['createdAt'] as int),
+        email: (j['email'] as String?) ?? '',
+        displayName: (j['display_name'] as String?) ?? '',
+        username: j['username'] as String?,
+        lastReadAt: j['last_read_at'] == null ? null : DateTime.parse(j['last_read_at'] as String).toLocal(),
+        role: j['role'] as String?,
       );
 }
 
-enum ChatKind { direct, group, lobby, bot, channel, saved }
+enum MsgKind { text, image, file }
 
-class Chat {
-  Chat({
-    required this.id,
-    required this.kind,
-    required this.title,
-    this.peerId,
-    this.groupId,
-    this.pinned = false,
-    this.unread = 0,
-    DateTime? updatedAt,
-  }) : updatedAt = updatedAt ?? DateTime.now();
-
-  /// Local id. direct: `u:<peerId>`, group: `g:<groupId>`, others fixed.
-  final String id;
-  final ChatKind kind;
-  String title;
-  final String? peerId;
-  final String? groupId;
-  bool pinned;
-  int unread;
-  DateTime updatedAt;
-
-  bool get canWrite => kind != ChatKind.channel;
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'kind': kind.name,
-        'title': title,
-        'peerId': peerId,
-        'groupId': groupId,
-        'pinned': pinned,
-        'unread': unread,
-        'updatedAt': updatedAt.millisecondsSinceEpoch,
-      };
-
-  factory Chat.fromJson(Map<String, dynamic> j) => Chat(
-        id: j['id'] as String,
-        kind: ChatKind.values.byName(j['kind'] as String),
-        title: j['title'] as String,
-        peerId: j['peerId'] as String?,
-        groupId: j['groupId'] as String?,
-        pinned: (j['pinned'] as bool?) ?? false,
-        unread: (j['unread'] as int?) ?? 0,
-        updatedAt: DateTime.fromMillisecondsSinceEpoch(j['updatedAt'] as int),
-      );
-}
-
-enum MsgStatus { sending, sent, delivered, read, failed }
+enum MsgStatus { sending, sent, read, failed }
 
 class Message {
   Message({
     required this.id,
     required this.chatId,
     required this.senderId,
-    required this.senderName,
-    required this.text,
-    required this.time,
-    required this.outgoing,
-    this.status = MsgStatus.sent,
-    this.system = false,
+    required this.kind,
+    required this.body,
+    required this.createdAt,
+    this.filePath,
+    this.fileName,
+    this.fileSize,
+    this.mimeType,
+    this.localBytes,
+    this.pending = false,
+    this.failed = false,
   });
 
   final String id;
   final String chatId;
   final String senderId;
-  final String senderName;
-  final String text;
-  final DateTime time;
-  final bool outgoing;
-  MsgStatus status;
+  final MsgKind kind;
+  final String body;
+  final DateTime createdAt;
+  final String? filePath;
+  final String? fileName;
+  final int? fileSize;
+  final String? mimeType;
 
-  /// Centered grey notice ("Ahmad joined the group").
-  final bool system;
-
-  Map<String, dynamic> toJson() => {
-        'id': id,
-        'chatId': chatId,
-        'senderId': senderId,
-        'senderName': senderName,
-        'text': text,
-        'time': time.millisecondsSinceEpoch,
-        'outgoing': outgoing,
-        'status': status.name,
-        'system': system,
-      };
+  /// Bytes of a file we are uploading (shown before the upload finishes).
+  final Uint8List? localBytes;
+  bool pending;
+  bool failed;
 
   factory Message.fromJson(Map<String, dynamic> j) => Message(
         id: j['id'] as String,
-        chatId: j['chatId'] as String,
-        senderId: j['senderId'] as String,
-        senderName: j['senderName'] as String,
-        text: j['text'] as String,
-        time: DateTime.fromMillisecondsSinceEpoch(j['time'] as int),
-        outgoing: j['outgoing'] as bool,
-        status: MsgStatus.values.byName(j['status'] as String),
-        system: (j['system'] as bool?) ?? false,
+        chatId: j['chat_id'] as String,
+        senderId: j['sender_id'] as String,
+        kind: MsgKind.values.byName((j['kind'] as String?) ?? 'text'),
+        body: (j['body'] as String?) ?? '',
+        createdAt: DateTime.parse(j['created_at'] as String).toLocal(),
+        filePath: j['file_path'] as String?,
+        fileName: j['file_name'] as String?,
+        fileSize: (j['file_size'] as num?)?.toInt(),
+        mimeType: j['mime_type'] as String?,
       );
+}
+
+class Chat {
+  Chat({
+    required this.id,
+    required this.isGroup,
+    this.title,
+    required this.lastMessageAt,
+    required this.members,
+    this.lastMessage,
+    this.unread = 0,
+  });
+
+  final String id;
+  final bool isGroup;
+  String? title;
+  DateTime lastMessageAt;
+  List<Profile> members;
+  Message? lastMessage;
+  int unread;
+
+  /// The other person in a direct chat.
+  Profile? peer(String me) {
+    for (final m in members) {
+      if (m.id != me) return m;
+    }
+    return null;
+  }
+
+  String displayTitle(String me) => isGroup ? (title ?? '') : (peer(me)?.name ?? '');
+
+  factory Chat.fromJson(Map<String, dynamic> j) => Chat(
+        id: j['id'] as String,
+        isGroup: j['is_group'] as bool,
+        title: j['title'] as String?,
+        lastMessageAt: DateTime.parse(j['last_message_at'] as String).toLocal(),
+        members: ((j['members'] as List?) ?? const []).map((e) => Profile.fromJson(e as Map<String, dynamic>)).toList(),
+        lastMessage: j['last_message'] == null ? null : Message.fromJson(j['last_message'] as Map<String, dynamic>),
+        unread: (j['unread'] as num?)?.toInt() ?? 0,
+      );
+}
+
+String formatBytes(int? b) {
+  if (b == null) return '';
+  if (b < 1024) return '$b B';
+  if (b < 1024 * 1024) return '${(b / 1024).toStringAsFixed(0)} KB';
+  return '${(b / 1024 / 1024).toStringAsFixed(1)} MB';
 }

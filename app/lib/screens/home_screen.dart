@@ -7,12 +7,10 @@ import '../brand/logo.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/messenger.dart';
-import '../services/relay.dart';
 import 'calls_screen.dart';
 import 'chat_screen.dart';
 import 'chats_screen.dart';
 import 'new_chat_sheet.dart';
-import 'services_screen.dart';
 import 'settings_screen.dart';
 
 /// Wide screens (desktop, tablet, web) get a Telegram-Desktop style
@@ -48,12 +46,14 @@ class _HomeScreenState extends State<HomeScreen> {
     final app = AppScope.read(context);
     if (app.openChatId == m.chatId) return;
     final chat = app.chatById(m.chatId);
-    if (chat == null || chat.kind == ChatKind.lobby) return;
+    if (chat == null) return;
+    final sender = app.memberById(chat, m.senderId)?.name ?? '';
+    final who = chat.isGroup ? '${app.chatTitle(chat)} · $sender' : sender;
     ScaffoldMessenger.of(context)
       ..hideCurrentSnackBar()
       ..showSnackBar(
         SnackBar(
-          content: Text('${app.chatTitle(chat)}: ${app.display(m.text)}', maxLines: 2, overflow: TextOverflow.ellipsis),
+          content: Text('$who: ${app.previewOf(m)}', maxLines: 2, overflow: TextOverflow.ellipsis),
           action: SnackBarAction(label: '›', textColor: Brand.saffron, onPressed: () => _openChat(chat)),
           duration: const Duration(seconds: 3),
         ),
@@ -82,14 +82,12 @@ class _HomeScreenState extends State<HomeScreen> {
   List<({IconData icon, IconData active, String label})> _destinations(BuildContext context) => [
         (icon: Icons.chat_bubble_outline_rounded, active: Icons.chat_bubble_rounded, label: context.tr('chats')),
         (icon: Icons.call_outlined, active: Icons.call_rounded, label: context.tr('calls')),
-        (icon: Icons.explore_outlined, active: Icons.explore_rounded, label: context.tr('services')),
         (icon: Icons.settings_outlined, active: Icons.settings_rounded, label: context.tr('settings')),
       ];
 
   Widget _tabBody() => switch (_tab) {
         0 => ChatsScreen(onOpen: _openChat, selectedId: _wide ? _selectedChat : null),
         1 => const CallsScreen(),
-        2 => const ServicesScreen(),
         _ => const SettingsScreen(),
       };
 
@@ -165,7 +163,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           const VerticalDivider(width: 1),
           SizedBox(
-            width: _tab == 2 ? 460 : 380,
+            width: 380,
             child: Scaffold(
               appBar: _tab == 0 ? HomeAppBar(onNewChat: _newChat, compact: true) : AppBar(title: Text(dests[_tab].label)),
               body: _tabBody(),
@@ -194,12 +192,9 @@ class HomeAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final st = app.relayState;
-    final (label, color) = switch (st) {
-      RelayState.online => (context.tr('connected'), const Color(0xFF5BE0A6)),
-      RelayState.connecting => (context.tr('connecting'), Brand.saffron),
-      RelayState.offline => (context.tr('offline'), const Color(0xFFFF8A80)),
-    };
+    final (label, color) = app.realtimeOnline
+        ? (context.tr('connected'), const Color(0xFF5BE0A6))
+        : (context.tr('connecting'), Brand.saffron);
     return AppBar(
       toolbarHeight: 64,
       titleSpacing: 16,

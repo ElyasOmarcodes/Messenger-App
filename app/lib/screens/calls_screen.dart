@@ -15,9 +15,8 @@ class CallsScreen extends StatelessWidget {
       (Icons.call_rounded, 'rm_calls'),
       (Icons.videocam_rounded, 'rm_video'),
       (Icons.mic_rounded, 'rm_voice_notes'),
-      (Icons.photo_library_rounded, 'rm_media'),
+      (Icons.notifications_active_rounded, 'rm_push'),
       (Icons.lock_rounded, 'rm_e2e'),
-      (Icons.dns_rounded, 'rm_server'),
     ];
     return ListView(
       padding: const EdgeInsets.all(16),

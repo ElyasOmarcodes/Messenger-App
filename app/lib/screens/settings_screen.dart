@@ -2,10 +2,10 @@ import 'package:flutter/material.dart';
 
 import '../brand/brand.dart';
 import '../brand/logo.dart';
+import '../config.dart';
 import '../l10n/strings.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
-import 'new_chat_sheet.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -13,7 +13,7 @@ class SettingsScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final p = app.profile!;
+    final me = app.me;
     final cs = Theme.of(context).colorScheme;
 
     String themeLabel(ThemeMode m) => switch (m) {
@@ -28,34 +28,27 @@ class SettingsScreen extends StatelessWidget {
         Card(
           child: Padding(
             padding: const EdgeInsets.all(16),
-            child: Column(
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    Avatar(seed: p.id, label: p.name, size: 64),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(p.name, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
-                          if (p.phone.isNotEmpty)
-                            Directionality(
-                              textDirection: TextDirection.ltr,
-                              child: Text(p.phone, style: TextStyle(color: cs.onSurfaceVariant)),
-                            ),
-                        ],
+                Avatar(seed: app.myId ?? '', label: me?.name ?? app.myEmail, size: 64),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(me?.name ?? '', style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w800)),
+                      Directionality(
+                        textDirection: TextDirection.ltr,
+                        child: Text(app.myEmail, style: TextStyle(color: cs.onSurfaceVariant)),
                       ),
-                    ),
-                    IconButton(
-                      tooltip: context.tr('edit_name'),
-                      onPressed: () => _editName(context, app),
-                      icon: const Icon(Icons.edit_outlined),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-                const SizedBox(height: 14),
-                MyIdCard(id: p.id),
+                IconButton(
+                  tooltip: context.tr('edit_name'),
+                  onPressed: () => _edit(context, 'edit_name', me?.displayName ?? '', (v) => app.updateProfile(displayName: v)),
+                  icon: const Icon(Icons.edit_outlined),
+                ),
               ],
             ),
           ),
@@ -65,52 +58,39 @@ class SettingsScreen extends StatelessWidget {
           child: Column(
             children: [
               _Tile(
+                icon: Icons.alternate_email_rounded,
+                color: Brand.saffronDeep,
+                title: context.tr('username'),
+                value: me?.username != null ? '@${me!.username}' : context.tr('not_set'),
+                onTap: () => _edit(context, 'username', me?.username ?? '', (v) => app.updateProfile(username: v),
+                    hint: context.tr('username_hint'), ltr: true, errorKey: 'username_taken'),
+              ),
+              _Tile(
                 icon: Icons.translate_rounded,
                 color: cs.primary,
                 title: context.tr('language'),
                 value: app.lang.label,
-                onTap: () => _pick<AppLang>(
-                  context,
-                  context.tr('language'),
-                  AppLang.values,
-                  app.lang,
-                  (l) => l.label,
-                  app.setLang,
-                ),
+                onTap: () => _pick<AppLang>(context, context.tr('language'), AppLang.values, app.lang, (l) => l.label, app.setLang),
               ),
               _Tile(
                 icon: Icons.dark_mode_outlined,
                 color: const Color(0xFF6A3FA0),
                 title: context.tr('theme'),
                 value: themeLabel(app.themeMode),
-                onTap: () => _pick<ThemeMode>(
-                  context,
-                  context.tr('theme'),
-                  ThemeMode.values,
-                  app.themeMode,
-                  themeLabel,
-                  app.setTheme,
-                ),
-              ),
-              _Tile(
-                icon: Icons.notifications_none_rounded,
-                color: Brand.saffronDeep,
-                title: context.tr('notifications'),
-                value: context.tr('coming_soon'),
-                onTap: () {},
+                onTap: () => _pick<ThemeMode>(context, context.tr('theme'), ThemeMode.values, app.themeMode, themeLabel, app.setTheme),
               ),
               _Tile(
                 icon: Icons.shield_outlined,
                 color: const Color(0xFF1E8C6E),
                 title: context.tr('privacy'),
-                onTap: () => _info(context, context.tr('privacy'), context.tr('encryption_note')),
+                onTap: () => _info(context, context.tr('privacy'), context.tr('privacy_body')),
               ),
               _Tile(
                 icon: Icons.dns_outlined,
                 color: const Color(0xFF0F7FA8),
-                title: context.tr('relay_server'),
-                value: Uri.parse(app.relayUrl).host,
-                onTap: () => _editRelay(context, app),
+                title: context.tr('server'),
+                value: Uri.parse(AppConfig.supabaseUrl).host,
+                onTap: () {},
               ),
             ],
           ),
@@ -124,28 +104,27 @@ class SettingsScreen extends StatelessWidget {
                 color: cs.primary,
                 title: context.tr('about'),
                 value: '${context.digits(Brand.version)} · ${context.tr('prototype')}',
-                onTap: () => _about(context),
+                onTap: () {},
               ),
               _Tile(
-                icon: Icons.delete_forever_outlined,
+                icon: Icons.logout_rounded,
                 color: Brand.pomegranate,
-                title: context.tr('reset_app'),
+                title: context.tr('logout'),
                 danger: true,
                 onTap: () async {
                   final ok = await showDialog<bool>(
                     context: context,
                     builder: (d) => AlertDialog(
-                      content: Text(d.tr('reset_q')),
+                      content: Text(d.tr('logout_q')),
                       actions: [
                         TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
                         TextButton(
-                          onPressed: () => Navigator.pop(d, true),
-                          child: Text(d.tr('delete'), style: const TextStyle(color: Brand.pomegranate)),
-                        ),
+                            onPressed: () => Navigator.pop(d, true),
+                            child: Text(d.tr('logout'), style: const TextStyle(color: Brand.pomegranate))),
                       ],
                     ),
                   );
-                  if (ok == true) await app.reset();
+                  if (ok == true) await app.signOut();
                 },
               ),
             ],
@@ -157,7 +136,8 @@ class SettingsScreen extends StatelessWidget {
             children: [
               const PaighamLogo(size: 40, background: false),
               const SizedBox(height: 6),
-              Text('${context.tr('app_name')} ${context.digits(Brand.version)}', style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
+              Text('${context.tr('app_name')} ${context.digits(Brand.version)}',
+                  style: TextStyle(color: cs.onSurfaceVariant, fontWeight: FontWeight.w700)),
               Text(context.tr('made_for'), style: TextStyle(color: cs.onSurfaceVariant, fontSize: 12.5)),
             ],
           ),
@@ -166,14 +146,7 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _pick<T>(
-    BuildContext context,
-    String title,
-    List<T> values,
-    T current,
-    String Function(T) label,
-    void Function(T) onPick,
-  ) async {
+  Future<void> _pick<T>(BuildContext context, String title, List<T> values, T current, String Function(T) label, void Function(T) onPick) async {
     final v = await showDialog<T>(
       context: context,
       builder: (ctx) => SimpleDialog(
@@ -192,35 +165,16 @@ class SettingsScreen extends StatelessWidget {
     if (v != null) onPick(v);
   }
 
-  Future<void> _editName(BuildContext context, AppController app) async {
-    final c = TextEditingController(text: app.profile!.name);
+  Future<void> _edit(BuildContext context, String titleKey, String initial, Future<bool> Function(String) save,
+      {String? hint, bool ltr = false, String errorKey = 'err_generic'}) async {
+    final c = TextEditingController(text: initial);
     final v = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(ctx.tr('edit_name')),
-        content: TextField(controller: c, autofocus: true, maxLength: 40, decoration: const InputDecoration(counterText: '')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('cancel'))),
-          TextButton(onPressed: () => Navigator.pop(ctx, c.text), child: Text(ctx.tr('save'))),
-        ],
-      ),
-    );
-    if (v != null) app.updateName(v);
-  }
-
-  Future<void> _editRelay(BuildContext context, AppController app) async {
-    final c = TextEditingController(text: app.relayUrl);
-    final v = await showDialog<String>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(ctx.tr('relay_server')),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(ctx.tr('relay_hint'), style: const TextStyle(height: 1.5)),
-            const SizedBox(height: 12),
-            Directionality(textDirection: TextDirection.ltr, child: TextField(controller: c)),
-          ],
+        title: Text(ctx.tr(titleKey)),
+        content: Directionality(
+          textDirection: ltr ? TextDirection.ltr : Directionality.of(ctx),
+          child: TextField(controller: c, autofocus: true, maxLength: 40, decoration: InputDecoration(helperText: hint, helperMaxLines: 2)),
         ),
         actions: [
           TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('cancel'))),
@@ -228,7 +182,11 @@ class SettingsScreen extends StatelessWidget {
         ],
       ),
     );
-    if (v != null) app.setRelay(v);
+    if (v == null) return;
+    final ok = await save(v);
+    if (!ok && context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr(errorKey))));
+    }
   }
 
   void _info(BuildContext context, String title, String body) => showDialog<void>(
@@ -239,48 +197,6 @@ class SettingsScreen extends StatelessWidget {
           actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('ok')))],
         ),
       );
-
-  void _about(BuildContext context) {
-    const services = [
-      ('ntfy.sh', 'real-time relay'),
-      ('Open-Meteo', 'weather'),
-      ('AlAdhan', 'prayer times'),
-      ('ExchangeRate-API', 'currency rates'),
-      ('AlQuran Cloud', 'Quran + Pashto/Dari translation'),
-      ('Vazirmatn', 'font (OFL)'),
-    ];
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            const PaighamLogo(size: 36),
-            const SizedBox(width: 10),
-            Text(ctx.tr('app_name')),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('${ctx.tr('version')}: ${Brand.version} (${ctx.tr('prototype')})'),
-            const SizedBox(height: 12),
-            Text(ctx.tr('free_services'), style: const TextStyle(fontWeight: FontWeight.w800)),
-            const SizedBox(height: 6),
-            for (final (name, what) in services)
-              Padding(
-                padding: const EdgeInsets.symmetric(vertical: 2),
-                child: Directionality(
-                  textDirection: TextDirection.ltr,
-                  child: Text('• $name — $what', style: const TextStyle(fontSize: 13.5)),
-                ),
-              ),
-          ],
-        ),
-        actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('ok')))],
-      ),
-    );
-  }
 }
 
 class _Tile extends StatelessWidget {
@@ -307,7 +223,11 @@ class _Tile extends StatelessWidget {
       trailing: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          if (value != null) Text(value!, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13.5)),
+          if (value != null)
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 170),
+              child: Text(value!, overflow: TextOverflow.ellipsis, style: TextStyle(color: cs.onSurfaceVariant, fontSize: 13.5)),
+            ),
           const SizedBox(width: 4),
           Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
         ],

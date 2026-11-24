@@ -1,0 +1,11 @@
+{
+  "name": "paigham-backend",
+  "private": true,
+  "scripts": {
+    "start": "supabase start -x studio,imgproxy,vector,logflare,edge-runtime,supavisor,postgres-meta",
+    "stop": "supabase stop",
+    "reset": "supabase db reset",
+    "deploy": "supabase db push"
+  },
+  "devDependencies": { "supabase": "^2.122.1" }
+}
