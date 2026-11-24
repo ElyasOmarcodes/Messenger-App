@@ -95,6 +95,10 @@ jobs:
           mkdir -p ../dist
           cp build/app/outputs/flutter-apk/app-release.apk "../dist/Paigham-$VERSION-android.apk"
           cp build/app/outputs/bundle/release/app-release.aab "../dist/Paigham-$VERSION-android.aab"
+          # Smaller per-CPU APKs (about a third of the size) for slow connections
+          flutter build apk --release --split-per-abi --build-number=${{ github.run_number }}
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "../dist/Paigham-$VERSION-android-arm64.apk"
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk "../dist/Paigham-$VERSION-android-armv7.apk"
       - uses: actions/upload-artifact@v4
         with:
           name: paigham-android
@@ -256,7 +260,9 @@ jobs:
 
             | File | Platform |
             |---|---|
-            | `*-android.apk` | Android phones: download and open to install |
+            | `*-android-arm64.apk` | Most Android phones (smallest download, ~20 MB) |
+            | `*-android-armv7.apk` | Older 32-bit Android phones |
+            | `*-android.apk` | Any Android phone (all CPU types in one, larger) |
             | `*-android.aab` | Google Play upload |
             | `*-windows-x64.zip` | Windows 10/11: unzip and run `Paigham.exe` |
             | `*-macos.zip` | macOS: unzip and open `Paigham.app` |

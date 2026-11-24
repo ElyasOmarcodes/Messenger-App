@@ -44,9 +44,13 @@
 |---|---|---|---|
 | <img src="docs/screenshots/01_welcome_ps.png" width="200"> | <img src="docs/screenshots/02_chats_ps.png" width="200"> | <img src="docs/screenshots/09_chat_ps_read.png" width="200"> | <img src="docs/screenshots/08_chat_fa.png" width="200"> |
 
-| Assistant bot | Services | Prayer times & rates | Settings |
+| Assistant bot | Verse with Pashto translation | Services | Rates in Afghani |
 |---|---|---|---|
-| <img src="docs/screenshots/03_bot_ps.png" width="200"> | <img src="docs/screenshots/10_services_ps.png" width="200"> | <img src="docs/screenshots/11_services_ps_more.png" width="200"> | <img src="docs/screenshots/13_settings_ps.png" width="200"> |
+| <img src="docs/screenshots/03_bot_ps.png" width="200"> | <img src="docs/screenshots/03b_bot_ps_ayah.png" width="200"> | <img src="docs/screenshots/10_services_ps.png" width="200"> | <img src="docs/screenshots/12_services_ps_ayah.png" width="200"> |
+
+| Dari onboarding | New chat / your ID | Settings | Calls (planned) |
+|---|---|---|---|
+| <img src="docs/screenshots/04_welcome_fa.png" width="200"> | <img src="docs/screenshots/06_new_chat_ps.png" width="200"> | <img src="docs/screenshots/13_settings_ps.png" width="200"> | <img src="docs/screenshots/14_calls_ps.png" width="200"> |
 
 **Desktop / web (two-pane layout)**
 

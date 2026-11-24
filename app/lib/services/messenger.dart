@@ -90,17 +90,19 @@ class AppController extends ChangeNotifier {
           if (c.groupId != null) groupTopic(c.groupId!),
       ];
 
-  void _connect() {
+  void _connect({bool force = false}) {
     _relay ??= Relay(
       baseUrl: relayUrl,
       onEvent: _onEvent,
       onState: (st) {
+        final cameOnline = st == RelayState.online && relayState != RelayState.online;
         relayState = st;
         notifyListeners();
+        if (cameOnline) _resendFailed();
       },
     );
     _relay!.baseUrl = relayUrl;
-    _relay!.connect(_topics, () => _lastEventTime);
+    _relay!.connect(_topics, () => _lastEventTime, force: force);
   }
 
   // ── Onboarding ───────────────────────────────────────────────────────────
@@ -241,6 +243,16 @@ class AppController extends ChangeNotifier {
     notifyListeners();
     await _transmit(chat, m);
     _touch(chat);
+  }
+
+  /// Messages that could not be sent are tried again once we are back online.
+  Future<void> _resendFailed() async {
+    for (final c in [...chats]) {
+      if (c.kind != ChatKind.direct && c.kind != ChatKind.group && c.kind != ChatKind.lobby) continue;
+      for (final m in [...messagesOf(c.id)]) {
+        if (m.outgoing && m.status == MsgStatus.failed) await retry(m);
+      }
+    }
   }
 
   Future<void> _transmit(Chat chat, Message m) async {
@@ -484,9 +496,9 @@ class AppController extends ChangeNotifier {
   void _subscriptionChanged({bool sinceAll = false}) {
     if (profile == null) return;
     if (sinceAll) {
-      // Fetch the cached history so a new member sees recent messages.
-      _relay?.connect(_topics, () => 0);
-      Future.delayed(const Duration(seconds: 5), () => _relay?.connect(_topics, () => _lastEventTime));
+      // Reconnect from the start of the relay's cache so a new member sees
+      // recent history; duplicates are dropped by message id.
+      _relay?.connect(_topics, () => 0, force: true);
       return;
     }
     _relay?.connect(_topics, () => _lastEventTime);
@@ -510,7 +522,7 @@ class AppController extends ChangeNotifier {
     if (Uri.tryParse(u)?.hasScheme != true) return;
     relayUrl = u;
     _prefs.setString('relay', u);
-    if (profile != null) _connect();
+    if (profile != null) _connect(force: true);
     notifyListeners();
   }
 

@@ -46,9 +46,14 @@ class Relay {
 
   /// Opens (or re-opens) the subscription. [since] returns the unix time of the
   /// last event we stored, so reconnects only fetch what we missed.
-  void connect(List<String> topics, int Function() since) {
-    _topics = topics.toSet().toList()..sort();
+  void connect(List<String> topics, int Function() since, {bool force = false}) {
+    final next = topics.toSet().toList()..sort();
     _since = since;
+    // Every (re)connect counts against the relay's rate limit, so skip it
+    // when we are already listening to exactly these topics.
+    final same = next.join(',') == _topics.join(',');
+    if (same && !force && !_closed && state != RelayState.offline) return;
+    _topics = next;
     _closed = false;
     _open();
   }
@@ -121,15 +126,20 @@ class Relay {
     _set(RelayState.offline);
   }
 
-  /// Returns true when the relay accepted the message.
+  /// Returns true when the relay accepted the message. Retries briefly when
+  /// the relay is busy (HTTP 429/5xx) or the network drops.
   Future<bool> publish(String topic, String body) async {
-    try {
-      final res = await http
-          .post(Uri.parse('${baseUrl.replaceAll(RegExp(r'/$'), '')}/$topic'), body: body)
-          .timeout(const Duration(seconds: 15));
-      return res.statusCode >= 200 && res.statusCode < 300;
-    } catch (_) {
-      return false;
+    final uri = Uri.parse('${baseUrl.replaceAll(RegExp(r'/$'), '')}/$topic');
+    for (var attempt = 0; attempt < 3; attempt++) {
+      if (attempt > 0) await Future<void>.delayed(Duration(seconds: attempt * 3));
+      try {
+        final res = await http.post(uri, body: body).timeout(const Duration(seconds: 15));
+        if (res.statusCode >= 200 && res.statusCode < 300) return true;
+        if (res.statusCode != 429 && res.statusCode < 500) return false;
+      } catch (_) {
+        // network error: try again
+      }
     }
+    return false;
   }
 }

@@ -41,7 +41,7 @@ The client keeps the last event time and reconnects with `since=<time>`, de-dupl
 - **No end-to-end encryption yet.** Topic names are random and hard to guess, but anyone who knows an ID can read that inbox. Do not send sensitive information.
 - No phone-number verification; the phone field is only stored on the device.
 - One device per account; history lives on the device.
-- ntfy.sh's free tier has daily request limits per IP address.
+- **ntfy.sh free tier limits: 250 messages per day and about 60 requests per 5 minutes per IP address.** Afghan mobile operators put many customers behind one shared IP, so the free relay is only for testing with a few people. Before inviting real users, run our own ntfy server (open source; a small VPS is enough) and change the address in Settings. The app already retries refused sends and resends failed messages after reconnecting.
 - Calls, voice notes, photos and push notifications are not built yet.
 
 ## Roadmap
