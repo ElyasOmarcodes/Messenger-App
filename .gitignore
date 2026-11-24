@@ -1,0 +1,4 @@
+# Build outputs produced by CI or local packaging
+/dist/
+/pages/
+.DS_Store
