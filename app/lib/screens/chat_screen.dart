@@ -18,11 +18,18 @@ import '../models/models.dart';
 import '../services/messenger.dart';
 import '../services/voice_io.dart';
 import '../widgets/avatar.dart';
+import '../widgets/chat_options.dart';
 import '../widgets/effects.dart';
 import '../widgets/message_bubble.dart';
 import 'call_screen.dart';
 import 'new_chat_sheet.dart';
 import 'profile_screen.dart';
+
+/// Opens "Saved Messages" (creating it the first time).
+Future<void> openSavedMessages(BuildContext context) async {
+  final c = await AppScope.read(context).savedChat();
+  if (c != null && context.mounted) Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChatScreen(chatId: c.id)));
+}
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key, required this.chatId, this.embedded = false});
@@ -388,6 +395,10 @@ class _ChatScreenState extends State<ChatScreen> {
       case MsgAction.pin:
         await _app!.pinMessage(chat, chat.pinnedMessageId == m.id ? null : m);
         _toast(chat.pinnedMessageId == null ? 'unpinned' : 'pinned');
+      case MsgAction.save:
+        final saved = await _app!.savedChat();
+        final ok = saved != null && await _app!.forward(m, saved);
+        _toast(ok ? 'saved_toast' : 'err_generic');
       case MsgAction.forward:
         final target = await _pickChat();
         if (target != null) {
@@ -455,18 +466,21 @@ class _ChatScreenState extends State<ChatScreen> {
               padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
               child: Text(ctx.tr('forward_to'), style: const TextStyle(fontSize: 19, fontWeight: FontWeight.w800)),
             ),
+            ListTile(
+              leading: const SavedAvatar(size: 44),
+              title: Text(ctx.tr('saved_messages'), style: const TextStyle(fontWeight: FontWeight.w600)),
+              onTap: () async {
+                final saved = await app.savedChat();
+                if (ctx.mounted) Navigator.pop(ctx, saved);
+              },
+            ),
             for (final c in app.chats)
-              ListTile(
-                leading: Avatar(
-                  seed: c.isGroup ? c.id : (c.peer(app.myId ?? '')?.id ?? c.id),
-                  label: app.chatTitle(c),
-                  group: c.isGroup,
-                  imageUrl: c.isGroup ? c.avatarUrl : c.peer(app.myId ?? '')?.avatarUrl,
-                  size: 44,
+              if (!c.isSaved)
+                ListTile(
+                  leading: ChatAvatar(chat: c, size: 44),
+                  title: Text(app.chatTitle(c), style: const TextStyle(fontWeight: FontWeight.w600)),
+                  onTap: () => Navigator.pop(ctx, c),
                 ),
-                title: Text(app.chatTitle(c), style: const TextStyle(fontWeight: FontWeight.w600)),
-                onTap: () => Navigator.pop(ctx, c),
-              ),
           ],
         ),
       );
@@ -474,6 +488,7 @@ class _ChatScreenState extends State<ChatScreen> {
   );
 
   void _openInfo(AppController app, Chat chat) {
+    if (chat.isSaved) return;
     final peer = chat.isGroup ? null : chat.peer(app.myId ?? '');
     if (!chat.isGroup && peer == null) return;
     Navigator.of(context).push(
@@ -504,25 +519,6 @@ class _ChatScreenState extends State<ChatScreen> {
     _toast('added');
   }
 
-  Future<void> _leave(Chat chat) async {
-    final ok = await showDialog<bool>(
-      context: context,
-      builder: (d) => AlertDialog(
-        content: Text(d.tr('leave_q')),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-          TextButton(
-            onPressed: () => Navigator.pop(d, true),
-            child: Text(d.tr('leave'), style: const TextStyle(color: Brand.pomegranate)),
-          ),
-        ],
-      ),
-    );
-    if (ok != true) return;
-    await _app!.leaveChat(chat);
-    if (mounted && !widget.embedded) Navigator.of(context).pop();
-  }
-
   Future<void> _openUser(String uid) async {
     final c = await _app!.openDirect(uid);
     if (c == null) return _toast('err_generic');
@@ -549,7 +545,6 @@ class _ChatScreenState extends State<ChatScreen> {
     final msgs = app.messagesOf(chat.id);
     final pinned = chat.pinnedMessageId == null ? null : app.messageById(chat.id, chat.pinnedMessageId!);
     final barTop = MediaQuery.paddingOf(context).top + kToolbarHeight;
-    final peer = chat.isGroup ? null : chat.peer(app.myId ?? '');
 
     return PopScope(
       canPop: !_emoji,
@@ -569,13 +564,7 @@ class _ChatScreenState extends State<ChatScreen> {
             onTap: () => _openInfo(app, chat),
             child: Row(
               children: [
-                Avatar(
-                  seed: chat.isGroup ? chat.id : (peer?.id ?? chat.id),
-                  label: title,
-                  group: chat.isGroup,
-                  imageUrl: chat.isGroup ? chat.avatarUrl : peer?.avatarUrl,
-                  size: 40,
-                ),
+                ChatAvatar(chat: chat, size: 40),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -587,12 +576,13 @@ class _ChatScreenState extends State<ChatScreen> {
                         overflow: TextOverflow.ellipsis,
                         style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                       ),
-                      Text(
-                        _subtitle(app, chat),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: cs.onSurfaceVariant),
-                      ),
+                      if (!chat.isSaved)
+                        Text(
+                          _subtitle(app, chat),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: cs.onSurfaceVariant),
+                        ),
                     ],
                   ),
                 ),
@@ -600,26 +590,42 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ),
           actions: [
-            if (!chat.isGroup) ...[
+            if (!chat.isGroup && !chat.isSaved) ...[
               IconButton(tooltip: context.tr('video_call'), onPressed: () => _call(chat, true), icon: const Icon(Icons.videocam_outlined)),
               IconButton(tooltip: context.tr('voice_call'), onPressed: () => _call(chat, false), icon: const Icon(Icons.call_outlined)),
             ],
             PopupMenuButton<String>(
               icon: const Icon(Icons.more_vert_rounded),
-              onSelected: (v) {
+              onSelected: (v) async {
                 switch (v) {
                   case 'info':
                     _openInfo(app, chat);
                   case 'add':
                     _addMember(chat);
+                  case 'mute':
+                    await app.toggleMute(chat);
+                    _toast(chat.muted ? 'muted_toast' : 'unmuted_toast');
+                  case 'clear':
+                    await clearHistoryFlow(context, chat);
                   case 'leave':
-                    _leave(chat);
+                    final nav = Navigator.of(context);
+                    if (await deleteChatFlow(context, chat) && !widget.embedded) nav.pop();
                 }
               },
               itemBuilder: (ctx) => [
-                _menuItem(ctx, 'info', Icons.info_outline_rounded, 'info'),
+                if (!chat.isSaved) _menuItem(ctx, 'info', Icons.info_outline_rounded, 'info'),
                 if (chat.isGroup) _menuItem(ctx, 'add', Icons.person_add_alt_1_outlined, 'add_member'),
-                _menuItem(ctx, 'leave', Icons.logout_rounded, 'leave_chat', danger: true),
+                if (!chat.isSaved)
+                  _menuItem(ctx, 'mute', chat.muted ? Icons.notifications_active_outlined : Icons.notifications_off_outlined, chat.muted ? 'unmute_chat' : 'mute_chat'),
+                _menuItem(ctx, 'clear', Icons.cleaning_services_outlined, 'clear_history'),
+                if (!chat.isSaved)
+                  _menuItem(
+                    ctx,
+                    'leave',
+                    chat.isGroup ? Icons.logout_rounded : Icons.delete_outline_rounded,
+                    chat.isGroup ? 'leave_chat' : 'delete_chat',
+                    danger: true,
+                  ),
               ],
             ),
           ],
@@ -694,17 +700,17 @@ class _ChatScreenState extends State<ChatScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.waving_hand_rounded, size: 52, color: Colors.white),
+              Icon(chat.isSaved ? Icons.bookmark_rounded : Icons.waving_hand_rounded, size: 52, color: Colors.white),
               const SizedBox(height: 10),
               Text(
-                context.tr('no_messages'),
+                context.tr(chat.isSaved ? 'saved_messages' : 'no_messages'),
                 style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w800, fontSize: 16),
               ),
               const SizedBox(height: 4),
               Text(
-                context.tr('say_hello'),
+                context.tr(chat.isSaved ? 'saved_hint' : 'say_hello'),
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.white70),
+                style: const TextStyle(color: Colors.white70, height: 1.5),
               ),
             ],
           ),

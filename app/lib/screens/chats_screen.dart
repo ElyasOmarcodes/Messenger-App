@@ -9,6 +9,7 @@ import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
+import '../widgets/chat_options.dart';
 import 'stories.dart';
 
 enum _Filter { all, personal, groups, unread }
@@ -95,7 +96,9 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
     final app = AppScope.of(context);
     final cs = Theme.of(context).colorScheme;
     final q = _query.trim().toLowerCase();
+    final archived = app.chats.where((c) => c.archived).toList();
     final list = app.chats.where((c) {
+      if (c.archived && _query.trim().isEmpty) return false;
       switch (_filter) {
         case _Filter.personal:
           if (c.isGroup) return false;
@@ -169,6 +172,13 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
                   SliverToBoxAdapter(child: SizedBox(height: full)),
+                  if (archived.isNotEmpty && q.isEmpty && _filter == _Filter.all)
+                    SliverToBoxAdapter(
+                      child: ArchivedRow(
+                        chats: archived,
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ArchivedChatsScreen(onOpen: widget.onOpen))),
+                      ),
+                    ),
                   if (!app.chatsLoaded)
                     const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
                   else if (list.isEmpty)
@@ -206,7 +216,10 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                       padding: const EdgeInsets.only(bottom: 120),
                       sliver: SliverList.builder(
                         itemCount: list.length,
-                        itemBuilder: (_, i) => ChatTile(chat: list[i], selected: list[i].id == widget.selectedId, onTap: () => widget.onOpen(list[i])),
+                        itemBuilder: (_, i) => SwipeArchive(
+                          chat: list[i],
+                          child: ChatTile(chat: list[i], selected: list[i].id == widget.selectedId, onTap: () => widget.onOpen(list[i])),
+                        ),
                       ),
                     ),
                 ],
@@ -435,33 +448,29 @@ class ChatTile extends StatelessWidget {
     final title = app.chatTitle(chat);
     final s = Strings(context.lang);
     final mine = last != null && last.senderId == app.myId;
-    final peer = chat.isGroup ? null : chat.peer(app.myId ?? '');
 
     String preview;
     String who = '';
     if (last == null) {
-      preview = context.tr('no_messages');
+      preview = context.tr(chat.isSaved ? 'saved_hint_short' : 'no_messages');
     } else {
-      who = mine ? '${context.tr('you')}: ' : (chat.isGroup ? '${app.memberById(chat, last.senderId)?.name ?? ''}: ' : '');
+      who = chat.isSaved ? '' : (mine ? '${context.tr('you')}: ' : (chat.isGroup ? '${app.memberById(chat, last.senderId)?.name ?? ''}: ' : ''));
       preview = app.previewOf(last).replaceAll('\n', ' ');
     }
-    final read = last != null && mine && app.statusOf(chat, last) == MsgStatus.read;
+    final read = last != null && mine && !chat.isSaved && app.statusOf(chat, last) == MsgStatus.read;
+    final badgeColor = chat.muted ? cs.onSurfaceVariant.withValues(alpha: 0.55) : cs.primary;
 
     return Material(
-      color: selected ? cs.primaryContainer : Colors.transparent,
+      color: selected ? cs.primaryContainer : (chat.pinnedAt != null ? cs.surfaceContainerLow.withValues(alpha: 0.6) : Colors.transparent),
       child: InkWell(
         onTap: onTap,
+        onLongPress: () => showChatOptions(context, chat),
+        onSecondaryTap: () => showChatOptions(context, chat),
         child: Padding(
           padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 14, 8),
           child: Row(
             children: [
-              Avatar(
-                seed: chat.isGroup ? chat.id : (peer?.id ?? chat.id),
-                label: title,
-                group: chat.isGroup,
-                imageUrl: chat.isGroup ? chat.avatarUrl : peer?.avatarUrl,
-                size: 58,
-              ),
+              ChatAvatar(chat: chat, size: 58),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -474,7 +483,7 @@ class ChatTile extends StatelessWidget {
                             padding: const EdgeInsetsDirectional.only(end: 4),
                             child: Icon(Icons.groups_rounded, size: 17, color: cs.onSurface),
                           ),
-                        Expanded(
+                        Flexible(
                           child: Text(
                             title,
                             maxLines: 1,
@@ -482,11 +491,20 @@ class ChatTile extends StatelessWidget {
                             style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700),
                           ),
                         ),
-                        if (mine) ...[Icon(read ? Icons.done_all_rounded : Icons.done_rounded, size: 17, color: cs.primary), const SizedBox(width: 3)],
+                        if (chat.muted)
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(start: 4),
+                            child: Icon(Icons.volume_off_rounded, size: 16, color: cs.onSurfaceVariant),
+                          ),
+                        const Spacer(),
+                        if (mine && !chat.isSaved) ...[
+                          Icon(read ? Icons.done_all_rounded : Icons.done_rounded, size: 17, color: cs.primary),
+                          const SizedBox(width: 3),
+                        ],
                         if (last != null)
                           Text(
                             chatListTime(last.createdAt, context.lang, s),
-                            style: TextStyle(fontSize: 12.5, color: chat.unread > 0 ? cs.primary : cs.onSurfaceVariant),
+                            style: TextStyle(fontSize: 12.5, color: chat.unread > 0 && !chat.muted ? cs.primary : cs.onSurfaceVariant),
                           ),
                       ],
                     ),
@@ -523,11 +541,26 @@ class ChatTile extends StatelessWidget {
                             margin: const EdgeInsetsDirectional.only(start: 8),
                             padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
                             constraints: const BoxConstraints(minWidth: 24),
-                            decoration: BoxDecoration(color: cs.primary, borderRadius: BorderRadius.circular(12)),
+                            decoration: BoxDecoration(color: badgeColor, borderRadius: BorderRadius.circular(12)),
                             child: Text(
                               context.digits(chat.unread),
                               textAlign: TextAlign.center,
                               style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white),
+                            ),
+                          )
+                        else if (chat.markedUnread)
+                          Container(
+                            margin: const EdgeInsetsDirectional.only(start: 8),
+                            width: 20,
+                            height: 20,
+                            decoration: BoxDecoration(color: badgeColor, shape: BoxShape.circle),
+                          )
+                        else if (chat.pinnedAt != null)
+                          Padding(
+                            padding: const EdgeInsetsDirectional.only(start: 8),
+                            child: Transform.rotate(
+                              angle: 0.6,
+                              child: Icon(Icons.push_pin_rounded, size: 18, color: cs.onSurfaceVariant.withValues(alpha: 0.7)),
                             ),
                           ),
                       ],
@@ -539,6 +572,139 @@ class ChatTile extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Swipe a chat toward the start edge to archive it (or bring it back from the archive).
+class SwipeArchive extends StatelessWidget {
+  const SwipeArchive({super.key, required this.chat, required this.child});
+  final Chat chat;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Dismissible(
+      key: ValueKey('swipe-${chat.id}-${chat.archived}'),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        color: chat.archived ? cs.primary : const Color(0xFF9AA6B2),
+        alignment: AlignmentDirectional.centerEnd,
+        padding: const EdgeInsetsDirectional.only(end: 26),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(chat.archived ? Icons.unarchive_rounded : Icons.archive_rounded, color: Colors.white),
+            const SizedBox(height: 2),
+            Text(
+              context.tr(chat.archived ? 'unarchive' : 'archive'),
+              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w700, fontSize: 12.5),
+            ),
+          ],
+        ),
+      ),
+      confirmDismiss: (_) async {
+        if (chat.archived) {
+          await AppScope.read(context).setArchived(chat, false);
+        } else {
+          await archiveChat(context, chat);
+        }
+        return true;
+      },
+      child: child,
+    );
+  }
+}
+
+/// Top row of the list that opens the archive.
+class ArchivedRow extends StatelessWidget {
+  const ArchivedRow({super.key, required this.chats, required this.onTap});
+  final List<Chat> chats;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final unread = chats.where((c) => c.unread > 0 || c.markedUnread).length;
+    return InkWell(
+      onTap: onTap,
+      child: Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 14, 8),
+        child: Row(
+          children: [
+            const ArchiveAvatar(size: 58),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(context.tr('archived_chats'), style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 4),
+                  Text(
+                    chats.map(app.chatTitle).join('، '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontSize: 14.5, color: cs.onSurfaceVariant),
+                  ),
+                ],
+              ),
+            ),
+            if (unread > 0)
+              Container(
+                margin: const EdgeInsetsDirectional.only(start: 8),
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                constraints: const BoxConstraints(minWidth: 24),
+                decoration: BoxDecoration(color: cs.onSurfaceVariant.withValues(alpha: 0.55), borderRadius: BorderRadius.circular(12)),
+                child: Text(
+                  context.digits(unread),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: Colors.white),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class ArchivedChatsScreen extends StatelessWidget {
+  const ArchivedChatsScreen({super.key, required this.onOpen});
+  final void Function(Chat) onOpen;
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final list = app.chats.where((c) => c.archived).toList();
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: Text(context.tr('archived_chats'))),
+      body: list.isEmpty
+          ? Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.archive_outlined, size: 56, color: cs.onSurfaceVariant),
+                  const SizedBox(height: 10),
+                  Text(context.tr('archive_empty'), style: TextStyle(color: cs.onSurfaceVariant)),
+                ],
+              ),
+            )
+          : ListView(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(18, 10, 18, 6),
+                  child: Text(context.tr('archive_hint'), style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+                ),
+                for (final c in list)
+                  SwipeArchive(
+                    chat: c,
+                    child: ChatTile(chat: c, onTap: () => onOpen(c)),
+                  ),
+              ],
+            ),
     );
   }
 }

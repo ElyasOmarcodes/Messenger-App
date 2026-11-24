@@ -180,6 +180,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   label: context.tr('edit_name'),
                   onTap: () => _edit('edit_name', app.me?.displayName ?? '', (v) => app.updateProfile(displayName: v)),
                 ),
+                _Action(icon: Icons.bookmark_rounded, label: context.tr('saved_short'), onTap: () => openSavedMessages(context)),
               ]),
             ),
           if (widget._kind == _Kind.group && chat != null)

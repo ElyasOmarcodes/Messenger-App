@@ -30,7 +30,7 @@ TextDirection textDirOf(String s, TextDirection fallback) {
 const quickReactions = ['\u2764\uFE0F', '\u{1F44D}', '\u{1F602}', '\u{1F62E}', '\u{1F622}', '\u{1F64F}'];
 
 /// Actions chosen from the long-press menu.
-enum MsgAction { reply, copy, edit, pin, forward, delete }
+enum MsgAction { reply, copy, edit, pin, forward, save, delete }
 
 class MessageBubble extends StatefulWidget {
   const MessageBubble({
@@ -376,6 +376,7 @@ class _ContextMenu extends StatelessWidget {
       if (mine && const [MsgKind.text, MsgKind.image, MsgKind.album, MsgKind.file].contains(message.kind)) (Icons.edit_rounded, 'edit', MsgAction.edit, false),
       (pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded, pinned ? 'unpin' : 'pin', MsgAction.pin, false),
       (Icons.shortcut_rounded, 'forward', MsgAction.forward, false),
+      if (!chat.isSaved) (Icons.bookmark_border_rounded, 'save_message', MsgAction.save, false),
       if (mine) (Icons.delete_outline_rounded, 'delete', MsgAction.delete, true),
     ];
     final panel = dark ? const Color(0xF0242F3D) : const Color(0xF5FFFFFF);

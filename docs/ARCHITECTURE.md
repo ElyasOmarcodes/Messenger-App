@@ -49,6 +49,7 @@ Run each file in `backend/supabase/migrations/` once, in order, in the Supabase 
 1. `20261124000000_paigham_core.sql`: accounts, chats, messages, files
 2. `20261125000000_paigham_v3.sql`: profile photos, replies, delete, voice notes, calls, sign-in check (`email_status`)
 3. `20261126000000_paigham_v5.sql`: message edit, reactions, pinned messages, albums, location and contact messages, group photos, and 24-hour stories (`stories`, `story_views`, `story_feed`, `story_viewers`, private `stories` bucket)
+4. `20261127000000_paigham_v6.sql`: Saved Messages (`saved_chat`) and per-person chat options on `chat_members` (pinned, muted, archived, marked unread, cleared history)
 
 ## Calls behind mobile networks
 

@@ -6,6 +6,8 @@ import '../config.dart';
 import '../l10n/strings.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
+import 'chat_screen.dart';
+import 'chats_screen.dart';
 import 'profile_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -37,6 +39,22 @@ class SettingsScreen extends StatelessWidget {
             trailing: const Icon(Icons.chevron_right_rounded),
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen.me())),
           ),
+        ]),
+        const SizedBox(height: 10),
+        _Group(children: [
+          _Tile(icon: Icons.bookmark_rounded, color: const Color(0xFF3390EC), title: context.tr('saved_messages'), onTap: () => openSavedMessages(context)),
+          if (app.chats.any((c) => c.archived))
+            _Tile(
+              icon: Icons.archive_rounded,
+              color: const Color(0xFF9AA6B2),
+              title: context.tr('archived_chats'),
+              value: context.digits(app.chats.where((c) => c.archived).length),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                builder: (_) => ArchivedChatsScreen(
+                  onOpen: (c) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChatScreen(chatId: c.id))),
+                ),
+              )),
+            ),
         ]),
         _Header(context.tr('appearance_sub')),
         _Group(children: [

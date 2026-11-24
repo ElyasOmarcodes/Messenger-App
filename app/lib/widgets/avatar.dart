@@ -52,3 +52,34 @@ class Avatar extends StatelessWidget {
     );
   }
 }
+
+/// Blue bookmark circle used for "Saved Messages".
+class SavedAvatar extends StatelessWidget {
+  const SavedAvatar({super.key, this.size = 52});
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: size,
+        height: size,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Brand.blueBright, Brand.blue]),
+        ),
+        child: Icon(Icons.bookmark_rounded, color: Colors.white, size: size * 0.5),
+      );
+}
+
+/// Grey archive circle used for the "Archived chats" row.
+class ArchiveAvatar extends StatelessWidget {
+  const ArchiveAvatar({super.key, this.size = 52});
+  final double size;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        width: size,
+        height: size,
+        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF9AA6B2)),
+        child: Icon(Icons.archive_rounded, color: Colors.white, size: size * 0.48),
+      );
+}

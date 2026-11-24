@@ -287,8 +287,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       } else {
         chat.unread++;
       }
-      _incoming.add(m);
-      if (!foreground || openChatId != m.chatId) _notify(chat, m);
+      // Like Telegram: a new message brings an archived chat back unless it is muted.
+      if (chat.archived && !chat.muted) unawaited(setArchived(chat, false));
+      if (!chat.muted) {
+        _incoming.add(m);
+        if (!foreground || openChatId != m.chatId) _notify(chat, m);
+      }
     }
     _sortChats();
     notifyListeners();
@@ -339,7 +343,19 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   void _onMemberUpdate(Map<String, dynamic> row) {
     final chat = chatById(row['chat_id'] as String);
-    if (chat == null || row['last_read_at'] == null) return;
+    if (chat == null) return;
+    if (row['user_id'] == myId) {
+      // my own settings changed (maybe on another device)
+      if (row.containsKey('muted')) chat.muted = (row['muted'] as bool?) ?? false;
+      if (row.containsKey('archived')) chat.archived = (row['archived'] as bool?) ?? false;
+      if (row.containsKey('marked_unread')) chat.markedUnread = (row['marked_unread'] as bool?) ?? false;
+      if (row.containsKey('pinned_at')) chat.pinnedAt = row['pinned_at'] == null ? null : DateTime.parse(row['pinned_at'] as String).toLocal();
+      _sortChats();
+    }
+    if (row['last_read_at'] == null) {
+      notifyListeners();
+      return;
+    }
     final at = DateTime.parse(row['last_read_at'] as String).toLocal();
     chat.members = [
       for (final m in chat.members)
@@ -369,7 +385,16 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  void _sortChats() => chats.sort((a, b) => b.lastMessageAt.compareTo(a.lastMessageAt));
+  /// Pinned chats first (last pinned on top), then newest activity.
+  void _sortChats() => chats.sort((a, b) {
+        final pa = a.pinnedAt, pb = b.pinnedAt;
+        if (pa != null || pb != null) {
+          if (pa == null) return 1;
+          if (pb == null) return -1;
+          return pb.compareTo(pa);
+        }
+        return b.lastMessageAt.compareTo(a.lastMessageAt);
+      });
 
   Chat? chatById(String id) {
     for (final c in chats) {
@@ -378,9 +403,91 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     return null;
   }
 
-  int get totalUnread => chats.fold(0, (n, c) => n + c.unread);
+  /// Badge on the Chats tab: muted and archived chats don't count.
+  int get totalUnread => chats.fold(0, (n, c) => c.muted || c.archived ? n : n + (c.unread > 0 ? c.unread : (c.markedUnread ? 1 : 0)));
 
-  String chatTitle(Chat c) => c.displayTitle(myId ?? '');
+  String chatTitle(Chat c) => c.isSaved ? s.get('saved_messages') : c.displayTitle(myId ?? '');
+
+  // ── Chat options (each person's own view) ────────────────────────────────
+  Future<bool> _setMine(Chat chat, Map<String, dynamic> fields) async {
+    if (myId == null) return false;
+    try {
+      await _sb.from('chat_members').update(fields).eq('chat_id', chat.id).eq('user_id', myId!);
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  static const maxPinned = 5;
+
+  /// Returns false when the pin limit is reached.
+  Future<bool> togglePinChat(Chat chat) async {
+    if (chat.pinnedAt == null && chats.where((c) => c.pinnedAt != null && c.archived == chat.archived).length >= maxPinned) return false;
+    chat.pinnedAt = chat.pinnedAt == null ? DateTime.now() : null;
+    _sortChats();
+    notifyListeners();
+    await _setMine(chat, {'pinned_at': chat.pinnedAt?.toUtc().toIso8601String()});
+    return true;
+  }
+
+  Future<void> toggleMute(Chat chat) async {
+    chat.muted = !chat.muted;
+    notifyListeners();
+    await _setMine(chat, {'muted': chat.muted});
+  }
+
+  Future<void> setArchived(Chat chat, bool archived) async {
+    chat.archived = archived;
+    if (archived) chat.pinnedAt = null;
+    _sortChats();
+    notifyListeners();
+    await _setMine(chat, {'archived': archived, if (archived) 'pinned_at': null});
+  }
+
+  /// Mark as read when there is something unread, otherwise mark as unread.
+  Future<void> toggleUnread(Chat chat) async {
+    if (chat.unread > 0 || chat.markedUnread) {
+      chat.markedUnread = false;
+      await markRead(chat);
+      await _setMine(chat, {'marked_unread': false});
+    } else {
+      chat.markedUnread = true;
+      notifyListeners();
+      await _setMine(chat, {'marked_unread': true});
+    }
+  }
+
+  /// Hides every message up to now, for me only.
+  Future<void> clearHistory(Chat chat) async {
+    final list = _messages[chat.id] ?? const <Message>[];
+    DateTime? newest = chat.lastMessage?.createdAt;
+    for (final m in list) {
+      if (!m.pending && (newest == null || m.createdAt.isAfter(newest))) newest = m.createdAt;
+    }
+    if (newest == null) return;
+    chat.clearedAt = newest;
+    _messages[chat.id] = [for (final m in list) if (m.createdAt.isAfter(newest)) m];
+    chat.lastMessage = null;
+    chat.unread = 0;
+    chat.markedUnread = false;
+    notifyListeners();
+    await _setMine(chat, {'cleared_at': newest.toUtc().toIso8601String(), 'marked_unread': false});
+  }
+
+  /// My "Saved Messages" chat (created on first use).
+  Future<Chat?> savedChat() async {
+    for (final c in chats) {
+      if (c.isSaved) return c;
+    }
+    try {
+      final id = await _sb.rpc('saved_chat') as String;
+      await reloadChats();
+      return chatById(id);
+    } catch (_) {
+      return null;
+    }
+  }
 
   Profile? memberById(Chat c, String id) {
     for (final m in c.members) {
@@ -439,12 +546,10 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   Future<void> loadMessages(String chatId) async {
     unawaited(_loadReactions(chatId));
     try {
-      final rows = await _sb
-          .from('messages')
-          .select()
-          .eq('chat_id', chatId)
-          .order('created_at', ascending: false)
-          .limit(300);
+      final cleared = chatById(chatId)?.clearedAt;
+      var q = _sb.from('messages').select().eq('chat_id', chatId);
+      if (cleared != null) q = q.gt('created_at', cleared.toUtc().toIso8601String());
+      final rows = await q.order('created_at', ascending: false).limit(300);
       final list = rows.map(Message.fromJson).toList().reversed.toList();
       for (final m in _messages[chatId] ?? const <Message>[]) {
         if (!list.any((x) => x.id == m.id)) list.add(m); // keep pending/realtime ones
@@ -470,6 +575,10 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> markRead(Chat chat) async {
     final last = chat.lastMessage;
+    if (chat.markedUnread) {
+      chat.markedUnread = false;
+      unawaited(_setMine(chat, {'marked_unread': false}));
+    }
     if (chat.unread > 0) {
       chat.unread = 0;
       notifyListeners();

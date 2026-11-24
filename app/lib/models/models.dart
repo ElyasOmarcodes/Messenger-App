@@ -226,10 +226,26 @@ class Chat {
     this.unread = 0,
     this.avatarPath,
     this.pinnedMessageId,
+    this.isSaved = false,
+    this.pinnedAt,
+    this.muted = false,
+    this.archived = false,
+    this.markedUnread = false,
+    this.clearedAt,
   });
 
   final String id;
   final bool isGroup;
+
+  /// "Saved Messages": a private chat with only me in it.
+  final bool isSaved;
+
+  // My own settings for this chat (other members have their own).
+  DateTime? pinnedAt;
+  bool muted;
+  bool archived;
+  bool markedUnread;
+  DateTime? clearedAt;
   String? title;
   DateTime lastMessageAt;
   List<Profile> members;
@@ -260,8 +276,16 @@ class Chat {
         unread: (j['unread'] as num?)?.toInt() ?? 0,
         avatarPath: j['avatar_path'] as String?,
         pinnedMessageId: j['pinned_message_id'] as String?,
+        isSaved: (j['is_saved'] as bool?) ?? false,
+        pinnedAt: _date(j['pinned_at']),
+        muted: (j['muted'] as bool?) ?? false,
+        archived: (j['archived'] as bool?) ?? false,
+        markedUnread: (j['marked_unread'] as bool?) ?? false,
+        clearedAt: _date(j['cleared_at']),
       );
 }
+
+DateTime? _date(Object? v) => v == null ? null : DateTime.parse(v as String).toLocal();
 
 String formatBytes(int? b) {
   if (b == null) return '';
