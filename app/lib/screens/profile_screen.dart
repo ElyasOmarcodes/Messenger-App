@@ -9,6 +9,7 @@ import '../models/models.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
 import '../widgets/media_views.dart';
+import 'group_admin.dart';
 import 'call_screen.dart';
 import 'chat_screen.dart';
 import 'new_chat_sheet.dart';
@@ -212,25 +213,36 @@ class _ProfileScreenState extends State<ProfileScreen> {
         _Action(icon: Icons.bookmark_rounded, label: context.tr('saved_short'), onBig: big, onTap: () => openSavedMessages(context)),
       ]);
     } else if (chat != null) {
+      final me = app.myId ?? '';
+      final manage = chat.can(me, 'info') || chat.can(me, 'ban') || chat.can(me, 'invite');
       actions.addAll([
-        _Action(
-          icon: Icons.person_add_alt_1_rounded,
-          label: context.tr('add_member'),
-          onBig: big,
-          onTap: () async {
-            final p = await showDialog<Profile>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: Text(ctx.tr('add_member')),
-                content: SizedBox(
-                  width: 420,
-                  child: PersonFinder(buttonKey: 'add', onFound: (p) => Navigator.pop(ctx, p)),
+        if (manage)
+          _Action(
+            icon: Icons.edit_rounded,
+            label: context.tr('edit'),
+            onBig: big,
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => GroupEditScreen(chatId: chat.id))),
+          ),
+        if (chat.can(me, 'add'))
+          _Action(
+            icon: Icons.person_add_alt_1_rounded,
+            label: context.tr('add_member'),
+            onBig: big,
+            onTap: () async {
+              final p = await showDialog<Profile>(
+                context: context,
+                builder: (ctx) => AlertDialog(
+                  title: Text(ctx.tr('add_member')),
+                  content: SizedBox(
+                    width: 420,
+                    child: PersonFinder(buttonKey: 'add', onFound: (p) => Navigator.pop(ctx, p)),
+                  ),
                 ),
-              ),
-            );
-            if (p != null) await app.addMember(chat, p);
-          },
-        ),
+              );
+              if (p != null) await app.addMember(chat, p);
+            },
+          ),
+
         _Action(
           icon: chat.muted ? Icons.notifications_off_rounded : Icons.notifications_rounded,
           label: context.tr(chat.muted ? 'unmute_chat' : 'mute_chat'),
@@ -427,8 +439,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       ),
                     ),
                   ],
+                  if (widget._kind == _Kind.me && app.me?.link != null)
+                    _Info(icon: Icons.link_rounded, value: app.me!.link!, label: context.tr('my_link'), ltr: true),
                   if (widget._kind == _Kind.user) ...[
                     _Info(icon: Icons.alternate_email_rounded, value: widget.profile!.email, label: context.tr('email'), ltr: true),
+                    if (widget.profile!.link != null) _Info(icon: Icons.link_rounded, value: widget.profile!.link!, label: context.tr('links'), ltr: true),
                     if (widget.profile!.username != null)
                       _Info(icon: Icons.tag_rounded, value: '@${widget.profile!.username}', label: context.tr('username'), ltr: true),
                     ListTile(
@@ -438,15 +453,25 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       onTap: () => _showSafety(app, widget.profile!.id),
                     ),
                   ],
-                  if (widget._kind == _Kind.group && chat != null)
+                  if (widget._kind == _Kind.group && chat != null) ...[
+                    if (chat.description?.isNotEmpty == true)
+                      _Info(icon: Icons.info_outline_rounded, value: chat.description!, label: context.tr('description')),
+                    if (chat.link != null) _Info(icon: Icons.link_rounded, value: chat.link!, label: context.tr('public_link'), ltr: true),
                     for (final m in chat.members)
                       ListTile(
                         leading: Avatar(seed: m.id, label: m.name, imageUrl: m.avatarUrl, size: 42),
                         title: Text(m.id == app.myId ? '${m.name} (${context.tr('you')})' : m.name, style: const TextStyle(fontWeight: FontWeight.w600)),
                         subtitle: Text(m.username != null ? '@${m.username}' : m.email, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        trailing: m.role == 'admin' ? Text(context.tr('admin'), style: TextStyle(color: cs.primary, fontSize: 13)) : null,
+                        trailing: m.isAdmin
+                            ? Text(
+                                context.tr(m.isOwner ? 'owner' : 'admin'),
+                                style: TextStyle(color: cs.primary, fontSize: 13, fontWeight: FontWeight.w600),
+                              )
+                            : null,
                         onTap: m.id == app.myId ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProfileScreen.user(profile: m))),
+                        onLongPress: m.id == app.myId ? null : () => showMemberActions(context, chat, m),
                       ),
+                  ],
                 ],
               ),
             ),

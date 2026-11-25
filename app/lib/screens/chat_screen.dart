@@ -871,11 +871,7 @@ class _ChatScreenState extends State<ChatScreen> {
     // Big emoji have no bubble, so their neighbours keep full corners.
     bool bare(Message m) => m.kind == MsgKind.text && m.replyTo == null && !m.deleted && bigEmojiCount(m.body) > 0;
     bool joined(Message a, Message b) =>
-        a.senderId == b.senderId &&
-        sameDay(a.createdAt, b.createdAt) &&
-        b.createdAt.difference(a.createdAt).inMinutes.abs() < 5 &&
-        !bare(a) &&
-        !bare(b);
+        a.senderId == b.senderId && sameDay(a.createdAt, b.createdAt) && b.createdAt.difference(a.createdAt).inMinutes.abs() < 5 && !bare(a) && !bare(b);
 
     // Only light data here; the bubbles themselves are built lazily,
     // just for the rows that are on screen.
@@ -1108,6 +1104,25 @@ class _ChatScreenState extends State<ChatScreen> {
     final cs = Theme.of(context).colorScheme;
     final app = AppScope.of(context);
     final field = dark(context) ? Brand.nightRaised : Colors.white;
+    // a group where only admins may write (Telegram shows a note instead)
+    if (!chat.can(app.myId ?? '', 'send') && chat.members.isNotEmpty) {
+      return SafeArea(
+        top: false,
+        child: Container(
+          margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+          decoration: BoxDecoration(color: field, borderRadius: BorderRadius.circular(24)),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.lock_rounded, size: 18, color: cs.onSurfaceVariant),
+              const SizedBox(width: 8),
+              Flexible(child: Text(context.tr('only_admins_send'), style: TextStyle(color: cs.onSurfaceVariant))),
+            ],
+          ),
+        ),
+      );
+    }
     return SafeArea(
       top: false,
       bottom: !_emoji,
@@ -1228,7 +1243,7 @@ class _ChatScreenState extends State<ChatScreen> {
       AnimatedSwitcher(
         duration: const Duration(milliseconds: 150),
         transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
-        child: _canSend || _editing != null
+        child: _canSend || _editing != null || !chat.can(AppScope.read(context).myId ?? '', 'media')
             ? const SizedBox(width: 10, key: ValueKey('gap'))
             : IconButton(
                 key: const ValueKey('attach'),
@@ -1297,7 +1312,8 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _actionButton(Chat chat, ColorScheme cs) {
-    final sendMode = _canSend || _locked || _editing != null;
+    // no media allowed in this group: no voice notes either
+    final sendMode = _canSend || _locked || _editing != null || !chat.can(AppScope.read(context).myId ?? '', 'media');
     final icon = _locked ? Icons.send_rounded : (_editing != null ? Icons.check_rounded : (sendMode ? Icons.send_rounded : Icons.mic_rounded));
     final button = AnimatedScale(
       // pressed: a quick dip; recording: the big Telegram circle

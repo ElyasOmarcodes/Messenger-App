@@ -4,7 +4,7 @@ import 'dart:typed_data';
 String avatarBaseUrl = '';
 
 class Profile {
-  Profile({required this.id, required this.email, required this.displayName, this.username, this.avatarPath, this.lastReadAt, this.role});
+  Profile({required this.id, required this.email, required this.displayName, this.username, this.avatarPath, this.lastReadAt, this.role, this.rights});
 
   final String id;
   final String email;
@@ -14,7 +14,16 @@ class Profile {
 
   String? get avatarUrl => avatarPath == null ? null : '$avatarBaseUrl/$avatarPath';
   final DateTime? lastReadAt; // only set inside a chat's member list
-  final String? role;
+  final String? role; // in a group: owner, admin or member
+
+  /// An admin's rights (info, delete, ban, invite, pin, add, add_admins).
+  final Map<String, dynamic>? rights;
+
+  bool get isOwner => role == 'owner';
+  bool get isAdmin => role == 'admin' || role == 'owner';
+
+  /// Link to this account (shared and opened inside the app).
+  String? get link => username == null ? null : 'paigham://u/$username';
 
   String get name => displayName.trim().isEmpty ? email.split('@').first : displayName;
 
@@ -26,6 +35,7 @@ class Profile {
     avatarPath: j['avatar_path'] as String?,
     lastReadAt: j['last_read_at'] == null ? null : DateTime.parse(j['last_read_at'] as String).toLocal(),
     role: j['role'] as String?,
+    rights: j['rights'] == null ? null : Map<String, dynamic>.from(j['rights'] as Map),
   );
 
   /// Same shape as [Profile.fromJson], for the offline copy on the phone.
@@ -37,6 +47,7 @@ class Profile {
     'avatar_path': avatarPath,
     'last_read_at': lastReadAt?.toUtc().toIso8601String(),
     'role': role,
+    'rights': rights,
   };
 }
 
@@ -298,10 +309,41 @@ class Chat {
     this.archived = false,
     this.markedUnread = false,
     this.clearedAt,
+    this.description,
+    this.username,
+    this.permissions = const {},
   });
 
   final String id;
   final bool isGroup;
+
+  /// Group details (Telegram-like).
+  String? description;
+  String? username;
+
+  /// What ordinary members may do: send, media, add, pin, info.
+  Map<String, dynamic> permissions;
+
+  String? get link => username == null ? null : 'paigham://join/$username';
+
+  /// May [me] do [what] here (send, media, add, pin, info, delete, ban, invite, add_admins)?
+  /// Mirrors the server's check, to show only what will work.
+  bool can(String me, String what) {
+    Profile? m;
+    for (final x in members) {
+      if (x.id == me) m = x;
+    }
+    if (m == null) return false;
+    if (!isGroup) return const {'send', 'media', 'pin', 'add'}.contains(what);
+    if (m.role == 'owner') return true;
+    if (m.role == 'admin') {
+      if (what == 'send' || what == 'media') return true;
+      final r = m.rights?[what];
+      return r is bool ? r : const {'info', 'delete', 'ban', 'invite', 'pin', 'add'}.contains(what);
+    }
+    final p = permissions[what];
+    return p is bool ? p : const {'send', 'media', 'add'}.contains(what);
+  }
 
   /// "Saved Messages": a private chat with only me in it.
   final bool isSaved;
@@ -348,6 +390,9 @@ class Chat {
     archived: (j['archived'] as bool?) ?? false,
     markedUnread: (j['marked_unread'] as bool?) ?? false,
     clearedAt: _date(j['cleared_at']),
+    description: j['description'] as String?,
+    username: j['username'] as String?,
+    permissions: j['permissions'] == null ? const {} : Map<String, dynamic>.from(j['permissions'] as Map),
   );
 
   /// Same shape as a `my_chats` row, for the offline copy on the phone.
@@ -367,6 +412,9 @@ class Chat {
     'archived': archived,
     'marked_unread': markedUnread,
     'cleared_at': clearedAt?.toUtc().toIso8601String(),
+    'description': description,
+    'username': username,
+    'permissions': permissions,
   };
 }
 

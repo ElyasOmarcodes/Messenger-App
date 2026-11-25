@@ -357,7 +357,9 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
               : Row(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Flexible(child: _Reactions(chat: widget.chat, message: m, reactions: reacts, interactive: interactive)),
+                    Flexible(
+                      child: _Reactions(chat: widget.chat, message: m, reactions: reacts, interactive: interactive),
+                    ),
                     const SizedBox(width: 8),
                     Padding(padding: const EdgeInsets.only(bottom: 2), child: time),
                   ],
@@ -502,10 +504,10 @@ class _ContextMenu extends StatelessWidget {
       (Icons.reply_rounded, 'reply', MsgAction.reply, false),
       if (message.body.isNotEmpty) (Icons.copy_rounded, 'copy', MsgAction.copy, false),
       if (mine && const [MsgKind.text, MsgKind.image, MsgKind.album, MsgKind.file].contains(message.kind)) (Icons.edit_rounded, 'edit', MsgAction.edit, false),
-      (pinned ? Icons.push_pin_rounded : Icons.push_pin_rounded, pinned ? 'unpin' : 'pin', MsgAction.pin, false),
+      if (chat.can(AppScope.read(context).myId ?? '', 'pin')) (Icons.push_pin_rounded, pinned ? 'unpin' : 'pin', MsgAction.pin, false),
       (Icons.shortcut_rounded, 'forward', MsgAction.forward, false),
       if (!chat.isSaved) (Icons.bookmark_rounded, 'save_message', MsgAction.save, false),
-      if (mine) (Icons.delete_rounded, 'delete', MsgAction.delete, true),
+      if (mine || chat.can(AppScope.read(context).myId ?? '', 'delete') && chat.isGroup) (Icons.delete_rounded, 'delete', MsgAction.delete, true),
     ];
     final panel = dark ? const Color(0xF2232E3B) : const Color(0xF7FFFFFF);
     final size = MediaQuery.sizeOf(context);

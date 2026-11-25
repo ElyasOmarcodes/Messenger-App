@@ -904,7 +904,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// "Delete for everyone": the server blanks the message; others see a placeholder.
   Future<void> deleteMessage(Chat chat, Message m) async {
-    if (m.senderId != myId) return;
+    if (m.senderId != myId && !(chat.isGroup && chat.can(myId ?? '', 'delete'))) return;
     try {
       await _sb.rpc('delete_message', params: {'m': m.id});
       final path = m.filePath;
@@ -1128,6 +1128,108 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     chats.remove(chat);
     _messages.remove(chat.id);
     notifyListeners();
+  }
+
+  // ── Group management (Telegram-like) ────────────────────────────────────
+  /// Runs a group action; returns null or a translation key for the error.
+  Future<String?> _groupCall(String fn, Map<String, dynamic> params) async {
+    try {
+      await _sb.rpc(fn, params: params).timeout(_net);
+      await reloadChats();
+      return null;
+    } on PostgrestException catch (e) {
+      if (e.message.contains('banned')) return 'user_banned';
+      if (e.message.contains('not allowed')) return 'not_allowed';
+      if (e.code == '23505') return 'username_taken';
+      return 'err_generic';
+    } catch (_) {
+      return 'err_network';
+    }
+  }
+
+  Future<String?> updateGroup(Chat chat, {String? title, String? description}) =>
+      _groupCall('update_group', {'c': chat.id, 'new_title': title, 'new_description': description});
+
+  Future<String?> setGroupPermissions(Chat chat, Map<String, bool> perms) => _groupCall('set_group_permissions', {'c': chat.id, 'perms': perms});
+
+  Future<String?> setMemberRole(Chat chat, String userId, {required bool admin, Map<String, bool>? rights}) =>
+      _groupCall('set_member_role', {'c': chat.id, 'u': userId, 'new_role': admin ? 'admin' : 'member', 'new_rights': rights});
+
+  Future<String?> removeMember(Chat chat, String userId, {bool ban = false}) async {
+    final err = await _groupCall('remove_member', {'c': chat.id, 'u': userId, 'ban': ban});
+    _sendKeys.remove(chat.id); // the next message gets a new chat key
+    return err;
+  }
+
+  Future<String?> unbanMember(Chat chat, String userId) => _groupCall('unban_member', {'c': chat.id, 'u': userId});
+
+  Future<String?> setGroupUsername(Chat chat, String username) => _groupCall('set_group_username', {'c': chat.id, 'uname': username});
+
+  Future<String?> deleteGroup(Chat chat) async {
+    final err = await _groupCall('delete_group', {'c': chat.id});
+    if (err == null) {
+      chats.remove(chat);
+      _messages.remove(chat.id);
+      notifyListeners();
+    }
+    return err;
+  }
+
+  /// People banned from a group.
+  Future<List<Profile>> bannedOf(Chat chat) async {
+    try {
+      final rows = await _sb.from('chat_bans').select('user_id').eq('chat_id', chat.id).timeout(_net);
+      final ids = [for (final r in rows) r['user_id'] as String];
+      if (ids.isEmpty) return [];
+      final ps = await _sb.from('profiles').select('id,email,display_name,username,avatar_path').inFilter('id', ids).timeout(_net);
+      return [for (final p in ps) Profile.fromJson(p)];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  // invite links: paigham://join/<code>
+  Future<String?> createInvite(Chat chat, {int? hours, int? maxUses}) async {
+    try {
+      final code = await _sb.rpc('create_invite', params: {'c': chat.id, 'hours': hours, 'max_uses': maxUses}).timeout(_net) as String;
+      return 'paigham://join/$code';
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> invitesOf(Chat chat) async {
+    try {
+      final rows = await _sb.from('chat_invites').select().eq('chat_id', chat.id).eq('revoked', false).order('created_at', ascending: false).timeout(_net);
+      return [for (final r in rows) Map<String, dynamic>.from(r)];
+    } catch (_) {
+      return [];
+    }
+  }
+
+  Future<void> revokeInvite(String code) async {
+    try {
+      await _sb.rpc('revoke_invite', params: {'k': code}).timeout(_net);
+    } catch (_) {}
+  }
+
+  Future<Map<String, dynamic>?> inviteInfo(String code) async {
+    try {
+      final r = await _sb.rpc('invite_info', params: {'k': code}).timeout(_net);
+      return r == null ? null : Map<String, dynamic>.from(r as Map);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<Chat?> joinByInvite(String code) async {
+    try {
+      final id = await _sb.rpc('join_by_invite', params: {'k': code}).timeout(_net) as String;
+      await reloadChats();
+      return chatById(id);
+    } catch (_) {
+      return null;
+    }
   }
 
   // ── Messages ─────────────────────────────────────────────────────────────
@@ -1715,7 +1817,10 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     chat.pinnedMessageId = m?.id;
     notifyListeners();
     try {
-      await _sb.from('chats').update({'pinned_message_id': m?.id}).eq('id', chat.id);
+      await _sb.rpc('set_pinned_message', params: {'c': chat.id, 'm': m?.id});
+    } on PostgrestException catch (e) {
+      // a server without the group update (v10)
+      if (e.code == 'PGRST202') await _sb.from('chats').update({'pinned_message_id': m?.id}).eq('id', chat.id);
     } catch (_) {}
   }
 
@@ -1838,7 +1943,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final path = '${chat.id}/group-${DateTime.now().millisecondsSinceEpoch}.${name.split('.').last.toLowerCase()}';
       await _sb.storage.from('avatars').uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mimeFor(name)));
-      await _sb.from('chats').update({'avatar_path': path}).eq('id', chat.id);
+      try {
+        await _sb.rpc('update_group', params: {'c': chat.id, 'new_avatar_path': path});
+      } on PostgrestException catch (e) {
+        if (e.code != 'PGRST202') rethrow;
+        await _sb.from('chats').update({'avatar_path': path}).eq('id', chat.id);
+      }
       chat.avatarPath = path;
       notifyListeners();
       return true;

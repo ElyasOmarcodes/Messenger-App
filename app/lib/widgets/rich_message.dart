@@ -65,7 +65,11 @@ class _RichMessageTextState extends State<RichMessageText> {
       t.dispose();
     }
     _taps.clear();
-    return Text.rich(TextSpan(children: _blocks(widget.text)), textDirection: widget.textDirection, style: widget.style);
+    return Text.rich(
+      TextSpan(children: _blocks(widget.text)),
+      textDirection: widget.textDirection,
+      style: widget.style,
+    );
   }
 
   // ── blocks: quotes and code blocks ────────────────────────────────────────
@@ -148,11 +152,17 @@ class _RichMessageTextState extends State<RichMessageText> {
               if (lang != null)
                 Padding(
                   padding: const EdgeInsets.only(bottom: 3),
-                  child: Text(lang, style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c)),
+                  child: Text(
+                    lang,
+                    style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700, color: c),
+                  ),
                 ),
               SingleChildScrollView(
                 scrollDirection: Axis.horizontal,
-                child: Text(code, style: widget.style.copyWith(fontFamily: 'monospace', fontSize: (widget.style.fontSize ?? 16) - 2, height: 1.35)),
+                child: Text(
+                  code,
+                  style: widget.style.copyWith(fontFamily: 'monospace', fontSize: (widget.style.fontSize ?? 16) - 2, height: 1.35),
+                ),
               ),
             ],
           ),
@@ -212,7 +222,10 @@ class _RichMessageTextState extends State<RichMessageText> {
       return [
         TextSpan(
           text: s,
-          style: (_style(f) ?? const TextStyle()).copyWith(color: Colors.transparent, backgroundColor: (widget.style.color ?? Colors.grey).withValues(alpha: 0.35)),
+          style: (_style(f) ?? const TextStyle()).copyWith(
+            color: Colors.transparent,
+            backgroundColor: (widget.style.color ?? Colors.grey).withValues(alpha: 0.35),
+          ),
           recognizer: _tap(() => setState(() => _revealed = true)),
         ),
       ];
@@ -229,7 +242,11 @@ class _RichMessageTextState extends State<RichMessageText> {
       out.add(
         TextSpan(
           text: t,
-          style: (_style(f) ?? const TextStyle()).copyWith(color: widget.linkColor, decoration: m[1] != null ? TextDecoration.underline : null, decorationColor: widget.linkColor),
+          style: (_style(f) ?? const TextStyle()).copyWith(
+            color: widget.linkColor,
+            decoration: m[1] != null ? TextDecoration.underline : null,
+            decorationColor: widget.linkColor,
+          ),
           recognizer: _tap(() => widget.onLink?.call(t)),
         ),
       );
