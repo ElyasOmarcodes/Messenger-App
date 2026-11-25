@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:math' as math;
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
@@ -11,6 +10,7 @@ import '../models/models.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
 import '../widgets/chat_options.dart';
+import '../widgets/glass.dart';
 import 'chat_screen.dart';
 import 'stories.dart';
 
@@ -45,7 +45,8 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
 
   static const _toolbarH = 56.0;
   static const _storiesH = 98.0;
-  static const _chipsH = 106.0;
+  static const _searchH = 50.0; // search row (slides away on scroll)
+  static const _chipsH = _searchH + 46.0; // + folder bar (stays)
   bool _initialFold = false;
 
   @override
@@ -68,7 +69,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
 
   /// The chips may hide only as far as the list has scrolled past them,
   /// so no empty gap ever opens between the header and the first chat.
-  double _maxHide(double o) => (o - _storiesH).clamp(0.0, _chipsH);
+  double _maxHide(double o) => (o - _storiesH).clamp(0.0, _searchH);
 
   void _onScroll() {
     final o = _scroll.offset;
@@ -92,7 +93,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
         return;
       }
       final h = _hide.value;
-      if (h <= 0 || h >= _chipsH || (_dir > 0 && h >= _maxHide(_scroll.offset))) return;
+      if (h <= 0 || h >= _searchH || (_dir > 0 && h >= _maxHide(_scroll.offset))) return;
       _snapFrom = h;
       // Scrolling down tucks the chips away (as far as the list allows); scrolling up brings them back.
       _snapTo = _dir > 0 ? _maxHide(_scroll.offset) : 0;
@@ -128,7 +129,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
     final personalUnread = app.totalUnread - groupsUnread;
     final topInset = MediaQuery.paddingOf(context).top;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final glass = Theme.of(context).scaffoldBackgroundColor.withValues(alpha: app.glass ? 0.88 : 1);
+    final glass = Theme.of(context).scaffoldBackgroundColor.withValues(alpha: app.glass ? 0.78 : 1);
     final full = topInset + _toolbarH + _storiesH + _chipsH;
     // Like Telegram: stories start folded beside the title unless someone posted something new.
     if (!_initialFold && app.chatsLoaded) {
@@ -142,54 +143,46 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
     }
     final field = dark ? const Color(0xFF202B38) : const Color(0xFFEEF1F5);
 
-    final chipsBlock = Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
-          child: SizedBox(
-            height: 42,
-            child: TextField(
-              onChanged: (v) => setState(() => _query = v),
-              textAlignVertical: TextAlignVertical.center,
-              decoration: InputDecoration(
-                hintText: context.tr('search'),
-                prefixIcon: Icon(Icons.search_rounded, color: cs.onSurfaceVariant),
-                filled: true,
-                fillColor: field,
-                isDense: true,
-                contentPadding: EdgeInsets.zero,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(21), borderSide: BorderSide.none),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(21), borderSide: BorderSide.none),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(21), borderSide: BorderSide.none),
-              ),
-            ),
+    final search = Padding(
+      padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+      child: SizedBox(
+        height: 40,
+        child: TextField(
+          onChanged: (v) => setState(() => _query = v),
+          textAlignVertical: TextAlignVertical.center,
+          style: const TextStyle(fontSize: 15),
+          decoration: InputDecoration(
+            hintText: context.tr('search'),
+            prefixIcon: Icon(Icons.search_rounded, color: cs.onSurfaceVariant, size: 21),
+            filled: true,
+            fillColor: field,
+            isDense: true,
+            contentPadding: EdgeInsets.zero,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
+            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
           ),
         ),
-        // Folder chips in one rounded capsule, like Telegram.
-        Container(
-          height: 44,
-          margin: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(
-            color: field,
-            borderRadius: BorderRadius.circular(22),
-            border: Border.all(color: dark ? const Color(0x14FFFFFF) : const Color(0x0A000000)),
-          ),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(22),
-            child: ListView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.all(3),
-              children: [
-                _chip(context, _Filter.all, 'all', app.totalUnread),
-                _chip(context, _Filter.personal, 'personal', personalUnread),
-                _chip(context, _Filter.groups, 'groups', groupsUnread),
-                _chip(context, _Filter.unread, 'unread', 0),
-              ],
-            ),
-          ),
-        ),
-      ],
+      ),
+    );
+    // Folder chips share one slim capsule equally, like Telegram.
+    final folders = Container(
+      height: 38,
+      margin: const EdgeInsets.symmetric(horizontal: 12),
+      padding: const EdgeInsets.all(3),
+      decoration: BoxDecoration(
+        color: field,
+        borderRadius: BorderRadius.circular(19),
+        border: Border.all(color: dark ? const Color(0x14FFFFFF) : const Color(0x0A000000)),
+      ),
+      child: Row(
+        children: [
+          Expanded(child: _chip(context, _Filter.all, 'all', app.totalUnread)),
+          Expanded(child: _chip(context, _Filter.personal, 'personal', personalUnread)),
+          Expanded(child: _chip(context, _Filter.groups, 'groups', groupsUnread)),
+          Expanded(child: _chip(context, _Filter.unread, 'unread', 0)),
+        ],
+      ),
     );
 
     return Stack(
@@ -282,15 +275,15 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
               final hide = _hide.value;
               final height = topInset + _toolbarH + storiesNow + _chipsH - hide;
               return ClipRect(
-                child: BackdropFilter(
+                child: BackdropFilter.grouped(
                   enabled: app.glass,
-                  filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
+                  filter: Glass.filter,
                   child: Container(
                     height: height,
                     decoration: BoxDecoration(
                       color: glass,
                       border: Border(
-                        bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: hide >= _chipsH ? 1 : 0.6), width: 0.6),
+                        bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: hide >= _searchH ? 1 : 0.6), width: 0.6),
                       ),
                     ),
                     child: Stack(
@@ -324,14 +317,19 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                             ),
                           ),
                         ),
-                        // Search + chips ride on the bottom edge.
+                        // Search slides up under the title as you scroll (Telegram)…
                         Positioned(
                           top: topInset + _toolbarH + storiesNow - hide,
                           left: 0,
                           right: 0,
-                          height: _chipsH,
-                          child: Opacity(opacity: (1 - hide / _chipsH).clamp(0.0, 1.0), child: chipsBlock),
+                          height: _searchH,
+                          child: Opacity(
+                            opacity: (1 - hide / (_searchH * 0.7)).clamp(0.0, 1.0),
+                            child: Transform.scale(scale: 1 - 0.08 * (hide / _searchH), child: search),
+                          ),
                         ),
+                        // …while the folder bar stays.
+                        Positioned(top: topInset + _toolbarH + storiesNow + _searchH - hide, left: 0, right: 0, height: 38, child: folders),
                         Positioned(
                           top: 0,
                           left: 0,
@@ -375,31 +373,36 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 220),
           curve: Curves.easeOut,
-          padding: const EdgeInsets.symmetric(horizontal: 14),
+          alignment: Alignment.center,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
           decoration: BoxDecoration(
             color: sel ? (dark ? const Color(0xFF26405C) : Brand.blueMist) : Colors.transparent,
-            borderRadius: BorderRadius.circular(19),
+            borderRadius: BorderRadius.circular(16),
           ),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                context.tr(key),
-                style: TextStyle(fontSize: 15, color: sel ? cs.primary : cs.onSurfaceVariant, fontWeight: sel ? FontWeight.w700 : FontWeight.w600),
+              Flexible(
+                child: Text(
+                  context.tr(key),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13.5, color: sel ? cs.primary : cs.onSurfaceVariant, fontWeight: sel ? FontWeight.w700 : FontWeight.w600),
+                ),
               ),
               if (count > 0) ...[
-                const SizedBox(width: 6),
+                const SizedBox(width: 5),
                 Container(
-                  constraints: const BoxConstraints(minWidth: 22),
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  constraints: const BoxConstraints(minWidth: 19),
+                  padding: const EdgeInsets.symmetric(horizontal: 5),
                   decoration: BoxDecoration(
                     color: sel ? cs.primary : (dark ? const Color(0xFF5B6B7C) : const Color(0xFFA9B2BC)),
-                    borderRadius: BorderRadius.circular(11),
+                    borderRadius: BorderRadius.circular(10),
                   ),
                   child: Text(
                     context.digits(count),
                     textAlign: TextAlign.center,
-                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
+                    style: const TextStyle(color: Colors.white, fontSize: 11, height: 1.5, fontWeight: FontWeight.w800),
                   ),
                 ),
               ],
@@ -489,7 +492,7 @@ class _Toolbar extends StatelessWidget {
                 app.realtimeOnline ? context.tr('app_name') : context.tr('connecting'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: app.realtimeOnline ? 24 : 19, fontWeight: FontWeight.w800, color: cs.onSurface),
+                style: TextStyle(fontSize: app.realtimeOnline ? 22 : 18, fontWeight: FontWeight.w800, color: cs.onSurface),
               ),
             ),
           ),

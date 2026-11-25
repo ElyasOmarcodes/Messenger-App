@@ -129,12 +129,27 @@ class Message {
 
 /// One story (24-hour status).
 class StoryItem {
-  StoryItem({required this.id, required this.kind, this.mediaPath, required this.body, this.bg, required this.createdAt, required this.seen, this.views});
+  StoryItem({
+    required this.id,
+    required this.kind,
+    this.mediaPath,
+    required this.body,
+    this.bg,
+    required this.createdAt,
+    required this.seen,
+    this.views,
+    this.liked = false,
+    this.likes,
+  });
   final String id, kind, body;
   final String? mediaPath, bg;
   final DateTime createdAt;
   bool seen;
   final int? views;
+
+  /// I gave this story a heart; [likes] is the count on my own stories.
+  bool liked;
+  final int? likes;
 
   factory StoryItem.fromJson(Map<String, dynamic> j) => StoryItem(
     id: j['id'] as String,
@@ -145,6 +160,8 @@ class StoryItem {
     createdAt: DateTime.parse(j['created_at'] as String).toLocal(),
     seen: (j['seen'] as bool?) ?? false,
     views: (j['views'] as num?)?.toInt(),
+    liked: (j['liked'] as bool?) ?? false,
+    likes: (j['likes'] as num?)?.toInt(),
   );
 }
 

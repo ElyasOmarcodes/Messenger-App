@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -11,6 +10,7 @@ import '../models/models.dart';
 import '../services/messenger.dart';
 import '../services/notifier.dart';
 import '../widgets/avatar.dart';
+import '../widgets/glass.dart';
 import 'call_screen.dart';
 import 'chat_screen.dart';
 import 'chats_screen.dart';
@@ -128,7 +128,7 @@ class _HomeScreenState extends State<HomeScreen> {
   PreferredSizeWidget? _appBar(BuildContext context) {
     final items = _items(context);
     return switch (_tab) {
-      0 || 3 => null,
+      0 || 2 || 3 => null,
       _ => AppBar(title: Text(items[_tab].label)),
     };
   }
@@ -258,7 +258,7 @@ class PillNavBar extends StatelessWidget {
     // Telegram's bar: a dark slate (or white) capsule, slightly see-through
     // with blur behind, a hairline rim, a light top reflection.
     final base = dark ? const Color(0xFF1E2934) : Colors.white;
-    final fill = base.withValues(alpha: glass ? (dark ? 0.82 : 0.80) : 1);
+    final fill = base.withValues(alpha: glass ? (dark ? 0.66 : 0.62) : 1);
     final barW = items.length * itemWidth + 8;
     Widget capsule = Container(
       width: barW,
@@ -327,7 +327,7 @@ class PillNavBar extends StatelessWidget {
     if (glass) {
       capsule = ClipRRect(
         borderRadius: BorderRadius.circular(height / 2),
-        child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14), child: capsule),
+        child: Glass.backdrop(enabled: true, child: capsule),
       );
     }
     return Stack(

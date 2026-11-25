@@ -748,41 +748,58 @@ class _ChatScreenState extends State<ChatScreen> {
     bool joined(Message a, Message b) =>
         a.senderId == b.senderId && sameDay(a.createdAt, b.createdAt) && b.createdAt.difference(a.createdAt).inMinutes.abs() < 5;
 
-    final items = <Widget>[];
+    // Only light data here; the bubbles themselves are built lazily,
+    // just for the rows that are on screen.
+    final entries = <Object>[]; // String = day header, (Message, GroupPos, bool) = message
     for (var i = 0; i < visible.length; i++) {
       final m = visible[i];
       final prev = i > 0 ? visible[i - 1] : null;
       final next = i < visible.length - 1 ? visible[i + 1] : null;
       final newDay = prev == null || !sameDay(prev.createdAt, m.createdAt);
-      if (newDay) items.add(SystemChip(text: dayHeader(m.createdAt, context.lang, s)));
+      if (newDay) entries.add(dayHeader(m.createdAt, context.lang, s));
       final jp = !newDay && joined(prev, m);
       final jn = next != null && joined(m, next);
       final pos = jp && jn ? GroupPos.middle : (jp ? GroupPos.last : (jn ? GroupPos.first : GroupPos.single));
       _shown.add(m.id);
-      items.add(
-        Dissolvable(
-          key: _keys.putIfAbsent(m.id, () => GlobalKey<DissolvableState>()),
-          child: MessageBubble(
-            key: ValueKey(m.id),
-            chat: chat,
-            message: m,
-            pos: pos,
-            senderName: chat.isGroup && !jp ? (app.memberById(chat, m.senderId)?.name ?? '') : null,
-            onReply: m.deleted ? null : (msg) => _onAction(chat, msg, MsgAction.reply),
-            onAction: (msg, a) => _onAction(chat, msg, a),
-            onOpenUser: _openUser,
-          ),
+      entries.add((m, pos, jp));
+    }
+    Widget build(int i) {
+      final e = entries[entries.length - 1 - i];
+      if (e is String) return SystemChip(text: e);
+      final (m, pos, jp) = e as (Message, GroupPos, bool);
+      return Dissolvable(
+        key: _keys.putIfAbsent(m.id, () => GlobalKey<DissolvableState>()),
+        child: MessageBubble(
+          key: ValueKey(m.id),
+          chat: chat,
+          message: m,
+          pos: pos,
+          senderName: chat.isGroup && !jp ? (app.memberById(chat, m.senderId)?.name ?? '') : null,
+          onReply: m.deleted ? null : (msg) => _onAction(chat, msg, MsgAction.reply),
+          onAction: (msg, a) => _onAction(chat, msg, a),
+          onOpenUser: _openUser,
         ),
       );
     }
+
     return ListView.builder(
       reverse: true,
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: EdgeInsets.fromLTRB(8, topPad, 8, _bottomH + 4),
-      itemCount: items.length,
-      itemBuilder: (_, i) => items[items.length - 1 - i],
+      itemCount: entries.length,
+      findChildIndexCallback: (key) {
+        if (key is! ValueKey<String>) return null;
+        for (var i = 0; i < entries.length; i++) {
+          final e = entries[entries.length - 1 - i];
+          if (e is (Message, GroupPos, bool) && 'msg-${e.$1.id}' == key.value) return i;
+        }
+        return null;
+      },
+      itemBuilder: (_, i) => KeyedSubtree(key: ValueKey(_entryKey(entries[entries.length - 1 - i])), child: build(i)),
     );
   }
+
+  String _entryKey(Object e) => e is String ? 'day-$e' : 'msg-${(e as (Message, GroupPos, bool)).$1.id}';
 
   Widget _pinnedBar(AppController app, Chat chat, Message pinned) {
     final cs = Theme.of(context).colorScheme;

@@ -55,19 +55,21 @@ class PaighamApp extends StatelessWidget {
                 locale: Locale(lang.code),
                 supportedLocales: [for (final l in AppLang.values) Locale(l.code)],
                 localizationsDelegates: const [GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, _CupertinoFallbackDelegate()],
-                builder: (context, child) => LangScope(
-                  lang: lang,
-                  // The call screen floats above every page, including open chats.
-                  child: ListenableBuilder(
-                    listenable: calls,
-                    builder: (context, _) => calls.phase == CallPhase.idle
-                        ? child!
-                        : Stack(
-                            children: [
-                              child!,
-                              const Positioned.fill(child: CallOverlay()),
-                            ],
-                          ),
+                builder: (context, child) => BackdropGroup(
+                  child: LangScope(
+                    lang: lang,
+                    // The call screen floats above every page, including open chats.
+                    child: ListenableBuilder(
+                      listenable: calls,
+                      builder: (context, _) => calls.phase == CallPhase.idle
+                          ? child!
+                          : Stack(
+                              children: [
+                                child!,
+                                const Positioned.fill(child: CallOverlay()),
+                              ],
+                            ),
+                    ),
                   ),
                 ),
                 home: !AppConfig.configured

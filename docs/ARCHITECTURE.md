@@ -50,6 +50,7 @@ Run each file in `backend/supabase/migrations/` once, in order, in the Supabase 
 2. `20261125000000_paigham_v3.sql`: profile photos, replies, delete, voice notes, calls, sign-in check (`email_status`)
 3. `20261126000000_paigham_v5.sql`: message edit, reactions, pinned messages, albums, location and contact messages, group photos, and 24-hour stories (`stories`, `story_views`, `story_feed`, `story_viewers`, private `stories` bucket)
 4. `20261127000000_paigham_v6.sql`: Saved Messages (`saved_chat`) and per-person chat options on `chat_members` (pinned, muted, archived, marked unread, cleared history)
+5. `20261128000000_paigham_v7.sql`: hearts on stories (`story_views.liked`, `like_story`, likes in `story_feed` / `story_viewers`)
 
 ## Calls behind mobile networks
 

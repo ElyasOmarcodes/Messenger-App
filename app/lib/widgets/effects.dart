@@ -4,6 +4,8 @@ import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
+import 'glass.dart';
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Soft edge under the header / above the input bar, like Telegram: content
 // fades out gradually into the page colour and is softly blurred right behind
@@ -40,7 +42,7 @@ class SoftEdge extends StatelessWidget {
                   bottom: fromTop ? null : 0,
                   height: solid,
                   child: ClipRect(
-                    child: BackdropFilter(filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10), child: const SizedBox.expand()),
+                    child: BackdropFilter.grouped(filter: Glass.filter, child: const SizedBox.expand()),
                   ),
                 ),
               Positioned.fill(

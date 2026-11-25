@@ -1040,13 +1040,23 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     await loadStories();
   }
 
-  Future<List<Profile>> storyViewers(StoryItem st) async {
+  Future<List<({Profile profile, bool liked})>> storyViewers(StoryItem st) async {
     try {
       final data = await _sb.rpc('story_viewers', params: {'s': st.id}) as List<dynamic>;
-      return data.map((e) => Profile.fromJson(e as Map<String, dynamic>)).toList();
+      return [for (final e in data.cast<Map<String, dynamic>>()) (profile: Profile.fromJson(e), liked: (e['liked'] as bool?) ?? false)];
     } catch (_) {
       return [];
     }
+  }
+
+  /// Heart on someone's story (also marks it seen).
+  Future<void> likeStory(StoryItem st, bool liked) async {
+    st.liked = liked;
+    st.seen = true;
+    notifyListeners();
+    try {
+      await _sb.rpc('like_story', params: {'s': st.id, 'v': liked});
+    } catch (_) {}
   }
 
   final Map<String, String> _storyUrls = {};

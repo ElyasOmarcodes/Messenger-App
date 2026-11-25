@@ -565,6 +565,20 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
   bool _ready = false;
   bool _sheet = false;
   final _reply = TextEditingController();
+  bool _burst = false;
+
+  Future<void> _toggleLike() async {
+    final st = _story;
+    final v = !st.liked;
+    HapticFeedback.lightImpact();
+    unawaited(AppScope.read(context).likeStory(st, v));
+    setState(() => _burst = v);
+    if (v) {
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (mounted) setState(() => _burst = false);
+    }
+  }
+
   final _replyFocus = FocusNode();
   final Map<String, String> _urls = {};
   late final List<StoryItem> _items = [...widget.user.stories];
@@ -692,7 +706,7 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
       isScrollControlled: true,
       builder: (ctx) => ConstrainedBox(
         constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(ctx).height * 0.6),
-        child: FutureBuilder<List<Profile>>(
+        child: FutureBuilder<List<({Profile profile, bool liked})>>(
           future: app.storyViewers(_story),
           builder: (ctx, snap) {
             final list = snap.data;
@@ -733,11 +747,12 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
                     child: ListView(
                       shrinkWrap: true,
                       children: [
-                        for (final p in list)
+                        for (final v in list)
                           ListTile(
-                            leading: Avatar(seed: p.id, label: p.name, imageUrl: p.avatarUrl, size: 42),
-                            title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                            subtitle: Text(p.username != null ? '@${p.username}' : p.email),
+                            leading: Avatar(seed: v.profile.id, label: v.profile.name, imageUrl: v.profile.avatarUrl, size: 42),
+                            title: Text(v.profile.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle: Text(v.profile.username != null ? '@${v.profile.username}' : v.profile.email),
+                            trailing: v.liked ? const Icon(Icons.favorite_rounded, color: Color(0xFFFF4D67)) : null,
                           ),
                       ],
                     ),
@@ -832,6 +847,26 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
         children: [
           Positioned.fill(child: content),
           if (!_ready) const Center(child: CircularProgressIndicator(color: Colors.white)),
+          // big heart when you like
+          IgnorePointer(
+            child: Center(
+              child: AnimatedOpacity(
+                opacity: _burst ? 1 : 0,
+                duration: const Duration(milliseconds: 250),
+                child: AnimatedScale(
+                  scale: _burst ? 1 : 0.4,
+                  duration: const Duration(milliseconds: 380),
+                  curve: Curves.elasticOut,
+                  child: const Icon(
+                    Icons.favorite_rounded,
+                    size: 120,
+                    color: Color(0xFFFF4D67),
+                    shadows: [Shadow(blurRadius: 24, color: Colors.black38)],
+                  ),
+                ),
+              ),
+            ),
+          ),
           // Tap zones: start side goes back, the rest goes forward. Hold to pause.
           Positioned.fill(
             child: GestureDetector(
@@ -979,7 +1014,18 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
                         onPressed: _showViewers,
                         style: TextButton.styleFrom(foregroundColor: Colors.white, backgroundColor: Colors.white12, shape: const StadiumBorder()),
                         icon: const Icon(Icons.visibility_outlined),
-                        label: Text('${context.digits(st.views ?? 0)} ${s.get('views')}'),
+                        label: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text('${context.digits(st.views ?? 0)} ${s.get('views')}'),
+                            if ((st.likes ?? 0) > 0) ...[
+                              const SizedBox(width: 10),
+                              const Icon(Icons.favorite_rounded, size: 16, color: Color(0xFFFF4D67)),
+                              const SizedBox(width: 3),
+                              Text(context.digits(st.likes!)),
+                            ],
+                          ],
+                        ),
                       )
                     else
                       Row(
@@ -1008,11 +1054,34 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
                             ),
                           ),
                           const SizedBox(width: 8),
-                          IconButton(
-                            tooltip: s.get('send'),
-                            onPressed: _sendReply,
-                            style: IconButton.styleFrom(backgroundColor: Brand.blue, minimumSize: const Size(48, 48)),
-                            icon: const Icon(Icons.send_rounded, color: Colors.white),
+                          // empty field: heart (like Telegram); typing: send
+                          ValueListenableBuilder<TextEditingValue>(
+                            valueListenable: _reply,
+                            builder: (_, v, _) => v.text.trim().isEmpty
+                                ? IconButton(
+                                    tooltip: s.get('like_story'),
+                                    onPressed: _toggleLike,
+                                    style: IconButton.styleFrom(backgroundColor: Colors.white12, minimumSize: const Size(48, 48)),
+                                    icon: AnimatedSwitcher(
+                                      duration: const Duration(milliseconds: 220),
+                                      transitionBuilder: (c, a) => ScaleTransition(
+                                        scale: CurvedAnimation(parent: a, curve: Curves.elasticOut),
+                                        child: c,
+                                      ),
+                                      child: Icon(
+                                        st.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                                        key: ValueKey(st.liked),
+                                        color: st.liked ? const Color(0xFFFF4D67) : Colors.white,
+                                        size: 27,
+                                      ),
+                                    ),
+                                  )
+                                : IconButton(
+                                    tooltip: s.get('send'),
+                                    onPressed: _sendReply,
+                                    style: IconButton.styleFrom(backgroundColor: Brand.blue, minimumSize: const Size(48, 48)),
+                                    icon: const Icon(Icons.send_rounded, color: Colors.white),
+                                  ),
                           ),
                         ],
                       ),

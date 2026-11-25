@@ -1,3 +1,5 @@
+import 'dart:ui' as ui;
+import 'dart:math' as math;
 import 'dart:async';
 
 import 'package:audioplayers/audioplayers.dart';
@@ -93,6 +95,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
   late final AnimationController _back = AnimationController(vsync: this, duration: const Duration(milliseconds: 180))
     ..addListener(() => setState(() => _drag = _dragStart * (1 - _back.value)));
   double _dragStart = 0;
+  final _bubbleKey = GlobalKey();
   bool _fired = false;
 
   @override
@@ -125,23 +128,23 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
     final m = widget.message;
     final mine = m.senderId == app.myId;
     HapticFeedback.mediumImpact();
+    // where the bubble is on screen, so the menu opens right at it
+    final box = _bubbleKey.currentContext?.findRenderObject() as RenderBox?;
+    final anchor = box == null || !box.hasSize ? null : box.localToGlobal(Offset.zero) & box.size;
+    final glass = app.glass;
     final result = await showGeneralDialog<Object>(
       context: context,
       barrierDismissible: true,
       barrierLabel: 'menu',
-      barrierColor: Colors.black.withValues(alpha: 0.25),
-      transitionDuration: const Duration(milliseconds: 200),
-      transitionBuilder: (_, a, _, child) => FadeTransition(
-        opacity: a,
-        child: ScaleTransition(
-          scale: Tween(begin: 0.94, end: 1.0).animate(CurvedAnimation(parent: a, curve: Curves.easeOutBack)),
-          child: child,
-        ),
-      ),
+      barrierColor: Colors.transparent,
+      transitionDuration: const Duration(milliseconds: 220),
+      transitionBuilder: (_, a, _, child) => FadeTransition(opacity: a, child: child),
       pageBuilder: (ctx, _, _) => _ContextMenu(
         chat: widget.chat,
         message: m,
         mine: mine,
+        anchor: anchor,
+        glass: glass,
         preview: HeroMode(enabled: false, child: _bubble(ctx, interactive: false)),
       ),
     );
@@ -192,7 +195,10 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
           ),
           Transform.translate(
             offset: Offset((rtl ? 1 : -1) * _drag, 0),
-            child: Align(alignment: out ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart, child: _bubble(context, interactive: true)),
+            child: Align(
+              alignment: out ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
+              child: KeyedSubtree(key: _bubbleKey, child: _bubble(context, interactive: true)),
+            ),
           ),
         ],
       ),
@@ -437,11 +443,17 @@ class _Reactions extends StatelessWidget {
 
 /// Long-press menu: reaction bar, the message itself, and actions.
 class _ContextMenu extends StatelessWidget {
-  const _ContextMenu({required this.chat, required this.message, required this.mine, required this.preview});
+  const _ContextMenu({required this.chat, required this.message, required this.mine, required this.preview, this.anchor, this.glass = true});
   final Chat chat;
   final Message message;
   final bool mine;
   final Widget preview;
+
+  /// Where the bubble sits on screen; the menu opens right there.
+  final Rect? anchor;
+  final bool glass;
+
+  static const _reactH = 50.0, _gap = 8.0, _rowH = 46.0, _menuW = 220.0;
 
   @override
   Widget build(BuildContext context) {
@@ -457,87 +469,138 @@ class _ContextMenu extends StatelessWidget {
       if (!chat.isSaved) (Icons.bookmark_border_rounded, 'save_message', MsgAction.save, false),
       if (mine) (Icons.delete_outline_rounded, 'delete', MsgAction.delete, true),
     ];
-    final panel = dark ? const Color(0xF0242F3D) : const Color(0xF5FFFFFF);
+    final panel = dark ? const Color(0xF2232E3B) : const Color(0xF7FFFFFF);
+    final size = MediaQuery.sizeOf(context);
+    final pad = MediaQuery.paddingOf(context);
+    final menuH = items.length * _rowH + 8;
+
+    // Layout: reactions above the bubble, menu below; slide the whole group
+    // up or down so it fits on screen.
+    final r = anchor ?? Rect.fromCenter(center: size.center(Offset.zero), width: math.min(size.width * 0.8, 300), height: 60);
+    final topLimit = pad.top + 8, bottomLimit = size.height - pad.bottom - 8;
+    final maxPreview = math.max(60.0, bottomLimit - topLimit - _reactH - menuH - _gap * 2);
+    final previewH = math.min(r.height, maxPreview);
+    var top = r.top - _reactH - _gap; // top of the whole group
+    final groupH = _reactH + _gap + previewH + _gap + menuH;
+    if (top + groupH > bottomLimit) top = bottomLimit - groupH;
+    if (top < topLimit) top = topLimit;
+    final previewTop = top + _reactH + _gap;
+    final menuTop = previewTop + previewH + _gap;
+    final onLeft = r.center.dx < size.width / 2;
+    double edgeX(double w) => onLeft ? r.left.clamp(8.0, size.width - w - 8) : (r.right - w).clamp(8.0, size.width - w - 8);
+    final reactW = quickReactions.length * 44.0 + 12;
+    final anim = ModalRoute.of(context)?.animation ?? const AlwaysStoppedAnimation(1.0);
+    final pop = CurvedAnimation(parent: anim, curve: Curves.easeOutBack);
+
+    Widget glassPanel({required Widget child, required double radius}) {
+      Widget p = Material(
+        color: panel,
+        elevation: 8,
+        shadowColor: Colors.black38,
+        borderRadius: BorderRadius.circular(radius),
+        clipBehavior: Clip.antiAlias,
+        child: child,
+      );
+      return p;
+    }
+
     return Material(
       type: MaterialType.transparency,
-      child: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  // reactions
-                  Align(
-                    child: Material(
-                      color: panel,
-                      elevation: 6,
-                      shadowColor: Colors.black26,
-                      borderRadius: BorderRadius.circular(28),
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            for (final e in quickReactions)
-                              InkResponse(
-                                onTap: () => Navigator.pop(context, e),
-                                radius: 24,
-                                child: Padding(
-                                  padding: const EdgeInsets.all(6),
-                                  child: Text(e, style: const TextStyle(fontSize: 28)),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  IgnorePointer(
-                    child: Align(alignment: mine ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart, child: preview),
-                  ),
-                  const SizedBox(height: 10),
-                  Align(
-                    alignment: mine ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
-                    child: Material(
-                      color: panel,
-                      elevation: 6,
-                      shadowColor: Colors.black26,
-                      borderRadius: BorderRadius.circular(16),
-                      clipBehavior: Clip.antiAlias,
-                      child: SizedBox(
-                        width: 230,
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            for (final (icon, key, action, danger) in items)
-                              InkWell(
-                                onTap: () => Navigator.pop(context, action),
-                                child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                  child: Row(
-                                    children: [
-                                      Icon(icon, size: 21, color: danger ? Brand.pomegranate : cs.onSurfaceVariant),
-                                      const SizedBox(width: 14),
-                                      Text(context.tr(key), style: TextStyle(fontSize: 15.5, color: danger ? Brand.pomegranate : cs.onSurface)),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
+      child: Stack(
+        children: [
+          // everything else: blurred and dimmed; a tap outside closes the menu
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => Navigator.pop(context),
+              child: BackdropFilter(
+                enabled: glass,
+                filter: ui.ImageFilter.blur(sigmaX: 12, sigmaY: 12),
+                child: ColoredBox(color: Colors.black.withValues(alpha: dark ? 0.35 : 0.18)),
               ),
             ),
           ),
-        ),
+          // the message itself, in the same place
+          Positioned(
+            left: r.left,
+            top: previewTop,
+            width: r.width,
+            height: previewH,
+            child: IgnorePointer(
+              child: ClipRect(
+                child: OverflowBox(alignment: Alignment.topLeft, maxHeight: double.infinity, child: preview),
+              ),
+            ),
+          ),
+          // quick reactions
+          Positioned(
+            left: edgeX(reactW),
+            top: top,
+            child: ScaleTransition(
+              scale: pop,
+              alignment: onLeft ? Alignment.bottomLeft : Alignment.bottomRight,
+              child: glassPanel(
+                radius: 28,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final e in quickReactions)
+                        InkResponse(
+                          onTap: () => Navigator.pop(context, e),
+                          radius: 24,
+                          child: SizedBox(
+                            width: 44,
+                            height: 44,
+                            child: Center(child: Text(e, style: const TextStyle(fontSize: 27))),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          // actions
+          Positioned(
+            left: edgeX(_menuW),
+            top: menuTop,
+            width: _menuW,
+            child: ScaleTransition(
+              scale: pop,
+              alignment: onLeft ? Alignment.topLeft : Alignment.topRight,
+              child: glassPanel(
+                radius: 16,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (final (icon, key, action, danger) in items)
+                        InkWell(
+                          onTap: () => Navigator.pop(context, action),
+                          child: SizedBox(
+                            height: _rowH,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Row(
+                                children: [
+                                  Icon(icon, size: 21, color: danger ? Brand.pomegranate : cs.onSurfaceVariant),
+                                  const SizedBox(width: 14),
+                                  Text(context.tr(key), style: TextStyle(fontSize: 15.5, color: danger ? Brand.pomegranate : cs.onSurface)),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

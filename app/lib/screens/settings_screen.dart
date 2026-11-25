@@ -1,3 +1,5 @@
+import 'package:qr_flutter/qr_flutter.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../brand/brand.dart';
@@ -13,12 +15,62 @@ import 'profile_screen.dart';
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
 
+  Future<void> _changePhoto(BuildContext context, AppController app) async {
+    final files = await FilePicker.pickFiles(type: FileType.image);
+    if (files.isEmpty) return;
+    final f = files.first;
+    final size = await f.length();
+    if (!context.mounted) return;
+    if (size != null && size > 5 * 1024 * 1024) {
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('photo_too_big'))));
+      return;
+    }
+    await app.uploadAvatar(f.name, await f.readAsBytes());
+  }
+
+  void _showQr(BuildContext context, AppController app) {
+    final me = app.me;
+    final handle = me?.username != null ? '@${me!.username}' : app.myEmail;
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(ctx.tr('my_qr'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+                child: QrImageView(
+                  data: 'paigham:$handle',
+                  size: 200,
+                  eyeStyle: const QrEyeStyle(color: Brand.blueDeep, eyeShape: QrEyeShape.circle),
+                ),
+              ),
+              const SizedBox(height: 12),
+              Directionality(
+                textDirection: TextDirection.ltr,
+                child: Text(handle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700)),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
     final me = app.me;
     final cs = Theme.of(context).colorScheme;
-    final dark = app.themeMode == ThemeMode.dark || (app.themeMode == ThemeMode.system && MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+    final pad = MediaQuery.paddingOf(context);
+    final archived = app.chats.where((c) => c.archived).length;
+    final handle = [app.myEmail, if (me?.username != null) '@${me!.username}'].join(' • ');
 
     String themeLabel(ThemeMode m) => switch (m) {
       ThemeMode.system => context.tr('theme_system'),
@@ -27,33 +79,117 @@ class SettingsScreen extends StatelessWidget {
     };
 
     return ListView(
-      padding: const EdgeInsets.fromLTRB(12, 6, 12, 120),
+      padding: EdgeInsets.fromLTRB(12, pad.top + 6, 12, 120),
       children: [
-        _Group(
+        // round buttons, like Telegram
+        Row(
           children: [
-            ListTile(
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              leading: Avatar(seed: app.myId ?? '', label: me?.name ?? app.myEmail, imageUrl: me?.avatarUrl, size: 56),
-              title: Text(me?.name ?? '', style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
-              subtitle: Directionality(
-                textDirection: TextDirection.ltr,
-                child: Text(app.myEmail, textAlign: TextAlign.start),
-              ),
-              trailing: const Icon(Icons.chevron_right_rounded),
+            _RoundIcon(icon: Icons.qr_code_2_rounded, tooltip: context.tr('my_qr'), onTap: () => _showQr(context, app)),
+            const Spacer(),
+            _RoundIcon(
+              icon: Icons.edit_rounded,
+              tooltip: context.tr('edit_name'),
               onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen.me())),
             ),
           ],
         ),
+        // photo, name, handle
+        Center(
+          child: GestureDetector(
+            onTap: () => _changePhoto(context, app),
+            child: Stack(
+              children: [
+                Avatar(seed: app.myId ?? '', label: me?.name ?? app.myEmail, imageUrl: me?.avatarUrl, size: 100),
+                PositionedDirectional(
+                  end: 0,
+                  bottom: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(6),
+                    decoration: BoxDecoration(
+                      color: cs.primary,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 3),
+                    ),
+                    child: const Icon(Icons.photo_camera_rounded, size: 17, color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
         const SizedBox(height: 10),
+        Text(
+          me?.name ?? '',
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
+        ),
+        const SizedBox(height: 2),
+        Directionality(
+          textDirection: TextDirection.ltr,
+          child: Text(
+            handle,
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: TextStyle(fontSize: 14, color: cs.onSurfaceVariant),
+          ),
+        ),
+        const SizedBox(height: 18),
         _Group(
           children: [
-            _Tile(icon: Icons.bookmark_rounded, color: const Color(0xFF3390EC), title: context.tr('saved_messages'), onTap: () => openSavedMessages(context)),
-            if (app.chats.any((c) => c.archived))
+            _Tile(
+              icon: Icons.account_circle_rounded,
+              color: const Color(0xFF3390EC),
+              title: context.tr('account'),
+              subtitle: context.tr('account_sub'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ProfileScreen.me())),
+            ),
+            _Tile(
+              icon: Icons.chat_rounded,
+              color: const Color(0xFFF5A623),
+              title: context.tr('chat_settings'),
+              subtitle: context.tr('chat_settings_sub'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const _ChatSettingsPage())),
+            ),
+            _Tile(
+              icon: Icons.key_rounded,
+              color: const Color(0xFF31B545),
+              title: context.tr('privacy'),
+              subtitle: context.tr('privacy_sub'),
+              onTap: () => _info(context, context.tr('privacy'), context.tr('privacy_body')),
+            ),
+            _Tile(
+              icon: Icons.notifications_rounded,
+              color: const Color(0xFFF0544C),
+              title: context.tr('notifications'),
+              subtitle: context.tr('notifications_sub'),
+              onTap: () => _info(context, context.tr('notifications'), context.tr('notifications_body')),
+            ),
+            _Tile(
+              icon: Icons.translate_rounded,
+              color: const Color(0xFF8E6CEF),
+              title: context.tr('language'),
+              subtitle: app.lang.label,
+              onTap: () => _pick<AppLang>(context, context.tr('language'), AppLang.values, app.lang, (l) => l.label, app.setLang),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+        _Group(
+          children: [
+            _Tile(
+              icon: Icons.bookmark_rounded,
+              color: const Color(0xFF3390EC),
+              title: context.tr('saved_messages'),
+              subtitle: context.tr('saved_sub'),
+              onTap: () => openSavedMessages(context),
+            ),
+            if (archived > 0)
               _Tile(
                 icon: Icons.archive_rounded,
-                color: const Color(0xFF9AA6B2),
+                color: const Color(0xFF8A98A8),
                 title: context.tr('archived_chats'),
-                value: context.digits(app.chats.where((c) => c.archived).length),
+                subtitle: context.digits(archived),
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(
                     builder: (_) => ArchivedChatsScreen(
@@ -62,68 +198,26 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ),
               ),
-          ],
-        ),
-        _Header(context.tr('appearance_sub')),
-        _Group(
-          children: [
-            SwitchListTile(
-              secondary: const _Ico(Icons.dark_mode_rounded, Color(0xFF5B6BF5)),
-              title: Text(context.tr('night_mode'), style: const TextStyle(fontWeight: FontWeight.w600)),
-              value: dark,
-              onChanged: (v) => app.setTheme(v ? ThemeMode.dark : ThemeMode.light),
-            ),
-            SwitchListTile(
-              secondary: const _Ico(Icons.blur_on_rounded, Color(0xFF2AA3C8)),
-              title: Text(context.tr('glass_effect'), style: const TextStyle(fontWeight: FontWeight.w600)),
-              subtitle: Text(context.tr('glass_effect_sub')),
-              value: app.glass,
-              onChanged: app.setGlass,
-            ),
             _Tile(
-              icon: Icons.brightness_auto_rounded,
-              color: const Color(0xFF8E6CEF),
+              icon: Icons.palette_rounded,
+              color: const Color(0xFF2AA3C8),
               title: context.tr('theme'),
-              value: themeLabel(app.themeMode),
+              subtitle: themeLabel(app.themeMode),
               onTap: () => _pick<ThemeMode>(context, context.tr('theme'), ThemeMode.values, app.themeMode, themeLabel, app.setTheme),
             ),
-            _Tile(
-              icon: Icons.translate_rounded,
-              color: const Color(0xFF3390EC),
-              title: context.tr('language'),
-              value: app.lang.label,
-              onTap: () => _pick<AppLang>(context, context.tr('language'), AppLang.values, app.lang, (l) => l.label, app.setLang),
-            ),
           ],
         ),
-        _Header(context.tr('account')),
+        const SizedBox(height: 14),
         _Group(
           children: [
-            _Tile(
-              icon: Icons.notifications_rounded,
-              color: const Color(0xFFF0544C),
-              title: context.tr('notifications'),
-              onTap: () => _info(context, context.tr('notifications'), context.tr('notifications_body')),
-            ),
-            _Tile(
-              icon: Icons.lock_rounded,
-              color: const Color(0xFF31B545),
-              title: context.tr('privacy'),
-              onTap: () => _info(context, context.tr('privacy'), context.tr('privacy_body')),
-            ),
             _Tile(
               icon: Icons.dns_rounded,
-              color: const Color(0xFF2AA3C8),
+              color: const Color(0xFF5E6E7E),
               title: context.tr('server'),
-              value: Uri.tryParse(AppConfig.supabaseUrl)?.host.split('.').first ?? '',
+              subtitle: Uri.tryParse(AppConfig.supabaseUrl)?.host ?? '',
               onTap: () {},
             ),
-          ],
-        ),
-        _Header(context.tr('about')),
-        _Group(
-          children: [
-            _Tile(icon: Icons.info_rounded, color: const Color(0xFF3390EC), title: context.tr('about'), value: context.digits(Brand.version), onTap: () {}),
+            _Tile(icon: Icons.info_rounded, color: const Color(0xFF3390EC), title: context.tr('about'), subtitle: context.digits(Brand.version), onTap: () {}),
             _Tile(
               icon: Icons.logout_rounded,
               color: Brand.pomegranate,
@@ -152,7 +246,7 @@ class SettingsScreen extends StatelessWidget {
         Center(
           child: Column(
             children: [
-              const PaighamLogo(size: 44),
+              const PaighamLogo(size: 40),
               const SizedBox(height: 8),
               Text(
                 '${context.tr('app_name')} ${context.digits(Brand.version)}',
@@ -195,18 +289,66 @@ class SettingsScreen extends StatelessWidget {
   );
 }
 
-class _Header extends StatelessWidget {
-  const _Header(this.text);
-  final String text;
+/// Night mode, theme and glass in one page.
+class _ChatSettingsPage extends StatelessWidget {
+  const _ChatSettingsPage();
 
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsetsDirectional.fromSTEB(18, 18, 18, 8),
-    child: Text(
-      text,
-      style: TextStyle(color: Theme.of(context).colorScheme.primary, fontWeight: FontWeight.w700, fontSize: 14),
-    ),
-  );
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final dark = app.themeMode == ThemeMode.dark || (app.themeMode == ThemeMode.system && MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+    return Scaffold(
+      appBar: AppBar(title: Text(context.tr('chat_settings'))),
+      body: ListView(
+        padding: const EdgeInsets.all(12),
+        children: [
+          _Group(
+            children: [
+              SwitchListTile(
+                secondary: const _Ico(Icons.dark_mode_rounded, Color(0xFF5B6BF5)),
+                title: Text(context.tr('night_mode'), style: const TextStyle(fontWeight: FontWeight.w600)),
+                value: dark,
+                onChanged: (v) => app.setTheme(v ? ThemeMode.dark : ThemeMode.light),
+              ),
+              SwitchListTile(
+                secondary: const _Ico(Icons.blur_on_rounded, Color(0xFF2AA3C8)),
+                title: Text(context.tr('glass_effect'), style: const TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: Text(context.tr('glass_effect_sub')),
+                value: app.glass,
+                onChanged: app.setGlass,
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _RoundIcon extends StatelessWidget {
+  const _RoundIcon({required this.icon, required this.onTap, required this.tooltip});
+  final IconData icon;
+  final VoidCallback onTap;
+  final String tooltip;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: dark ? const Color(0xFF202B38) : Colors.white,
+        elevation: dark ? 0 : 1,
+        shadowColor: Colors.black12,
+        shape: CircleBorder(side: BorderSide(color: dark ? const Color(0x14FFFFFF) : const Color(0x0A000000))),
+        child: InkWell(
+          customBorder: const CircleBorder(),
+          onTap: onTap,
+          child: SizedBox(width: 46, height: 46, child: Icon(icon, color: Theme.of(context).colorScheme.onSurface)),
+        ),
+      ),
+    );
+  }
 }
 
 class _Group extends StatelessWidget {
@@ -214,11 +356,21 @@ class _Group extends StatelessWidget {
   final List<Widget> children;
 
   @override
-  Widget build(BuildContext context) => Card(
-    color: Theme.of(context).colorScheme.surfaceContainerLow,
-    clipBehavior: Clip.antiAlias,
-    child: Column(children: children),
-  );
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      clipBehavior: Clip.antiAlias,
+      decoration: BoxDecoration(
+        color: dark ? const Color(0xFF1C2733) : Colors.white,
+        borderRadius: BorderRadius.circular(22),
+        border: Border.all(color: dark ? const Color(0x10FFFFFF) : const Color(0x08000000)),
+      ),
+      child: Material(
+        type: MaterialType.transparency,
+        child: Column(children: children),
+      ),
+    );
+  }
 }
 
 class _Ico extends StatelessWidget {
@@ -230,45 +382,52 @@ class _Ico extends StatelessWidget {
   Widget build(BuildContext context) => Container(
     width: 34,
     height: 34,
-    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(10)),
+    decoration: BoxDecoration(color: color, borderRadius: BorderRadius.circular(9)),
     child: Icon(icon, color: Colors.white, size: 20),
   );
 }
 
 class _Tile extends StatelessWidget {
-  const _Tile({required this.icon, required this.color, required this.title, this.value, required this.onTap, this.danger = false});
+  const _Tile({required this.icon, required this.color, required this.title, this.subtitle, required this.onTap, this.danger = false});
   final IconData icon;
   final Color color;
   final String title;
-  final String? value;
+  final String? subtitle;
   final VoidCallback onTap;
   final bool danger;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return ListTile(
+    return InkWell(
       onTap: onTap,
-      leading: _Ico(icon, color),
-      title: Text(
-        title,
-        style: TextStyle(fontWeight: FontWeight.w600, color: danger ? Brand.pomegranate : null),
-      ),
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (value != null)
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 150),
-              child: Text(
-                value!,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(color: cs.onSurfaceVariant, fontSize: 14),
+      child: Padding(
+        padding: const EdgeInsetsDirectional.fromSTEB(16, 11, 14, 11),
+        child: Row(
+          children: [
+            _Ico(icon, color),
+            const SizedBox(width: 16),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: danger ? Brand.pomegranate : null),
+                  ),
+                  if (subtitle != null && subtitle!.isNotEmpty)
+                    Text(
+                      subtitle!,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                    ),
+                ],
               ),
             ),
-          const SizedBox(width: 4),
-          Icon(Icons.chevron_right_rounded, color: cs.onSurfaceVariant),
-        ],
+          ],
+        ),
       ),
     );
   }
