@@ -107,6 +107,15 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
         return;
       }
       final h = _hide.value;
+      // Never leave the search half-way between field and icon: when scrolling
+      // down, carry the list a little further so it can finish turning into the icon.
+      if (h > 0 && h < _searchH && _dir > 0) {
+        final target = _storiesH + _searchH;
+        if (o < target && _scroll.position.maxScrollExtent >= target) {
+          _scroll.animateTo(target, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+          return;
+        }
+      }
       if (h <= 0 || h >= _searchH || (_dir > 0 && h >= _maxHide(_scroll.offset))) return;
       _snapFrom = h;
       // Scrolling down tucks the chips away (as far as the list allows); scrolling up brings them back.
