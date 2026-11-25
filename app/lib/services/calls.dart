@@ -51,12 +51,13 @@ class CallController extends ChangeNotifier {
   bool get busy => phase != CallPhase.idle && phase != CallPhase.ended;
 
   static Map<String, dynamic> get _iceConfig => {
-        'iceServers': [
-          {'urls': ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302']},
-          if (AppConfig.turnUrl.isNotEmpty)
-            {'urls': AppConfig.turnUrl, 'username': AppConfig.turnUser, 'credential': AppConfig.turnPass},
-        ],
-      };
+    'iceServers': [
+      {
+        'urls': ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
+      },
+      if (AppConfig.turnUrl.isNotEmpty) {'urls': AppConfig.turnUrl, 'username': AppConfig.turnUser, 'credential': AppConfig.turnPass},
+    ],
+  };
 
   // ── Listening for incoming calls ─────────────────────────────────────────
   void start() {
@@ -64,18 +65,8 @@ class CallController extends ChangeNotifier {
     if (me == null || _callsChannel != null) return;
     _callsChannel = _sb
         .channel('calls-$me')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'calls',
-          callback: (p) => _onCallInsert(p.newRecord),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'calls',
-          callback: (p) => _onCallUpdate(p.newRecord),
-        )
+        .onPostgresChanges(event: PostgresChangeEvent.insert, schema: 'public', table: 'calls', callback: (p) => _onCallInsert(p.newRecord))
+        .onPostgresChanges(event: PostgresChangeEvent.update, schema: 'public', table: 'calls', callback: (p) => _onCallUpdate(p.newRecord))
         .subscribe();
   }
 
@@ -152,11 +143,7 @@ class CallController extends ChangeNotifier {
     try {
       await _ensureRenderers();
       await _openMedia();
-      final row = await _sb
-          .from('calls')
-          .insert({'chat_id': chat.id, 'caller_id': app.myId, 'callee_id': other.id, 'video': withVideo})
-          .select()
-          .single();
+      final row = await _sb.from('calls').insert({'chat_id': chat.id, 'caller_id': app.myId, 'callee_id': other.id, 'video': withVideo}).select().single();
       callId = row['id'] as String;
       await _createPeer();
       _listenSignals();

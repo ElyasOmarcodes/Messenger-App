@@ -55,10 +55,7 @@ class _LogoPainter extends CustomPainter {
       ..close();
     canvas.drawPath(Path.combine(PathOperation.union, bubble, tail), Paint()..color = ink);
     // Eight-pointed star (Afghan tile motif).
-    canvas.drawPath(
-      starPath(c, r * 0.56, r * 0.32, 8, rotation: math.pi / 8),
-      Paint()..color = background ? Brand.blue : Colors.white,
-    );
+    canvas.drawPath(starPath(c, r * 0.56, r * 0.32, 8, rotation: math.pi / 8), Paint()..color = background ? Brand.blue : Colors.white);
   }
 
   @override
@@ -105,57 +102,41 @@ class GirihWallpaper extends StatelessWidget {
 
   final Widget child;
 
+  /// Width of one pattern tile in logical pixels: the doodles keep the same
+  /// physical size on every phone, tablet and desktop (no stretching).
+  static const double tile = 420;
+
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    // The pattern lives in its own layer, so scrolling messages never redraws it.
-    return ColoredBox(
-      color: dark ? Brand.nightChatBg : Brand.lightChatBg,
-      child: Stack(children: [
-        Positioned.fill(
-          child: RepaintBoundary(
-            child: CustomPaint(
-              isComplex: true,
-              willChange: false,
-              painter: _WallpaperPainter(
-                color: dark ? const Color(0x0FFFFFFF) : const Color(0x1A3390EC),
-                accent: dark ? const Color(0x142E9BF0) : const Color(0x1A2E9BF0),
+    // Soft gradient like Telegram's themes, with the doodles drawn over it.
+    final colors = dark ? const [Color(0xFF0F1B2A), Color(0xFF0B1420), Color(0xFF121F2E)] : const [Color(0xFFCFE2F3), Color(0xFFDCE9E2), Color(0xFFD5E3F5)];
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: colors),
+      ),
+      child: Stack(
+        children: [
+          // The pattern lives in its own cached layer, so scrolling never redraws it.
+          Positioned.fill(
+            child: RepaintBoundary(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  image: DecorationImage(
+                    image: const AssetImage('assets/wallpaper/doodle.png'),
+                    repeat: ImageRepeat.repeat,
+                    alignment: Alignment.topLeft,
+                    scale: 1024 / tile,
+                    filterQuality: FilterQuality.medium,
+                    colorFilter: ColorFilter.mode(dark ? const Color(0x17FFFFFF) : const Color(0x262B5278), BlendMode.srcIn),
+                  ),
+                ),
               ),
             ),
           ),
-        ),
-        Positioned.fill(child: RepaintBoundary(child: child)),
-      ]),
+          Positioned.fill(child: RepaintBoundary(child: child)),
+        ],
+      ),
     );
   }
-}
-
-class _WallpaperPainter extends CustomPainter {
-  _WallpaperPainter({required this.color, required this.accent});
-
-  final Color color;
-  final Color accent;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    const tile = 72.0;
-    final line = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.2;
-    final fill = Paint()..color = accent;
-    for (var y = -tile; y < size.height + tile; y += tile) {
-      final row = (y / tile).round();
-      for (var x = -tile; x < size.width + tile; x += tile) {
-        final ox = row.isEven ? 0.0 : tile / 2;
-        final c = Offset(x + ox, y);
-        canvas.drawPath(starPath(c, 16, 9, 8, rotation: math.pi / 8), line);
-        canvas.drawCircle(c, 3, fill);
-        canvas.drawCircle(Offset(c.dx + tile / 2, c.dy + tile / 2), 2, fill);
-      }
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _WallpaperPainter old) => old.color != color || old.accent != accent;
 }

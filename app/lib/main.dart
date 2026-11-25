@@ -20,10 +20,7 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AppConfig.load();
   if (AppConfig.configured) {
-    await Supabase.initialize(
-      url: AppConfig.supabaseUrl,
-      publishableKey: AppConfig.supabaseAnonKey,
-    );
+    await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
   }
   final controller = AppController();
   final calls = CallController(controller);
@@ -56,14 +53,8 @@ class PaighamApp extends StatelessWidget {
                 darkTheme: Brand.theme(Brightness.dark),
                 themeMode: controller.themeMode,
                 locale: Locale(lang.code),
-                supportedLocales: [
-                  for (final l in AppLang.values) Locale(l.code),
-                ],
-                localizationsDelegates: const [
-                  GlobalMaterialLocalizations.delegate,
-                  GlobalWidgetsLocalizations.delegate,
-                  _CupertinoFallbackDelegate(),
-                ],
+                supportedLocales: [for (final l in AppLang.values) Locale(l.code)],
+                localizationsDelegates: const [GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, _CupertinoFallbackDelegate()],
                 builder: (context, child) => LangScope(
                   lang: lang,
                   // The call screen floats above every page, including open chats.
@@ -122,10 +113,7 @@ class _NoServerState extends State<_NoServer> {
     if (!url.startsWith('http') || _key.text.trim().length < 20) return;
     setState(() => _busy = true);
     await AppConfig.save(url, _key.text);
-    await Supabase.initialize(
-      url: AppConfig.supabaseUrl,
-      publishableKey: AppConfig.supabaseAnonKey,
-    );
+    await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
     if (!mounted) return;
     await AppScope.read(context).init();
   }
@@ -146,11 +134,7 @@ class _NoServerState extends State<_NoServer> {
               Text(
                 context.tr('server_missing'),
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 15,
-                  height: 1.6,
-                ),
+                style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.6),
               ),
               const SizedBox(height: 20),
               Card(
@@ -162,25 +146,17 @@ class _NoServerState extends State<_NoServer> {
                       children: [
                         TextField(
                           controller: _url,
-                          decoration: const InputDecoration(
-                            labelText: 'Server URL',
-                            hintText: 'https://xxxx.supabase.co',
-                          ),
+                          decoration: const InputDecoration(labelText: 'Server URL', hintText: 'https://xxxx.supabase.co'),
                         ),
                         const SizedBox(height: 12),
                         TextField(
                           controller: _key,
-                          decoration: const InputDecoration(
-                            labelText: 'Anon / publishable key',
-                          ),
+                          decoration: const InputDecoration(labelText: 'Anon / publishable key'),
                         ),
                         const SizedBox(height: 16),
                         SizedBox(
                           width: double.infinity,
-                          child: FilledButton(
-                            onPressed: _busy ? null : _connect,
-                            child: Text(context.tr('connect')),
-                          ),
+                          child: FilledButton(onPressed: _busy ? null : _connect, child: Text(context.tr('connect'))),
                         ),
                       ],
                     ),
@@ -197,8 +173,7 @@ class _NoServerState extends State<_NoServer> {
 
 /// Flutter ships Material translations for Pashto but not Cupertino ones;
 /// this keeps iOS-style widgets working (they fall back to Dari or English).
-class _CupertinoFallbackDelegate
-    extends LocalizationsDelegate<CupertinoLocalizations> {
+class _CupertinoFallbackDelegate extends LocalizationsDelegate<CupertinoLocalizations> {
   const _CupertinoFallbackDelegate();
 
   @override
@@ -214,7 +189,5 @@ class _CupertinoFallbackDelegate
   }
 
   @override
-  bool shouldReload(
-    covariant LocalizationsDelegate<CupertinoLocalizations> old,
-  ) => false;
+  bool shouldReload(covariant LocalizationsDelegate<CupertinoLocalizations> old) => false;
 }

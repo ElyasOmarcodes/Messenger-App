@@ -18,6 +18,7 @@ import 'contacts_screen.dart';
 import 'new_chat_sheet.dart';
 import 'profile_screen.dart';
 import 'settings_screen.dart';
+import 'stories.dart';
 
 /// Wide screens (desktop, tablet, web) get a Telegram-Desktop style
 /// two-pane layout; phones get the floating bottom bar.
@@ -94,8 +95,8 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<NavItem> _items(BuildContext context) => [
-    NavItem(Icons.chat_bubble_outline_rounded, Icons.chat_bubble_rounded, context.tr('chats')),
-    NavItem(Icons.person_outline_rounded, Icons.person_rounded, context.tr('contacts')),
+    NavItem(Icons.forum_outlined, Icons.forum_rounded, context.tr('chats')),
+    NavItem(Icons.account_circle_outlined, Icons.account_circle, context.tr('contacts')),
     NavItem(Icons.settings_outlined, Icons.settings_rounded, context.tr('settings')),
     NavItem(
       Icons.account_circle_outlined,
@@ -144,7 +145,27 @@ class _HomeScreenState extends State<HomeScreen> {
       floatingActionButton: _tab == 0
           ? Padding(
               padding: const EdgeInsets.only(bottom: 8),
-              child: FloatingActionButton(onPressed: _newChat, tooltip: context.tr('new_chat'), child: const Icon(Icons.edit_rounded)),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // small story camera above the main button (Telegram)
+                  SizedBox(
+                    width: 44,
+                    height: 44,
+                    child: FloatingActionButton(
+                      heroTag: 'story-fab',
+                      elevation: 2,
+                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
+                      foregroundColor: Theme.of(context).colorScheme.onSurface,
+                      tooltip: context.tr('add_story'),
+                      onPressed: () => addStory(context),
+                      child: const Icon(Icons.photo_camera_outlined, size: 22),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  FloatingActionButton(heroTag: 'new-fab', onPressed: _newChat, tooltip: context.tr('new_chat'), child: const Icon(Icons.add_comment_rounded)),
+                ],
+              ),
             )
           : null,
       bottomNavigationBar: PillNavBar(items: items, index: _tab, badges: {0: app.totalUnread}, onTap: (i) => setState(() => _tab = i)),
@@ -225,12 +246,90 @@ class PillNavBar extends StatelessWidget {
   final ValueChanged<int> onTap;
   final Map<int, int> badges;
 
+  /// Each tab has a fixed width, so the bar keeps its size on every screen.
+  static const double itemWidth = 80;
+  static const double height = 58;
+
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final page = Theme.of(context).scaffoldBackgroundColor;
-    // Liquid glass: see-through tint, light rim on top, soft shadow.
-    final tint = dark ? const Color(0xFF1B2733) : Colors.white;
+    final glass = AppScope.of(context).glass;
+    // Telegram's bar: a dark slate (or white) capsule, slightly see-through
+    // with blur behind, a hairline rim, a light top reflection.
+    final base = dark ? const Color(0xFF1E2934) : Colors.white;
+    final fill = base.withValues(alpha: glass ? (dark ? 0.82 : 0.80) : 1);
+    final barW = items.length * itemWidth + 8;
+    Widget capsule = Container(
+      width: barW,
+      height: height,
+      padding: const EdgeInsets.all(4),
+      decoration: BoxDecoration(
+        color: fill,
+        borderRadius: BorderRadius.circular(height / 2),
+        border: Border.all(color: dark ? const Color(0x22FFFFFF) : const Color(0x14000000), width: 0.8),
+        gradient: glass
+            ? LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color.alphaBlend(Colors.white.withValues(alpha: dark ? 0.05 : 0.25), fill),
+                  fill,
+                ],
+              )
+            : null,
+      ),
+      child: Stack(
+        children: [
+          // sliding lens under the selected tab
+          AnimatedPositionedDirectional(
+            duration: const Duration(milliseconds: 380),
+            curve: Curves.easeOutBack,
+            start: index * itemWidth,
+            top: 0,
+            bottom: 0,
+            width: itemWidth,
+            child: DecoratedBox(
+              decoration: BoxDecoration(color: dark ? const Color(0xFF253A50) : const Color(0xFFE6F0FB), borderRadius: BorderRadius.circular((height - 8) / 2)),
+            ),
+          ),
+          // top reflection (specular rim)
+          Positioned(
+            left: 20,
+            right: 20,
+            top: -3,
+            height: 1,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    Colors.white.withValues(alpha: 0),
+                    Colors.white.withValues(alpha: dark ? 0.22 : 0.9),
+                    Colors.white.withValues(alpha: 0),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var i = 0; i < items.length; i++)
+                SizedBox(
+                  width: itemWidth,
+                  child: _PillItem(item: items[i], selected: i == index, badge: badges[i] ?? 0, onTap: () => onTap(i)),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+    if (glass) {
+      capsule = ClipRRect(
+        borderRadius: BorderRadius.circular(height / 2),
+        child: BackdropFilter(filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14), child: capsule),
+      );
+    }
     return Stack(
       clipBehavior: Clip.none,
       children: [
@@ -238,7 +337,7 @@ class PillNavBar extends StatelessWidget {
         Positioned(
           left: 0,
           right: 0,
-          top: -56,
+          top: -48,
           bottom: 0,
           child: IgnorePointer(
             child: DecoratedBox(
@@ -246,7 +345,7 @@ class PillNavBar extends StatelessWidget {
                 gradient: LinearGradient(
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
-                  colors: [page.withValues(alpha: 0), page.withValues(alpha: 0.55), page.withValues(alpha: 0.9), page],
+                  colors: [page.withValues(alpha: 0), page.withValues(alpha: 0.6), page.withValues(alpha: 0.92), page],
                   stops: const [0, 0.35, 0.7, 1],
                 ),
               ),
@@ -255,97 +354,22 @@ class PillNavBar extends StatelessWidget {
         ),
         SafeArea(
           top: false,
-          child: Center(
-            heightFactor: 1,
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 480),
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
-                child: DecoratedBox(
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(32),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: dark ? 0.35 : 0.10),
-                        blurRadius: 24,
-                        offset: const Offset(0, 8),
-                      ),
-                    ],
-                  ),
-                  child: ClipRRect(
-                    borderRadius: BorderRadius.circular(32),
-                    child: BackdropFilter(
-                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
-                      child: Container(
-                        height: 62,
-                        padding: const EdgeInsets.all(4),
-                        decoration: BoxDecoration(
-                          borderRadius: BorderRadius.circular(32),
-                          gradient: LinearGradient(
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter,
-                            colors: [
-                              tint.withValues(alpha: dark ? 0.62 : 0.58),
-                              tint.withValues(alpha: dark ? 0.70 : 0.68),
-                            ],
-                          ),
-                          border: Border.all(color: Colors.white.withValues(alpha: dark ? 0.14 : 0.75), width: 1),
-                        ),
-                        child: LayoutBuilder(
-                          builder: (context, c) {
-                            final w = c.maxWidth / items.length;
-                            return Stack(
-                              children: [
-                                // top light reflection
-                                Positioned(
-                                  left: 18,
-                                  right: 18,
-                                  top: 0,
-                                  height: 1.2,
-                                  child: DecoratedBox(
-                                    decoration: BoxDecoration(
-                                      gradient: LinearGradient(
-                                        colors: [
-                                          Colors.white.withValues(alpha: 0),
-                                          Colors.white.withValues(alpha: dark ? 0.35 : 0.95),
-                                          Colors.white.withValues(alpha: 0),
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                                // Sliding glass lens under the selected tab.
-                                AnimatedPositionedDirectional(
-                                  duration: const Duration(milliseconds: 420),
-                                  curve: Curves.easeOutBack,
-                                  start: index * w,
-                                  top: 0,
-                                  bottom: 0,
-                                  width: w,
-                                  child: Container(
-                                    decoration: BoxDecoration(
-                                      color: dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.05),
-                                      borderRadius: BorderRadius.circular(28),
-                                      border: Border.all(color: Colors.white.withValues(alpha: dark ? 0.12 : 0.9), width: 0.8),
-                                    ),
-                                  ),
-                                ),
-                                Row(
-                                  children: [
-                                    for (var i = 0; i < items.length; i++)
-                                      Expanded(
-                                        child: _PillItem(item: items[i], selected: i == index, badge: badges[i] ?? 0, onTap: () => onTap(i)),
-                                      ),
-                                  ],
-                                ),
-                              ],
-                            );
-                          },
-                        ),
-                      ),
+          child: Padding(
+            padding: const EdgeInsets.only(bottom: 8),
+            child: Center(
+              heightFactor: 1,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(height / 2),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: dark ? 0.30 : 0.10),
+                      blurRadius: 18,
+                      offset: const Offset(0, 6),
                     ),
-                  ),
+                  ],
                 ),
+                child: capsule,
               ),
             ),
           ),
@@ -385,8 +409,8 @@ class _PillItemState extends State<_PillItem> with SingleTickerProviderStateMixi
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final color = widget.selected ? cs.primary : (dark ? const Color(0xFF8D9AA6) : const Color(0xFF8A8F96));
-    Widget icon = widget.item.custom?.call(widget.selected, color) ?? Icon(widget.selected ? widget.item.active : widget.item.icon, color: color, size: 27);
+    final color = widget.selected ? cs.primary : (dark ? const Color(0xFFE4E9EE) : const Color(0xFF2A2F35));
+    Widget icon = widget.item.custom?.call(widget.selected, color) ?? Icon(widget.selected ? widget.item.active : widget.item.icon, color: color, size: 25);
     icon = AnimatedBuilder(
       animation: _bounce,
       builder: (_, child) {
@@ -400,7 +424,7 @@ class _PillItemState extends State<_PillItem> with SingleTickerProviderStateMixi
     if (widget.badge > 0) {
       icon = Badge(
         label: Text(context.digits(widget.badge > 99 ? '99+' : widget.badge)),
-        backgroundColor: Brand.pomegranate,
+        backgroundColor: cs.primary,
         textColor: Colors.white,
         offset: const Offset(12, -5),
         child: icon,
@@ -425,7 +449,13 @@ class _PillItemState extends State<_PillItem> with SingleTickerProviderStateMixi
             const SizedBox(height: 1),
             AnimatedDefaultTextStyle(
               duration: const Duration(milliseconds: 200),
-              style: TextStyle(fontFamily: Brand.fontFamily, fontSize: 11.5, fontWeight: widget.selected ? FontWeight.w700 : FontWeight.w600, color: color),
+              style: TextStyle(
+                fontFamily: Brand.fontFamily,
+                fontSize: 12,
+                height: 1.2,
+                fontWeight: widget.selected ? FontWeight.w700 : FontWeight.w600,
+                color: color,
+              ),
               child: Text(widget.item.label, maxLines: 1, overflow: TextOverflow.ellipsis),
             ),
           ],

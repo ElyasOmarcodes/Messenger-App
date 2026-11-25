@@ -257,6 +257,7 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   void _attachMenu(Chat chat) {
+    FocusManager.instance.primaryFocus?.unfocus();
     final items = <(IconData, Color, String, VoidCallback)>[
       (Icons.photo_library_rounded, const Color(0xFF3390EC), 'gallery', () => _pickPhotos(chat, camera: false)),
       (Icons.photo_camera_rounded, const Color(0xFF8E6CEF), 'camera', () => _pickPhotos(chat, camera: true)),
@@ -599,6 +600,7 @@ class _ChatScreenState extends State<ChatScreen> {
               IconButton(tooltip: context.tr('voice_call'), onPressed: () => _call(chat, false), icon: const Icon(Icons.call_outlined)),
             ],
             PopupMenuButton<String>(
+              onOpened: () => FocusManager.instance.primaryFocus?.unfocus(),
               icon: const Icon(Icons.more_vert_rounded),
               onSelected: (v) async {
                 switch (v) {
@@ -620,7 +622,12 @@ class _ChatScreenState extends State<ChatScreen> {
                 if (!chat.isSaved) _menuItem(ctx, 'info', Icons.info_outline_rounded, 'info'),
                 if (chat.isGroup) _menuItem(ctx, 'add', Icons.person_add_alt_1_outlined, 'add_member'),
                 if (!chat.isSaved)
-                  _menuItem(ctx, 'mute', chat.muted ? Icons.notifications_active_outlined : Icons.notifications_off_outlined, chat.muted ? 'unmute_chat' : 'mute_chat'),
+                  _menuItem(
+                    ctx,
+                    'mute',
+                    chat.muted ? Icons.notifications_active_outlined : Icons.notifications_off_outlined,
+                    chat.muted ? 'unmute_chat' : 'mute_chat',
+                  ),
                 _menuItem(ctx, 'clear', Icons.cleaning_services_outlined, 'clear_history'),
                 if (!chat.isSaved)
                   _menuItem(
@@ -647,7 +654,9 @@ class _ChatScreenState extends State<ChatScreen> {
                 left: 0,
                 right: 0,
                 height: barTop + (pinned != null ? 52 : 0) + 44,
-                child: RepaintBoundary(child: SoftEdge(fromTop: true, color: pageColor, solid: barTop + (pinned != null ? 52 : 0))),
+                child: RepaintBoundary(
+                  child: SoftEdge(fromTop: true, color: pageColor, blur: app.glass, solid: barTop + (pinned != null ? 52 : 0)),
+                ),
               ),
               if (pinned != null) Positioned(top: barTop, left: 0, right: 0, child: _pinnedBar(app, chat, pinned)),
               Positioned(
@@ -662,7 +671,11 @@ class _ChatScreenState extends State<ChatScreen> {
                       Stack(
                         children: [
                           Positioned.fill(
-                            child: RepaintBoundary(child: LayoutBuilder(builder: (_, c) => SoftEdge(fromTop: false, color: pageColor, solid: (c.maxHeight - 34).clamp(0.0, 400.0)))),
+                            child: RepaintBoundary(
+                              child: LayoutBuilder(
+                                builder: (_, c) => SoftEdge(fromTop: false, color: pageColor, blur: app.glass, solid: (c.maxHeight - 34).clamp(0.0, 400.0)),
+                              ),
+                            ),
                           ),
                           Padding(padding: const EdgeInsets.only(top: 34), child: _composer(chat)),
                         ],

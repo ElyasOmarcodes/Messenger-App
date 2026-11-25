@@ -255,7 +255,11 @@ class _StoryComposerState extends State<StoryComposer> {
                           child: Image.memory(widget.image!, fit: BoxFit.cover, cacheWidth: 48, filterQuality: FilterQuality.low),
                         ),
                         Container(color: Colors.black26),
-                        Image.memory(widget.image!, fit: BoxFit.contain, cacheWidth: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round()),
+                        Image.memory(
+                          widget.image!,
+                          fit: BoxFit.contain,
+                          cacheWidth: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round(),
+                        ),
                       ],
                     )
                   : AnimatedContainer(
@@ -664,9 +668,17 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
     final app = AppScope.read(context);
     final messenger = ScaffoldMessenger.of(context);
     final sent = context.tr('reply_sent');
+    final st = _story;
     final chat = await app.openDirect(widget.user.user.id);
     if (chat == null) return;
-    await app.sendText(chat, t);
+    // The reply carries the story, so it shows as a quote of that story.
+    await app.sendText(
+      chat,
+      t,
+      meta: {
+        'story': {'id': st.id, 'owner': widget.user.user.id, 'kind': st.kind, 'body': st.body, 'bg': ?st.bg, 'media_path': ?st.mediaPath},
+      },
+    );
     messenger.showSnackBar(SnackBar(content: Text(sent), duration: const Duration(seconds: 2)));
   }
 

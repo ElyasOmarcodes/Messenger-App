@@ -26,7 +26,10 @@ class _ContactsScreenState extends State<ContactsScreen> {
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(ctx.tr('add_contact')),
-        content: SizedBox(width: 420, child: PersonFinder(buttonKey: 'find', onFound: (p) => Navigator.pop(ctx, p))),
+        content: SizedBox(
+          width: 420,
+          child: PersonFinder(buttonKey: 'find', onFound: (p) => Navigator.pop(ctx, p)),
+        ),
       ),
     );
     if (p == null) return;
@@ -69,23 +72,36 @@ class _ContactsScreenState extends State<ContactsScreen> {
                   padding: const EdgeInsets.only(bottom: 110),
                   children: [
                     ListTile(
-                      leading: CircleAvatar(radius: 24, backgroundColor: cs.primary.withValues(alpha: 0.12), child: Icon(Icons.person_add_rounded, color: cs.primary)),
-                      title: Text(context.tr('add_contact'), style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700)),
+                      leading: CircleAvatar(
+                        radius: 24,
+                        backgroundColor: cs.primary.withValues(alpha: 0.12),
+                        child: Icon(Icons.person_add_rounded, color: cs.primary),
+                      ),
+                      title: Text(
+                        context.tr('add_contact'),
+                        style: TextStyle(color: cs.primary, fontWeight: FontWeight.w700),
+                      ),
                       onTap: _add,
                     ),
                     if (list.isEmpty)
                       Padding(
                         padding: const EdgeInsets.all(32),
-                        child: Text(context.tr('contacts_empty'), textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
+                        child: Text(
+                          context.tr('contacts_empty'),
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: cs.onSurfaceVariant),
+                        ),
                       ),
                     for (final (p, chat) in list)
                       ListTile(
                         leading: Avatar(seed: p.id, label: p.name, imageUrl: p.avatarUrl, size: 48),
                         title: Text(p.name, style: const TextStyle(fontWeight: FontWeight.w700)),
                         subtitle: Text(p.username != null ? '@${p.username}' : p.email, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        onTap: () => Navigator.of(context).push(MaterialPageRoute(
-                          builder: (_) => ProfileScreen.user(profile: p, chatId: chat?.id),
-                        )),
+                        onTap: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ProfileScreen.user(profile: p, chatId: chat?.id),
+                          ),
+                        ),
                       ),
                   ],
                 ),

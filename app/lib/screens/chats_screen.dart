@@ -4,13 +4,14 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 
-import '../brand/logo.dart';
+import '../brand/brand.dart';
 import '../l10n/afghan_date.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
 import '../widgets/chat_options.dart';
+import 'chat_screen.dart';
 import 'stories.dart';
 
 enum _Filter { all, personal, groups, unread }
@@ -44,7 +45,8 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
 
   static const _toolbarH = 56.0;
   static const _storiesH = 98.0;
-  static const _chipsH = 98.0;
+  static const _chipsH = 106.0;
+  bool _initialFold = false;
 
   @override
   void initState() {
@@ -82,6 +84,13 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
     _snapTimer?.cancel();
     _snapTimer = Timer(const Duration(milliseconds: 180), () {
       if (!mounted || !_scroll.hasClients) return;
+      // Stories open/close with a snap: past a small pull they finish by themselves.
+      final o = _scroll.offset;
+      if (o > 0.5 && o < _storiesH - 0.5) {
+        final target = _dir > 0 ? (o > _storiesH * 0.15 ? _storiesH : 0.0) : (o < _storiesH * 0.85 ? 0.0 : _storiesH);
+        _scroll.animateTo(target, duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
+        return;
+      }
       final h = _hide.value;
       if (h <= 0 || h >= _chipsH || (_dir > 0 && h >= _maxHide(_scroll.offset))) return;
       _snapFrom = h;
@@ -119,40 +128,65 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
     final personalUnread = app.totalUnread - groupsUnread;
     final topInset = MediaQuery.paddingOf(context).top;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final glass = (dark ? const Color(0xFF17212B) : Colors.white).withValues(alpha: 0.88);
+    final glass = Theme.of(context).scaffoldBackgroundColor.withValues(alpha: app.glass ? 0.88 : 1);
     final full = topInset + _toolbarH + _storiesH + _chipsH;
+    // Like Telegram: stories start folded beside the title unless someone posted something new.
+    if (!_initialFold && app.chatsLoaded) {
+      _initialFold = true;
+      final fresh = app.stories.any((u) => u.user.id != app.myId && !u.allSeen && u.stories.isNotEmpty);
+      if (!fresh) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_scroll.hasClients && _scroll.position.maxScrollExtent >= _storiesH) _scroll.jumpTo(_storiesH);
+        });
+      }
+    }
+    final field = dark ? const Color(0xFF202B38) : const Color(0xFFEEF1F5);
 
     final chipsBlock = Column(
       mainAxisSize: MainAxisSize.min,
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(12, 2, 12, 6),
-          child: TextField(
-            onChanged: (v) => setState(() => _query = v),
-            decoration: InputDecoration(
-              hintText: context.tr('search'),
-              prefixIcon: const Icon(Icons.search_rounded),
-              filled: true,
-              fillColor: cs.surfaceContainerLow,
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(vertical: 10),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
-              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
-              focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(22), borderSide: BorderSide.none),
+          padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
+          child: SizedBox(
+            height: 42,
+            child: TextField(
+              onChanged: (v) => setState(() => _query = v),
+              textAlignVertical: TextAlignVertical.center,
+              decoration: InputDecoration(
+                hintText: context.tr('search'),
+                prefixIcon: Icon(Icons.search_rounded, color: cs.onSurfaceVariant),
+                filled: true,
+                fillColor: field,
+                isDense: true,
+                contentPadding: EdgeInsets.zero,
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(21), borderSide: BorderSide.none),
+                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(21), borderSide: BorderSide.none),
+                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(21), borderSide: BorderSide.none),
+              ),
             ),
           ),
         ),
-        SizedBox(
+        // Folder chips in one rounded capsule, like Telegram.
+        Container(
           height: 44,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 10),
-            children: [
-              _chip(context, _Filter.all, 'all', app.totalUnread),
-              _chip(context, _Filter.personal, 'personal', personalUnread),
-              _chip(context, _Filter.groups, 'groups', groupsUnread),
-              _chip(context, _Filter.unread, 'unread', 0),
-            ],
+          margin: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(
+            color: field,
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(color: dark ? const Color(0x14FFFFFF) : const Color(0x0A000000)),
+          ),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(22),
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.all(3),
+              children: [
+                _chip(context, _Filter.all, 'all', app.totalUnread),
+                _chip(context, _Filter.personal, 'personal', personalUnread),
+                _chip(context, _Filter.groups, 'groups', groupsUnread),
+                _chip(context, _Filter.unread, 'unread', 0),
+              ],
+            ),
           ),
         ),
       ],
@@ -249,6 +283,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
               final height = topInset + _toolbarH + storiesNow + _chipsH - hide;
               return ClipRect(
                 child: BackdropFilter(
+                  enabled: app.glass,
                   filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
                   child: Container(
                     height: height,
@@ -327,32 +362,49 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
 
   Widget _chip(BuildContext context, _Filter f, String key, int count) {
     final cs = Theme.of(context).colorScheme;
+    final dark = Theme.of(context).brightness == Brightness.dark;
     final sel = _filter == f;
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 4),
-      child: ChoiceChip(
-        selected: sel,
-        showCheckmark: false,
-        onSelected: (_) => setState(() => _filter = f),
-        label: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              context.tr(key),
-              style: TextStyle(color: sel ? cs.primary : cs.onSurface, fontWeight: FontWeight.w700),
-            ),
-            if (count > 0) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-                decoration: BoxDecoration(color: sel ? cs.primary : cs.onSurfaceVariant.withValues(alpha: 0.5), borderRadius: BorderRadius.circular(10)),
-                child: Text(
-                  context.digits(count),
-                  style: const TextStyle(color: Colors.white, fontSize: 11.5, fontWeight: FontWeight.w800),
-                ),
+    return Semantics(
+      button: true,
+      selected: sel,
+      label: context.tr(key),
+      excludeSemantics: true,
+      onTap: () => setState(() => _filter = f),
+      child: GestureDetector(
+        onTap: () => setState(() => _filter = f),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 220),
+          curve: Curves.easeOut,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(
+            color: sel ? (dark ? const Color(0xFF26405C) : Brand.blueMist) : Colors.transparent,
+            borderRadius: BorderRadius.circular(19),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                context.tr(key),
+                style: TextStyle(fontSize: 15, color: sel ? cs.primary : cs.onSurfaceVariant, fontWeight: sel ? FontWeight.w700 : FontWeight.w600),
               ),
+              if (count > 0) ...[
+                const SizedBox(width: 6),
+                Container(
+                  constraints: const BoxConstraints(minWidth: 22),
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                  decoration: BoxDecoration(
+                    color: sel ? cs.primary : (dark ? const Color(0xFF5B6B7C) : const Color(0xFFA9B2BC)),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Text(
+                    context.digits(count),
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w800),
+                  ),
+                ),
+              ],
             ],
-          ],
+          ),
         ),
       ),
     );
@@ -376,11 +428,58 @@ class _Toolbar extends StatelessWidget {
         if (u.user.id != app.myId) u,
     ].take(3).toList();
     final fold = ((t - 0.4) / 0.6).clamp(0.0, 1.0);
+    final archived = app.chats.where((c) => c.archived).length;
+    Widget rings = const SizedBox.shrink();
+    if (shown.isNotEmpty && fold > 0) {
+      rings = Opacity(
+        opacity: fold,
+        child: Transform.scale(
+          scale: 0.6 + 0.4 * fold,
+          child: Semantics(
+            button: true,
+            label: context.tr('stories'),
+            excludeSemantics: true,
+            onTap: () => openStories(context, shown.first),
+            child: GestureDetector(
+              onTap: () => openStories(context, shown.first),
+              child: Padding(
+                padding: const EdgeInsetsDirectional.only(end: 10),
+                child: SizedBox(
+                  width: 34.0 + (shown.length - 1) * 20,
+                  height: 34,
+                  child: Stack(
+                    children: [
+                      for (var i = shown.length - 1; i >= 0; i--)
+                        PositionedDirectional(
+                          start: i * 20.0,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 1.5),
+                            ),
+                            child: StoryRing(
+                              profile: shown[i].user,
+                              size: 31,
+                              unseen: !shown[i].allSeen && shown[i].user.id != app.myId,
+                              seen: shown[i].allSeen || shown[i].user.id == app.myId,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     return Padding(
-      padding: const EdgeInsetsDirectional.only(start: 16, end: 6),
+      padding: const EdgeInsetsDirectional.only(start: 16, end: 4),
       child: Row(
         children: [
-          if (!wide) ...[const PaighamLogo(size: 32), const SizedBox(width: 10)],
+          // folded stories sit before the title (Telegram)
+          AnimatedSize(duration: const Duration(milliseconds: 200), curve: Curves.easeOut, child: rings),
           Flexible(
             fit: FlexFit.loose,
             flex: 0,
@@ -390,57 +489,51 @@ class _Toolbar extends StatelessWidget {
                 app.realtimeOnline ? context.tr('app_name') : context.tr('connecting'),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: app.realtimeOnline ? 22 : 18, fontWeight: FontWeight.w800, color: cs.onSurface),
+                style: TextStyle(fontSize: app.realtimeOnline ? 24 : 19, fontWeight: FontWeight.w800, color: cs.onSurface),
               ),
             ),
           ),
-          // Folded stories: small overlapping rings beside the title.
-          if (shown.isNotEmpty && fold > 0)
-            Opacity(
-              opacity: fold,
-              child: Transform.scale(
-                scale: 0.6 + 0.4 * fold,
-                child: Semantics(
-                  button: true,
-                  label: context.tr('stories'),
-                  excludeSemantics: true,
-                  onTap: () => openStories(context, shown.first),
-                  child: GestureDetector(
-                    onTap: () => openStories(context, shown.first),
-                    child: Padding(
-                      padding: const EdgeInsetsDirectional.only(start: 10),
-                      child: SizedBox(
-                        width: 30.0 + (shown.length - 1) * 18,
-                        height: 30,
-                        child: Stack(
-                          children: [
-                            for (var i = shown.length - 1; i >= 0; i--)
-                              PositionedDirectional(
-                                start: i * 18.0,
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: cs.surface, width: 1.5),
-                                  ),
-                                  child: StoryRing(
-                                    profile: shown[i].user,
-                                    size: 27,
-                                    unseen: !shown[i].allSeen && shown[i].user.id != app.myId,
-                                    seen: shown[i].allSeen || shown[i].user.id == app.myId,
-                                  ),
-                                ),
-                              ),
-                          ],
-                        ),
+          const Spacer(),
+          if (wide && onNewChat != null) IconButton(onPressed: onNewChat, icon: const Icon(Icons.edit_outlined), tooltip: context.tr('new_chat')),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
+            onSelected: (v) {
+              switch (v) {
+                case 'new':
+                  onNewChat?.call();
+                case 'story':
+                  addStory(context);
+                case 'saved':
+                  openSavedMessages(context);
+                case 'archive':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => ArchivedChatsScreen(
+                        onOpen: (c) => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ChatScreen(chatId: c.id))),
                       ),
                     ),
-                  ),
+                  );
+              }
+            },
+            itemBuilder: (ctx) {
+              PopupMenuItem<String> item(String v, IconData icon, String key) => PopupMenuItem(
+                value: v,
+                child: Row(
+                  children: [
+                    Icon(icon, size: 21, color: cs.onSurfaceVariant),
+                    const SizedBox(width: 14),
+                    Text(ctx.tr(key)),
+                  ],
                 ),
-              ),
-            ),
-          const Spacer(),
-          IconButton(tooltip: context.tr('add_story'), onPressed: () => addStory(context), icon: const Icon(Icons.add_a_photo_outlined)),
-          if (wide && onNewChat != null) IconButton(onPressed: onNewChat, icon: const Icon(Icons.edit_outlined), tooltip: context.tr('new_chat')),
+              );
+              return [
+                if (onNewChat != null) item('new', Icons.edit_outlined, 'new_chat'),
+                item('story', Icons.add_a_photo_outlined, 'add_story'),
+                item('saved', Icons.bookmark_border_rounded, 'saved_messages'),
+                if (archived > 0) item('archive', Icons.archive_outlined, 'archived_chats'),
+              ];
+            },
+          ),
         ],
       ),
     );

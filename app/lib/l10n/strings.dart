@@ -12,8 +12,7 @@ enum AppLang {
 
   bool get rtl => this != AppLang.en;
 
-  static AppLang fromCode(String? code) =>
-      AppLang.values.firstWhere((l) => l.code == code, orElse: () => AppLang.ps);
+  static AppLang fromCode(String? code) => AppLang.values.firstWhere((l) => l.code == code, orElse: () => AppLang.ps);
 }
 
 /// Small, dependency-free translation table.
@@ -85,7 +84,11 @@ class Strings {
     'err_code': {'ps': 'کوډ سم نه دی یا یې وخت تېر شوی', 'fa': 'کد نادرست یا منقضی است', 'en': 'Wrong or expired code'},
     'err_login': {'ps': 'ایمیل یا پټنوم سم نه دی', 'fa': 'ایمیل یا رمز نادرست است', 'en': 'Wrong email or password'},
     'err_exists': {'ps': 'په دې ایمیل مخکې حساب جوړ شوی', 'fa': 'با این ایمیل قبلاً حساب ساخته شده', 'en': 'An account with this email already exists'},
-    'err_network': {'ps': 'سرور ته نښلېدل ونه شول. انټرنېټ وګورئ', 'fa': 'اتصال به سرور ممکن نشد. اینترنت را بررسی کنید', 'en': 'Could not reach the server. Check your internet'},
+    'err_network': {
+      'ps': 'سرور ته نښلېدل ونه شول. انټرنېټ وګورئ',
+      'fa': 'اتصال به سرور ممکن نشد. اینترنت را بررسی کنید',
+      'en': 'Could not reach the server. Check your internet',
+    },
     'err_generic': {'ps': 'یوه ستونزه پېښه شوه. بیا هڅه وکړئ', 'fa': 'مشکلی پیش آمد. دوباره تلاش کنید', 'en': 'Something went wrong. Try again'},
 
     // ── Navigation ────────────────────────────────────────────────────────
@@ -166,11 +169,7 @@ class Strings {
     // ── Settings ──────────────────────────────────────────────────────────
     'profile': {'ps': 'پروفایل', 'fa': 'پروفایل', 'en': 'Profile'},
     'username': {'ps': 'کارن نوم', 'fa': 'نام کاربری', 'en': 'Username'},
-    'username_hint': {
-      'ps': 'یوازې انګلیسي توري، عدد او _ (۳ تر ۲۴)',
-      'fa': 'فقط حروف انگلیسی، عدد و _ (۳ تا ۲۴)',
-      'en': 'Letters a–z, digits and _ (3–24)',
-    },
+    'username_hint': {'ps': 'یوازې انګلیسي توري، عدد او _ (۳ تر ۲۴)', 'fa': 'فقط حروف انگلیسی، عدد و _ (۳ تا ۲۴)', 'en': 'Letters a–z, digits and _ (3–24)'},
     'username_taken': {'ps': 'دا کارن نوم نیول شوی یا سم نه دی', 'fa': 'این نام کاربری گرفته شده یا نادرست است', 'en': 'Username taken or invalid'},
     'not_set': {'ps': 'نه دی ټاکل شوی', 'fa': 'تنظیم نشده', 'en': 'Not set'},
     'edit_name': {'ps': 'نوم بدلول', 'fa': 'تغییر نام', 'en': 'Edit name'},
@@ -214,7 +213,11 @@ class Strings {
     'call_ended': {'ps': 'زنګ پای ته ورسېد', 'fa': 'تماس پایان یافت', 'en': 'Call ended'},
     'call_declined': {'ps': 'زنګ رد شو', 'fa': 'تماس رد شد', 'en': 'Call declined'},
     'call_missed': {'ps': 'ځواب یې ورنه کړ', 'fa': 'پاسخ داده نشد', 'en': 'No answer'},
-    'call_failed': {'ps': 'زنګ ونه شو. انټرنېټ، مایکروفون یا کمره وګورئ', 'fa': 'تماس برقرار نشد. اینترنت، میکروفون یا دوربین را بررسی کنید', 'en': 'Call failed. Check internet, microphone or camera'},
+    'call_failed': {
+      'ps': 'زنګ ونه شو. انټرنېټ، مایکروفون یا کمره وګورئ',
+      'fa': 'تماس برقرار نشد. اینترنت، میکروفون یا دوربین را بررسی کنید',
+      'en': 'Call failed. Check internet, microphone or camera',
+    },
     'call_busy': {'ps': 'تاسو اوس په بل زنګ کې یاست', 'fa': 'شما در تماس دیگری هستید', 'en': 'You are already in a call'},
     'no_calls': {'ps': 'تر اوسه زنګ نشته', 'fa': 'هنوز تماسی نیست', 'en': 'No calls yet'},
     'no_calls_sub': {
@@ -283,10 +286,19 @@ class Strings {
     'online_now': {'ps': 'وصل', 'fa': 'آنلاین', 'en': 'online'},
     'tap_profile': {'ps': 'د معلوماتو لپاره کېکاږئ', 'fa': 'برای اطلاعات بزنید', 'en': 'tap for info'},
     // v0.6: saved messages, chat options
+    'links': {'ps': 'لینکونه', 'fa': 'لینک‌ها', 'en': 'Links'},
+    'back': {'ps': 'شاته', 'fa': 'بازگشت', 'en': 'Back'},
+    'glass_effect': {'ps': 'ښیښه‌یي بڼه', 'fa': 'جلوهٔ شیشه‌ای', 'en': 'Glass effect'},
+    'glass_effect_sub': {'ps': 'په ورو مبایلونو کې یې بند کړئ', 'fa': 'در گوشی‌های کند خاموش کنید', 'en': 'Turn off on slow phones'},
+    'story_label': {'ps': 'کیسه', 'fa': 'استوری', 'en': 'Story'},
     'download': {'ps': 'ښکته کول', 'fa': 'دانلود', 'en': 'Download'},
     'saved_messages': {'ps': 'خوندي پیغامونه', 'fa': 'پیام‌های ذخیره‌شده', 'en': 'Saved Messages'},
     'saved_short': {'ps': 'خوندي', 'fa': 'ذخیره‌ها', 'en': 'Saved'},
-    'saved_hint': {'ps': 'دلته پیغامونه، انځورونه او فایلونه ځانته خوندي کړئ. یوازې تاسو یې لیدلی شئ.', 'fa': 'پیام‌ها، عکس‌ها و فایل‌ها را اینجا برای خود نگه دارید. فقط شما آن‌ها را می‌بینید.', 'en': 'Keep messages, photos and files for yourself here. Only you can see them.'},
+    'saved_hint': {
+      'ps': 'دلته پیغامونه، انځورونه او فایلونه ځانته خوندي کړئ. یوازې تاسو یې لیدلی شئ.',
+      'fa': 'پیام‌ها، عکس‌ها و فایل‌ها را اینجا برای خود نگه دارید. فقط شما آن‌ها را می‌بینید.',
+      'en': 'Keep messages, photos and files for yourself here. Only you can see them.',
+    },
     'saved_hint_short': {'ps': 'ستاسو شخصي زېرمه', 'fa': 'فضای شخصی شما', 'en': 'Your personal storage'},
     'saved_toast': {'ps': 'په خوندي پیغامونو کې کېښودل شو', 'fa': 'در پیام‌های ذخیره‌شده گذاشته شد', 'en': 'Added to Saved Messages'},
     'save_message': {'ps': 'خوندي کول', 'fa': 'ذخیره', 'en': 'Save'},
@@ -305,7 +317,11 @@ class Strings {
     'undo': {'ps': 'بېرته', 'fa': 'برگرداندن', 'en': 'Undo'},
     'archived_chats': {'ps': 'آرشیف شوي چټونه', 'fa': 'گفتگوهای بایگانی‌شده', 'en': 'Archived chats'},
     'archive_empty': {'ps': 'آرشیف تش دی', 'fa': 'بایگانی خالی است', 'en': 'No archived chats'},
-    'archive_hint': {'ps': 'چې غږ یې بند نه وي، نوی پیغام یې بېرته لیست ته راولي.', 'fa': 'اگر بی‌صدا نباشد، پیام تازه آن را به فهرست برمی‌گرداند.', 'en': 'A new message brings a chat back unless it is muted.'},
+    'archive_hint': {
+      'ps': 'چې غږ یې بند نه وي، نوی پیغام یې بېرته لیست ته راولي.',
+      'fa': 'اگر بی‌صدا نباشد، پیام تازه آن را به فهرست برمی‌گرداند.',
+      'en': 'A new message brings a chat back unless it is muted.',
+    },
     'clear_history': {'ps': 'تاریخچه پاکول', 'fa': 'پاک کردن تاریخچه', 'en': 'Clear history'},
     'clear_history_q': {'ps': 'ټول پیغامونه یوازې ستاسو لپاره پاک شي؟', 'fa': 'همه پیام‌ها فقط برای شما پاک شود؟', 'en': 'Clear all messages for you?'},
     'clear': {'ps': 'پاکول', 'fa': 'پاک کردن', 'en': 'Clear'},
@@ -373,8 +389,7 @@ class LangScope extends InheritedWidget {
   const LangScope({super.key, required this.lang, required super.child});
   final AppLang lang;
 
-  static AppLang of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<LangScope>()?.lang ?? AppLang.ps;
+  static AppLang of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<LangScope>()?.lang ?? AppLang.ps;
 
   @override
   bool updateShouldNotify(LangScope old) => old.lang != lang;

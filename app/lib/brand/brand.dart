@@ -7,7 +7,7 @@ class Brand {
 
   static const String nameLatin = 'Paigham';
   static const String nameNative = 'پیغام';
-  static const String version = '0.6.1';
+  static const String version = '0.7.0';
   static const String fontFamily = 'Vazirmatn';
 
   // ── Paigham Blue ─────────────────────────────────────────────────────────
@@ -32,7 +32,7 @@ class Brand {
   static const Color ink = Color(0xFF0F1419);
   static const Color slate = Color(0xFF707579);
   static const Color paper = Colors.white;
-  static const Color lightChatBg = Color(0xFFDCE7F1);
+  static const Color lightChatBg = Color(0xFFD3E4F0);
   static const Color bubbleOutLight = Color(0xFFDDEEFE);
   static const Color bubbleInLight = Colors.white;
 
@@ -40,7 +40,7 @@ class Brand {
   static const Color night = Color(0xFF17212B); // page background
   static const Color nightSurface = Color(0xFF1E2C3A); // bars, cards
   static const Color nightRaised = Color(0xFF242F3D); // inputs, sheets
-  static const Color nightChatBg = Color(0xFF0E1621);
+  static const Color nightChatBg = Color(0xFF0F1A28);
   static const Color bubbleOutDark = Color(0xFF2B5278);
   static const Color bubbleInDark = Color(0xFF182533);
 

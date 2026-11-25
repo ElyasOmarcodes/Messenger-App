@@ -23,6 +23,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   AppLang lang = AppLang.ps;
   ThemeMode themeMode = ThemeMode.system;
 
+  /// Glass (blur) effects; can be turned off on slow phones, like Telegram.
+  bool glass = true;
+
   SupabaseClient get _sb => Supabase.instance.client;
   Session? get session => AppConfig.configured ? _sb.auth.currentSession : null;
   String? get myId => session?.user.id;
@@ -61,6 +64,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _prefs = await SharedPreferences.getInstance();
     lang = AppLang.fromCode(_prefs.getString('lang'));
     themeMode = ThemeMode.values.byName(_prefs.getString('theme') ?? 'system');
+    glass = _prefs.getBool('glass') ?? true;
     if (AppConfig.configured) {
       _authSub = _sb.auth.onAuthStateChange.listen((st) {
         if (st.event == AuthChangeEvent.signedIn || st.event == AuthChangeEvent.initialSession) {
@@ -111,11 +115,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// Creates the account; the server emails a 6-digit code.
   Future<AuthError> signUp(String name, String email, String password) async {
     try {
-      final res = await _sb.auth.signUp(
-        email: email.trim().toLowerCase(),
-        password: password,
-        data: {'display_name': name.trim()},
-      );
+      final res = await _sb.auth.signUp(email: email.trim().toLowerCase(), password: password, data: {'display_name': name.trim()});
       // With email confirmation on, an existing address returns a user without identities.
       if (res.user != null && (res.user!.identities?.isEmpty ?? false)) return 'err_exists';
       return null;
@@ -212,12 +212,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _channel?.unsubscribe();
     _channel = _sb
         .channel('paigham-${myId!}')
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'messages',
-          callback: (p) => _onMessage(Message.fromJson(p.newRecord)),
-        )
+        .onPostgresChanges(event: PostgresChangeEvent.insert, schema: 'public', table: 'messages', callback: (p) => _onMessage(Message.fromJson(p.newRecord)))
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
@@ -230,30 +225,10 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
           table: 'message_reactions',
           callback: (p) => _onReaction(p.eventType, p.newRecord, p.oldRecord),
         )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.all,
-          schema: 'public',
-          table: 'stories',
-          callback: (_) => loadStories(),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'chats',
-          callback: (_) => _scheduleReload(),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.update,
-          schema: 'public',
-          table: 'chat_members',
-          callback: (p) => _onMemberUpdate(p.newRecord),
-        )
-        .onPostgresChanges(
-          event: PostgresChangeEvent.insert,
-          schema: 'public',
-          table: 'chat_members',
-          callback: (_) => _scheduleReload(),
-        )
+        .onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'stories', callback: (_) => loadStories())
+        .onPostgresChanges(event: PostgresChangeEvent.update, schema: 'public', table: 'chats', callback: (_) => _scheduleReload())
+        .onPostgresChanges(event: PostgresChangeEvent.update, schema: 'public', table: 'chat_members', callback: (p) => _onMemberUpdate(p.newRecord))
+        .onPostgresChanges(event: PostgresChangeEvent.insert, schema: 'public', table: 'chat_members', callback: (_) => _scheduleReload())
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
@@ -261,11 +236,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
           callback: (_) => _scheduleReload(), // name or photo changed
         )
         .subscribe((status, [err]) {
-      final online = status == RealtimeSubscribeStatus.subscribed;
-      if (online && !realtimeOnline) _scheduleReload(); // catch up after a reconnect
-      realtimeOnline = online;
-      notifyListeners();
-    });
+          final online = status == RealtimeSubscribeStatus.subscribed;
+          if (online && !realtimeOnline) _scheduleReload(); // catch up after a reconnect
+          realtimeOnline = online;
+          notifyListeners();
+        });
   }
 
   void _onMessage(Message m) {
@@ -387,14 +362,14 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Pinned chats first (last pinned on top), then newest activity.
   void _sortChats() => chats.sort((a, b) {
-        final pa = a.pinnedAt, pb = b.pinnedAt;
-        if (pa != null || pb != null) {
-          if (pa == null) return 1;
-          if (pb == null) return -1;
-          return pb.compareTo(pa);
-        }
-        return b.lastMessageAt.compareTo(a.lastMessageAt);
-      });
+    final pa = a.pinnedAt, pb = b.pinnedAt;
+    if (pa != null || pb != null) {
+      if (pa == null) return 1;
+      if (pb == null) return -1;
+      return pb.compareTo(pa);
+    }
+    return b.lastMessageAt.compareTo(a.lastMessageAt);
+  });
 
   Chat? chatById(String id) {
     for (final c in chats) {
@@ -467,7 +442,10 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     }
     if (newest == null) return;
     chat.clearedAt = newest;
-    _messages[chat.id] = [for (final m in list) if (m.createdAt.isAfter(newest)) m];
+    _messages[chat.id] = [
+      for (final m in list)
+        if (m.createdAt.isAfter(newest)) m,
+    ];
     chat.lastMessage = null;
     chat.unread = 0;
     chat.markedUnread = false;
@@ -520,10 +498,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<Chat?> createGroup(String title, List<Profile> members) async {
-    final id = await _sb.rpc('create_group', params: {
-      'title': title.trim(),
-      'members': members.map((m) => m.id).toList(),
-    }) as String;
+    final id = await _sb.rpc('create_group', params: {'title': title.trim(), 'members': members.map((m) => m.id).toList()}) as String;
     await reloadChats();
     return chatById(id);
   }
@@ -603,8 +578,18 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     return MsgStatus.sent;
   }
 
-  Message _local(Chat chat, MsgKind kind, String body,
-      {String? name, int? size, String? mime, Uint8List? bytes, String? replyTo, int? durationMs}) {
+  Message _local(
+    Chat chat,
+    MsgKind kind,
+    String body, {
+    String? name,
+    int? size,
+    String? mime,
+    Uint8List? bytes,
+    String? replyTo,
+    int? durationMs,
+    Map<String, dynamic>? meta,
+  }) {
     final m = Message(
       id: 'local-${DateTime.now().microsecondsSinceEpoch}',
       chatId: chat.id,
@@ -618,6 +603,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       replyTo: replyTo,
       durationMs: durationMs,
       localBytes: bytes,
+      meta: meta,
       pending: true,
     );
     _messages.putIfAbsent(chat.id, () => []).add(m);
@@ -640,11 +626,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
-  Future<void> sendText(Chat chat, String text, {String? replyTo}) async {
+  Future<void> sendText(Chat chat, String text, {String? replyTo, Map<String, dynamic>? meta}) async {
     final body = text.trim();
     if (body.isEmpty) return;
-    final local = _local(chat, MsgKind.text, body.length > 4000 ? body.substring(0, 4000) : body, replyTo: replyTo);
-    await _insert(chat, local, {'body': local.body, 'reply_to': ?replyTo});
+    final local = _local(chat, MsgKind.text, body.length > 4000 ? body.substring(0, 4000) : body, replyTo: replyTo, meta: meta);
+    await _insert(chat, local, {'body': local.body, 'reply_to': ?replyTo, 'meta': ?meta});
   }
 
   /// Uploads a recorded voice note and posts it.
@@ -675,11 +661,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _insert(Chat chat, Message local, Map<String, dynamic> fields) async {
     try {
-      final row = await _sb
-          .from('messages')
-          .insert({'chat_id': chat.id, 'sender_id': myId, 'kind': local.kind.name, ...fields})
-          .select()
-          .single();
+      final row = await _sb.from('messages').insert({'chat_id': chat.id, 'sender_id': myId, 'kind': local.kind.name, ...fields}).select().single();
       _replace(chat, local, Message.fromJson(row));
     } catch (_) {
       local
@@ -707,14 +689,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       notifyListeners();
       return null;
     }
-    await _insert(chat, local, {
-      'body': caption,
-      'file_path': path,
-      'file_name': name,
-      'file_size': bytes.length,
-      'mime_type': mime,
-      'reply_to': ?replyTo,
-    });
+    await _insert(chat, local, {'body': caption, 'file_path': path, 'file_name': name, 'file_size': bytes.length, 'mime_type': mime, 'reply_to': ?replyTo});
     return null;
   }
 
@@ -746,15 +721,17 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  String previewOf(Message m) => m.deleted ? s.get('deleted') : switch (m.kind) {
-        MsgKind.voice => s.get('voice_message'),
-        MsgKind.image => m.body.isEmpty ? s.get('photo') : m.body,
-        MsgKind.album => m.body.isEmpty ? s.get('album_n', {'n': localDigits('${m.albumItems.length}', lang)}) : m.body,
-        MsgKind.file => m.fileName ?? s.get('file'),
-        MsgKind.location => s.get('location'),
-        MsgKind.contact => '${s.get('contact')}: ${m.meta?['name'] ?? ''}',
-        MsgKind.text => m.body,
-      };
+  String previewOf(Message m) => m.deleted
+      ? s.get('deleted')
+      : switch (m.kind) {
+          MsgKind.voice => s.get('voice_message'),
+          MsgKind.image => m.body.isEmpty ? s.get('photo') : m.body,
+          MsgKind.album => m.body.isEmpty ? s.get('album_n', {'n': localDigits('${m.albumItems.length}', lang)}) : m.body,
+          MsgKind.file => m.fileName ?? s.get('file'),
+          MsgKind.location => s.get('location'),
+          MsgKind.contact => '${s.get('contact')}: ${m.meta?['name'] ?? ''}',
+          MsgKind.text => m.body,
+        };
 
   /// Icon shown before a message preview (chat list, reply quotes).
   IconData? previewIcon(Message m) => m.deleted
@@ -924,7 +901,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       body: caption,
       createdAt: DateTime.now(),
       replyTo: replyTo,
-      meta: {'items': [for (final z in sizes) {'w': z.w, 'h': z.h}]},
+      meta: {
+        'items': [
+          for (final z in sizes) {'w': z.w, 'h': z.h},
+        ],
+      },
       localAlbum: [for (final p in photos) p.bytes],
       pending: true,
     );
@@ -937,7 +918,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       if (!await _upload(local, path, p.bytes, mimeFor(p.name))) return null;
       items.add({'path': path, 'w': sizes[i].w, 'h': sizes[i].h});
     }
-    await _insert(chat, local, {'body': caption, 'meta': {'items': items}, 'reply_to': ?replyTo});
+    await _insert(chat, local, {
+      'body': caption,
+      'meta': {'items': items},
+      'reply_to': ?replyTo,
+    });
     return null;
   }
 
@@ -1031,12 +1016,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         path = '${myId!}/${DateTime.now().millisecondsSinceEpoch}-${_safe(imageName ?? 'story.jpg')}';
         await _sb.storage.from('stories').uploadBinary(path, image, fileOptions: FileOptions(contentType: mimeFor(imageName ?? 'x.jpg')));
       }
-      await _sb.from('stories').insert({
-        'kind': image != null ? 'image' : 'text',
-        'media_path': path,
-        'body': text.trim(),
-        'bg': bg,
-      });
+      await _sb.from('stories').insert({'kind': image != null ? 'image' : 'text', 'media_path': path, 'body': text.trim(), 'bg': bg});
       await loadStories();
       return true;
     } catch (_) {
@@ -1085,10 +1065,13 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   // ── Profile & settings ───────────────────────────────────────────────────
   Future<bool> updateProfile({String? displayName, String? username}) async {
     try {
-      await _sb.from('profiles').update({
-        if (displayName != null) 'display_name': displayName.trim(),
-        if (username != null) 'username': username.trim().isEmpty ? null : username.trim().toLowerCase().replaceAll('@', ''),
-      }).eq('id', myId!);
+      await _sb
+          .from('profiles')
+          .update({
+            if (displayName != null) 'display_name': displayName.trim(),
+            if (username != null) 'username': username.trim().isEmpty ? null : username.trim().toLowerCase().replaceAll('@', ''),
+          })
+          .eq('id', myId!);
       await _loadProfile();
       return true;
     } catch (_) {
@@ -1123,6 +1106,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
   }
 
+  void setGlass(bool v) {
+    glass = v;
+    _prefs.setBool('glass', v);
+    notifyListeners();
+  }
+
   void setTheme(ThemeMode m) {
     themeMode = m;
     _prefs.setString('theme', m.name);
@@ -1133,13 +1122,23 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 String mimeFor(String name) {
   final ext = name.contains('.') ? name.split('.').last.toLowerCase() : '';
   return const {
-        'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp',
-        'pdf': 'application/pdf', 'txt': 'text/plain', 'zip': 'application/zip', 'doc': 'application/msword',
+        'jpg': 'image/jpeg',
+        'jpeg': 'image/jpeg',
+        'png': 'image/png',
+        'gif': 'image/gif',
+        'webp': 'image/webp',
+        'pdf': 'application/pdf',
+        'txt': 'text/plain',
+        'zip': 'application/zip',
+        'doc': 'application/msword',
         'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
         'xls': 'application/vnd.ms-excel',
         'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
         'pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
-        'mp3': 'audio/mpeg', 'm4a': 'audio/mp4', 'ogg': 'audio/ogg', 'mp4': 'video/mp4',
+        'mp3': 'audio/mpeg',
+        'm4a': 'audio/mp4',
+        'ogg': 'audio/ogg',
+        'mp4': 'video/mp4',
         'apk': 'application/vnd.android.package-archive',
       }[ext] ??
       'application/octet-stream';
@@ -1151,6 +1150,5 @@ class AppScope extends InheritedNotifier<AppController> {
 
   static AppController of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<AppScope>()!.notifier!;
 
-  static AppController read(BuildContext context) =>
-      (context.getElementForInheritedWidgetOfExactType<AppScope>()!.widget as AppScope).notifier!;
+  static AppController read(BuildContext context) => (context.getElementForInheritedWidgetOfExactType<AppScope>()!.widget as AppScope).notifier!;
 }

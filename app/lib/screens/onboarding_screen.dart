@@ -44,13 +44,13 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   void _go(_Step s) => setState(() {
-        _stack.add(s);
-        _error = null;
-        if (s == _Step.code || s == _Step.reset) {
-          _code.clear();
-          _startResendTimer();
-        }
-      });
+    _stack.add(s);
+    _error = null;
+    if (s == _Step.code || s == _Step.reset) {
+      _code.clear();
+      _startResendTimer();
+    }
+  });
 
   bool _back() {
     if (_stack.length <= 1) return false;
@@ -178,61 +178,53 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
   }
 
   Widget _page(BuildContext context) => switch (_step) {
-        _Step.welcome => _welcome(context),
-        _Step.email => _form(
-            icon: Icons.alternate_email_rounded,
-            title: context.tr('your_email'),
-            sub: context.tr('your_email_sub'),
-            fields: [_emailField()],
-          ),
-        _Step.password => _form(
-            icon: Icons.lock_rounded,
-            title: context.tr('enter_password'),
-            sub: context.tr('enter_password_sub', {'email': _email.text.trim()}),
-            fields: [_passwordField('password', AutofillHints.password)],
-            extra: Column(children: [
-              TextButton(onPressed: () => _go(_Step.forgot), child: Text(context.tr('forgot'))),
-              TextButton(onPressed: () => _go(_Step.signup), child: Text(context.tr('no_account'))),
-            ]),
-          ),
-        _Step.signup => _form(
-            icon: Icons.person_rounded,
-            title: context.tr('your_info'),
-            sub: context.tr('your_info_sub'),
-            fields: [
-              TextField(
-                controller: _name,
-                autofocus: true,
-                maxLength: 40,
-                textInputAction: TextInputAction.next,
-                autofillHints: const [AutofillHints.name],
-                decoration: InputDecoration(labelText: context.tr('your_name'), counterText: ''),
-              ),
-              const SizedBox(height: 14),
-              _passwordField('password', AutofillHints.newPassword, autofocus: false),
-            ],
-          ),
-        _Step.code => _form(
-            icon: Icons.mark_email_unread_rounded,
-            title: context.tr('check_email'),
-            sub: context.tr('verify_sub', {'email': _email.text.trim()}),
-            fields: [_codeField(autoSubmit: true)],
-            extra: _resendButton(() => AppScope.read(context).resendSignup(_email.text)),
-          ),
-        _Step.forgot => _form(
-            icon: Icons.key_rounded,
-            title: context.tr('reset_title'),
-            sub: context.tr('reset_sub'),
-            fields: [_emailField()],
-          ),
-        _Step.reset => _form(
-            icon: Icons.mark_email_unread_rounded,
-            title: context.tr('reset_title'),
-            sub: context.tr('verify_sub', {'email': _email.text.trim()}),
-            fields: [_codeField(autoSubmit: false), const SizedBox(height: 14), _passwordField('new_password', AutofillHints.newPassword, autofocus: false)],
-            extra: _resendButton(() => AppScope.read(context).sendResetCode(_email.text)),
-          ),
-      };
+    _Step.welcome => _welcome(context),
+    _Step.email => _form(icon: Icons.alternate_email_rounded, title: context.tr('your_email'), sub: context.tr('your_email_sub'), fields: [_emailField()]),
+    _Step.password => _form(
+      icon: Icons.lock_rounded,
+      title: context.tr('enter_password'),
+      sub: context.tr('enter_password_sub', {'email': _email.text.trim()}),
+      fields: [_passwordField('password', AutofillHints.password)],
+      extra: Column(
+        children: [
+          TextButton(onPressed: () => _go(_Step.forgot), child: Text(context.tr('forgot'))),
+          TextButton(onPressed: () => _go(_Step.signup), child: Text(context.tr('no_account'))),
+        ],
+      ),
+    ),
+    _Step.signup => _form(
+      icon: Icons.person_rounded,
+      title: context.tr('your_info'),
+      sub: context.tr('your_info_sub'),
+      fields: [
+        TextField(
+          controller: _name,
+          autofocus: true,
+          maxLength: 40,
+          textInputAction: TextInputAction.next,
+          autofillHints: const [AutofillHints.name],
+          decoration: InputDecoration(labelText: context.tr('your_name'), counterText: ''),
+        ),
+        const SizedBox(height: 14),
+        _passwordField('password', AutofillHints.newPassword, autofocus: false),
+      ],
+    ),
+    _Step.code => _form(
+      icon: Icons.mark_email_unread_rounded,
+      title: context.tr('check_email'),
+      sub: context.tr('verify_sub', {'email': _email.text.trim()}),
+      fields: [_codeField(autoSubmit: true)],
+      extra: _resendButton(() => AppScope.read(context).resendSignup(_email.text)),
+    ),
+    _Step.forgot => _form(icon: Icons.key_rounded, title: context.tr('reset_title'), sub: context.tr('reset_sub'), fields: [_emailField()]),
+    _Step.reset => _form(
+      icon: Icons.mark_email_unread_rounded,
+      title: context.tr('reset_title'),
+      sub: context.tr('verify_sub', {'email': _email.text.trim()}),
+      fields: [_codeField(autoSubmit: false), const SizedBox(height: 14), _passwordField('new_password', AutofillHints.newPassword, autofocus: false)],
+      extra: _resendButton(() => AppScope.read(context).sendResetCode(_email.text)),
+    ),
+  };
 
   // ── Pages ──────────────────────────────────────────────────────────────
   Widget _welcome(BuildContext context) {
@@ -257,12 +249,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
             spacing: 8,
             children: [
               for (final l in AppLang.values)
-                ChoiceChip(
-                  label: Text(l.label),
-                  selected: app.lang == l,
-                  showCheckmark: false,
-                  onSelected: (_) => app.setLang(l),
-                ),
+                ChoiceChip(label: Text(l.label), selected: app.lang == l, showCheckmark: false, onSelected: (_) => app.setLang(l)),
             ],
           ),
           const SizedBox(height: 18),
@@ -289,80 +276,93 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
           ),
         ),
         const SizedBox(height: 24),
-        Text(title, textAlign: TextAlign.center, style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800)),
+        Text(
+          title,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w800),
+        ),
         const SizedBox(height: 8),
-        Text(sub, textAlign: TextAlign.center, style: TextStyle(fontSize: 15, height: 1.5, color: cs.onSurfaceVariant)),
+        Text(
+          sub,
+          textAlign: TextAlign.center,
+          style: TextStyle(fontSize: 15, height: 1.5, color: cs.onSurfaceVariant),
+        ),
         const SizedBox(height: 28),
         AutofillGroup(child: Column(children: fields)),
         if (_error != null)
           Padding(
             padding: const EdgeInsets.only(top: 14),
-            child: Text(_error!, textAlign: TextAlign.center, style: const TextStyle(color: Brand.pomegranate, fontWeight: FontWeight.w600)),
+            child: Text(
+              _error!,
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: Brand.pomegranate, fontWeight: FontWeight.w600),
+            ),
           ),
-        if (extra != null) Padding(padding: const EdgeInsets.only(top: 18), child: Center(child: extra)),
+        if (extra != null)
+          Padding(
+            padding: const EdgeInsets.only(top: 18),
+            child: Center(child: extra),
+          ),
       ],
     );
   }
 
   // ── Fields ─────────────────────────────────────────────────────────────
   Widget _emailField() => Directionality(
-        textDirection: TextDirection.ltr,
-        child: TextField(
-          controller: _email,
-          autofocus: true,
-          keyboardType: TextInputType.emailAddress,
-          autofillHints: const [AutofillHints.email],
-          style: const TextStyle(fontSize: 18),
-          decoration: InputDecoration(labelText: context.tr('email'), hintText: 'name@gmail.com'),
-          onSubmitted: (_) => _next(),
-        ),
-      );
+    textDirection: TextDirection.ltr,
+    child: TextField(
+      controller: _email,
+      autofocus: true,
+      keyboardType: TextInputType.emailAddress,
+      autofillHints: const [AutofillHints.email],
+      style: const TextStyle(fontSize: 18),
+      decoration: InputDecoration(labelText: context.tr('email'), hintText: 'name@gmail.com'),
+      onSubmitted: (_) => _next(),
+    ),
+  );
 
   Widget _passwordField(String label, String hint, {bool autofocus = true}) => Directionality(
-        textDirection: TextDirection.ltr,
-        child: TextField(
-          controller: _password,
-          autofocus: autofocus,
-          obscureText: _hide,
-          autofillHints: [hint],
-          style: const TextStyle(fontSize: 18),
-          decoration: InputDecoration(
-            labelText: context.tr(label),
-            suffixIcon: IconButton(
-              icon: Icon(_hide ? Icons.visibility_rounded : Icons.visibility_off_rounded),
-              onPressed: () => setState(() => _hide = !_hide),
-            ),
-          ),
-          onSubmitted: (_) => _next(),
-        ),
-      );
+    textDirection: TextDirection.ltr,
+    child: TextField(
+      controller: _password,
+      autofocus: autofocus,
+      obscureText: _hide,
+      autofillHints: [hint],
+      style: const TextStyle(fontSize: 18),
+      decoration: InputDecoration(
+        labelText: context.tr(label),
+        suffixIcon: IconButton(icon: Icon(_hide ? Icons.visibility_rounded : Icons.visibility_off_rounded), onPressed: () => setState(() => _hide = !_hide)),
+      ),
+      onSubmitted: (_) => _next(),
+    ),
+  );
 
   Widget _codeField({required bool autoSubmit}) => Directionality(
-        textDirection: TextDirection.ltr,
-        child: TextField(
-          controller: _code,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          maxLength: 6,
-          textAlign: TextAlign.center,
-          autofillHints: const [AutofillHints.oneTimeCode],
-          style: const TextStyle(fontSize: 32, letterSpacing: 14, fontWeight: FontWeight.w800),
-          decoration: const InputDecoration(counterText: '', hintText: '------'),
-          onChanged: (v) {
-            if (autoSubmit && v.trim().length == 6) _next();
-          },
-        ),
-      );
+    textDirection: TextDirection.ltr,
+    child: TextField(
+      controller: _code,
+      autofocus: true,
+      keyboardType: TextInputType.number,
+      maxLength: 6,
+      textAlign: TextAlign.center,
+      autofillHints: const [AutofillHints.oneTimeCode],
+      style: const TextStyle(fontSize: 32, letterSpacing: 14, fontWeight: FontWeight.w800),
+      decoration: const InputDecoration(counterText: '', hintText: '------'),
+      onChanged: (v) {
+        if (autoSubmit && v.trim().length == 6) _next();
+      },
+    ),
+  );
 
   Widget _resendButton(Future<String?> Function() send) => TextButton(
-        onPressed: _resendIn > 0 || _busy
-            ? null
-            : () async {
-                await send();
-                if (!mounted) return;
-                _startResendTimer();
-                ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('code_sent'))));
-              },
-        child: Text(_resendIn > 0 ? context.tr('resend_in', {'s': context.digits(_resendIn)}) : context.tr('resend')),
-      );
+    onPressed: _resendIn > 0 || _busy
+        ? null
+        : () async {
+            await send();
+            if (!mounted) return;
+            _startResendTimer();
+            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('code_sent'))));
+          },
+    child: Text(_resendIn > 0 ? context.tr('resend_in', {'s': context.digits(_resendIn)}) : context.tr('resend')),
+  );
 }

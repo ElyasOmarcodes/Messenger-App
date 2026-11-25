@@ -53,16 +53,26 @@ class _CallsScreenState extends State<CallsScreen> {
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final list = snap.data!;
           if (list.isEmpty) {
-            return ListView(children: [
-              const SizedBox(height: 90),
-              Icon(Icons.call_rounded, size: 64, color: cs.primary.withValues(alpha: 0.5)),
-              const SizedBox(height: 12),
-              Text(context.tr('no_calls'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700)),
-              Padding(
-                padding: const EdgeInsets.all(8),
-                child: Text(context.tr('no_calls_sub'), textAlign: TextAlign.center, style: TextStyle(color: cs.onSurfaceVariant)),
-              ),
-            ]);
+            return ListView(
+              children: [
+                const SizedBox(height: 90),
+                Icon(Icons.call_rounded, size: 64, color: cs.primary.withValues(alpha: 0.5)),
+                const SizedBox(height: 12),
+                Text(
+                  context.tr('no_calls'),
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(8),
+                  child: Text(
+                    context.tr('no_calls_sub'),
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
+                ),
+              ],
+            );
           }
           return ListView.builder(
             itemCount: list.length,
@@ -73,18 +83,26 @@ class _CallsScreenState extends State<CallsScreen> {
               final when = '${chatListTime(r.createdAt, context.lang, s)} · ${hhmm(r.createdAt, context.lang)}';
               return ListTile(
                 leading: Avatar(seed: r.peerId, label: r.peerName, imageUrl: r.peerAvatar == null ? null : '$avatarBaseUrl/${r.peerAvatar}', size: 48),
-                title: Text(r.peerName, style: TextStyle(fontWeight: FontWeight.w700, color: missed ? Brand.pomegranate : null)),
-                subtitle: Row(children: [
-                  Icon(r.outgoing ? Icons.call_made_rounded : Icons.call_received_rounded,
-                      size: 16, color: missed ? Brand.pomegranate : const Color(0xFF1E8C6E)),
-                  const SizedBox(width: 4),
-                  Flexible(
-                    child: Text(
-                      d != null ? '$when · ${context.digits('${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}')}' : when,
-                      overflow: TextOverflow.ellipsis,
+                title: Text(
+                  r.peerName,
+                  style: TextStyle(fontWeight: FontWeight.w700, color: missed ? Brand.pomegranate : null),
+                ),
+                subtitle: Row(
+                  children: [
+                    Icon(
+                      r.outgoing ? Icons.call_made_rounded : Icons.call_received_rounded,
+                      size: 16,
+                      color: missed ? Brand.pomegranate : const Color(0xFF1E8C6E),
                     ),
-                  ),
-                ]),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        d != null ? '$when · ${context.digits('${d.inMinutes}:${(d.inSeconds % 60).toString().padLeft(2, '0')}')}' : when,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
                 trailing: IconButton(
                   icon: Icon(r.video ? Icons.videocam_rounded : Icons.call_rounded, color: cs.primary),
                   onPressed: () => _callBack(r, r.video),

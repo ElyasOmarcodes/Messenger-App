@@ -22,11 +22,7 @@ class Notifier {
           iOS: DarwinInitializationSettings(),
           macOS: DarwinInitializationSettings(),
           linux: LinuxInitializationSettings(defaultActionName: 'Open'),
-          windows: WindowsInitializationSettings(
-            appName: 'Paigham',
-            appUserModelId: 'Paigham.Messenger',
-            guid: '6d3f1c2e-8a4b-4f5e-9c7d-2b1a0e9f8d7c',
-          ),
+          windows: WindowsInitializationSettings(appName: 'Paigham', appUserModelId: 'Paigham.Messenger', guid: '6d3f1c2e-8a4b-4f5e-9c7d-2b1a0e9f8d7c'),
           web: WebInitializationSettings(),
         ),
         onDidReceiveNotificationResponse: (r) {
@@ -34,9 +30,7 @@ class Notifier {
         },
       );
       if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-        await _plugin
-            .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()
-            ?.requestNotificationsPermission();
+        await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
       }
       _ready = true;
     } catch (_) {

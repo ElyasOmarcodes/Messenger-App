@@ -7,10 +7,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 class AppConfig {
   // Paigham's server. Build-time --dart-define values override these defaults.
   // The publishable key is public by design: Row Level Security protects the data.
-  static String supabaseUrl =
-      const String.fromEnvironment('SUPABASE_URL', defaultValue: 'https://dspcumnbqyxwtxtljpub.supabase.co');
-  static String supabaseAnonKey =
-      const String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: 'sb_publishable_oUabrcRLi1wMPh0gT6uVMA_Q4NTVNAs');
+  static String supabaseUrl = const String.fromEnvironment('SUPABASE_URL', defaultValue: 'https://dspcumnbqyxwtxtljpub.supabase.co');
+  static String supabaseAnonKey = const String.fromEnvironment('SUPABASE_ANON_KEY', defaultValue: 'sb_publishable_oUabrcRLi1wMPh0gT6uVMA_Q4NTVNAs');
 
   static bool get configured => supabaseUrl.isNotEmpty && supabaseAnonKey.isNotEmpty;
 

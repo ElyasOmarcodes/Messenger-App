@@ -90,9 +90,7 @@ class _PersonFinderState extends State<PersonFinder> {
         FilledButton(
           style: FilledButton.styleFrom(minimumSize: const Size(72, 52)),
           onPressed: _busy ? null : _find,
-          child: _busy
-              ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.2))
-              : Text(context.tr(widget.buttonKey)),
+          child: _busy ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.2)) : Text(context.tr(widget.buttonKey)),
         ),
       ],
     );
@@ -154,7 +152,10 @@ class _NewChatSheetState extends State<_NewChatSheet> {
             const SizedBox(height: 16),
             if (_busy) const LinearProgressIndicator(),
             if (!_group) ...[
-              Text(context.tr('find_person'), style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurfaceVariant)),
+              Text(
+                context.tr('find_person'),
+                style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurfaceVariant),
+              ),
               const SizedBox(height: 8),
               PersonFinder(onFound: _openDirect, buttonKey: 'start_chat'),
             ] else ...[
@@ -164,7 +165,10 @@ class _NewChatSheetState extends State<_NewChatSheet> {
                 decoration: InputDecoration(labelText: context.tr('group_name'), prefixIcon: const Icon(Icons.groups_rounded), counterText: ''),
               ),
               const SizedBox(height: 14),
-              Text(context.tr('add_members'), style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurfaceVariant)),
+              Text(
+                context.tr('add_members'),
+                style: TextStyle(fontWeight: FontWeight.w700, color: cs.onSurfaceVariant),
+              ),
               const SizedBox(height: 8),
               PersonFinder(
                 autofocus: false,

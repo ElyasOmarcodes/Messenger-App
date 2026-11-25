@@ -10,18 +10,10 @@ import '../widgets/avatar.dart';
 
 /// Makes the call controller reachable from any widget.
 class CallScope extends InheritedNotifier<CallController> {
-  const CallScope({
-    super.key,
-    required CallController controller,
-    required super.child,
-  }) : super(notifier: controller);
+  const CallScope({super.key, required CallController controller, required super.child}) : super(notifier: controller);
 
-  static CallController of(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<CallScope>()!.notifier!;
-  static CallController read(BuildContext context) =>
-      (context.getElementForInheritedWidgetOfExactType<CallScope>()!.widget
-              as CallScope)
-          .notifier!;
+  static CallController of(BuildContext context) => context.dependOnInheritedWidgetOfExactType<CallScope>()!.notifier!;
+  static CallController read(BuildContext context) => (context.getElementForInheritedWidgetOfExactType<CallScope>()!.widget as CallScope).notifier!;
 }
 
 /// Full-screen call UI shown above everything while a call is in progress.
@@ -80,9 +72,7 @@ class _CallOverlayState extends State<CallOverlay> {
     if (c.phase == CallPhase.ended) {
       Future.delayed(const Duration(seconds: 2), c.reset);
     }
-    final showVideo =
-        c.video &&
-        (c.phase == CallPhase.active || c.phase == CallPhase.connecting);
+    final showVideo = c.video && (c.phase == CallPhase.active || c.phase == CallPhase.connecting);
     final name = c.peer?.name ?? '';
 
     return Material(
@@ -91,24 +81,14 @@ class _CallOverlayState extends State<CallOverlay> {
         fit: StackFit.expand,
         children: [
           if (showVideo)
-            RTCVideoView(
-              c.remoteRenderer,
-              objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-            )
+            RTCVideoView(c.remoteRenderer, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover)
           else
             const DecoratedBox(
               decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [Brand.lapisBright, Brand.lapis, Brand.lapisDeep],
-                ),
+                gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Brand.lapisBright, Brand.lapis, Brand.lapisDeep]),
               ),
             ),
-          if (c.video &&
-              c.phase != CallPhase.incoming &&
-              c.phase != CallPhase.ended &&
-              !c.cameraOff)
+          if (c.video && c.phase != CallPhase.incoming && c.phase != CallPhase.ended && !c.cameraOff)
             PositionedDirectional(
               top: 48,
               end: 16,
@@ -116,11 +96,7 @@ class _CallOverlayState extends State<CallOverlay> {
               height: 150,
               child: ClipRRect(
                 borderRadius: BorderRadius.circular(16),
-                child: RTCVideoView(
-                  c.localRenderer,
-                  mirror: true,
-                  objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
-                ),
+                child: RTCVideoView(c.localRenderer, mirror: true, objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover),
               ),
             ),
           SafeArea(
@@ -133,36 +109,18 @@ class _CallOverlayState extends State<CallOverlay> {
                       shape: BoxShape.circle,
                       border: Border.all(color: Colors.white24, width: 6),
                     ),
-                    child: Avatar(
-                      seed: c.peer?.id ?? '',
-                      label: name,
-                      imageUrl: c.peer?.avatarUrl,
-                      size: 120,
-                    ),
+                    child: Avatar(seed: c.peer?.id ?? '', label: name, imageUrl: c.peer?.avatarUrl, size: 120),
                   ),
                   const SizedBox(height: 20),
                 ],
                 Text(
                   name,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                  ),
+                  style: const TextStyle(color: Colors.white, fontSize: 26, fontWeight: FontWeight.w800),
                 ),
                 const SizedBox(height: 6),
-                Text(
-                  _status(context, c),
-                  style: const TextStyle(
-                    color: Color(0xCCFFFFFF),
-                    fontSize: 16,
-                  ),
-                ),
+                Text(_status(context, c), style: const TextStyle(color: Color(0xCCFFFFFF), fontSize: 16)),
                 const Spacer(),
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 36),
-                  child: _controls(context, c),
-                ),
+                Padding(padding: const EdgeInsets.only(bottom: 36), child: _controls(context, c)),
               ],
             ),
           ),
@@ -177,12 +135,7 @@ class _CallOverlayState extends State<CallOverlay> {
       return Row(
         mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
-          _RoundButton(
-            icon: Icons.call_end_rounded,
-            color: Brand.pomegranate,
-            label: context.tr('decline'),
-            onTap: c.decline,
-          ),
+          _RoundButton(icon: Icons.call_end_rounded, color: Brand.pomegranate, label: context.tr('decline'), onTap: c.decline),
           _RoundButton(
             icon: c.video ? Icons.videocam_rounded : Icons.call_rounded,
             color: const Color(0xFF1E8C6E),
@@ -204,40 +157,21 @@ class _CallOverlayState extends State<CallOverlay> {
         ),
         if (c.video)
           _RoundButton(
-            icon: c.cameraOff
-                ? Icons.videocam_off_rounded
-                : Icons.videocam_rounded,
+            icon: c.cameraOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
             color: c.cameraOff ? Colors.white : Colors.white24,
             iconColor: c.cameraOff ? Brand.lapisDeep : Colors.white,
             label: context.tr('camera'),
             onTap: c.toggleCamera,
           ),
-        if (c.video)
-          _RoundButton(
-            icon: Icons.cameraswitch_rounded,
-            color: Colors.white24,
-            label: context.tr('flip'),
-            onTap: c.switchCamera,
-          ),
-        _RoundButton(
-          icon: Icons.call_end_rounded,
-          color: Brand.pomegranate,
-          label: context.tr('end_call'),
-          onTap: () => c.hangUp(),
-        ),
+        if (c.video) _RoundButton(icon: Icons.cameraswitch_rounded, color: Colors.white24, label: context.tr('flip'), onTap: c.switchCamera),
+        _RoundButton(icon: Icons.call_end_rounded, color: Brand.pomegranate, label: context.tr('end_call'), onTap: () => c.hangUp()),
       ],
     );
   }
 }
 
 class _RoundButton extends StatelessWidget {
-  const _RoundButton({
-    required this.icon,
-    required this.color,
-    required this.label,
-    required this.onTap,
-    this.iconColor = Colors.white,
-  });
+  const _RoundButton({required this.icon, required this.color, required this.label, required this.onTap, this.iconColor = Colors.white});
   final IconData icon;
   final Color color;
   final Color iconColor;
@@ -259,11 +193,7 @@ class _RoundButton extends StatelessWidget {
           child: InkWell(
             customBorder: const CircleBorder(),
             onTap: onTap,
-            child: SizedBox(
-              width: 66,
-              height: 66,
-              child: Icon(icon, color: iconColor, size: 30),
-            ),
+            child: SizedBox(width: 66, height: 66, child: Icon(icon, color: iconColor, size: 30)),
           ),
         ),
         const SizedBox(height: 8),

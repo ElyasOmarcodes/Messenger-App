@@ -4,15 +4,7 @@ import 'dart:typed_data';
 String avatarBaseUrl = '';
 
 class Profile {
-  Profile({
-    required this.id,
-    required this.email,
-    required this.displayName,
-    this.username,
-    this.avatarPath,
-    this.lastReadAt,
-    this.role,
-  });
+  Profile({required this.id, required this.email, required this.displayName, this.username, this.avatarPath, this.lastReadAt, this.role});
 
   final String id;
   final String email;
@@ -27,14 +19,14 @@ class Profile {
   String get name => displayName.trim().isEmpty ? email.split('@').first : displayName;
 
   factory Profile.fromJson(Map<String, dynamic> j) => Profile(
-        id: j['id'] as String,
-        email: (j['email'] as String?) ?? '',
-        displayName: (j['display_name'] as String?) ?? '',
-        username: j['username'] as String?,
-        avatarPath: j['avatar_path'] as String?,
-        lastReadAt: j['last_read_at'] == null ? null : DateTime.parse(j['last_read_at'] as String).toLocal(),
-        role: j['role'] as String?,
-      );
+    id: j['id'] as String,
+    email: (j['email'] as String?) ?? '',
+    displayName: (j['display_name'] as String?) ?? '',
+    username: j['username'] as String?,
+    avatarPath: j['avatar_path'] as String?,
+    lastReadAt: j['last_read_at'] == null ? null : DateTime.parse(j['last_read_at'] as String).toLocal(),
+    role: j['role'] as String?,
+  );
 }
 
 enum MsgKind { text, image, file, voice, album, location, contact }
@@ -91,26 +83,25 @@ class Message {
 
   double? get width => (meta?['w'] as num?)?.toDouble();
   double? get height => (meta?['h'] as num?)?.toDouble();
-  List<Map<String, dynamic>> get albumItems =>
-      ((meta?['items'] as List?) ?? const []).cast<Map<String, dynamic>>();
+  List<Map<String, dynamic>> get albumItems => ((meta?['items'] as List?) ?? const []).cast<Map<String, dynamic>>();
 
   Message copyWith({String? body, DateTime? editedAt, DateTime? deletedAt}) => Message(
-        id: id,
-        chatId: chatId,
-        senderId: senderId,
-        kind: kind,
-        body: body ?? this.body,
-        createdAt: createdAt,
-        filePath: filePath,
-        fileName: fileName,
-        fileSize: fileSize,
-        mimeType: mimeType,
-        replyTo: replyTo,
-        deletedAt: deletedAt ?? this.deletedAt,
-        durationMs: durationMs,
-        editedAt: editedAt ?? this.editedAt,
-        meta: meta,
-      );
+    id: id,
+    chatId: chatId,
+    senderId: senderId,
+    kind: kind,
+    body: body ?? this.body,
+    createdAt: createdAt,
+    filePath: filePath,
+    fileName: fileName,
+    fileSize: fileSize,
+    mimeType: mimeType,
+    replyTo: replyTo,
+    deletedAt: deletedAt ?? this.deletedAt,
+    durationMs: durationMs,
+    editedAt: editedAt ?? this.editedAt,
+    meta: meta,
+  );
 
   /// Bytes of a file we are uploading (shown before the upload finishes).
   final Uint8List? localBytes;
@@ -118,22 +109,22 @@ class Message {
   bool failed;
 
   factory Message.fromJson(Map<String, dynamic> j) => Message(
-        id: j['id'] as String,
-        chatId: j['chat_id'] as String,
-        senderId: j['sender_id'] as String,
-        kind: MsgKind.values.byName((j['kind'] as String?) ?? 'text'),
-        body: (j['body'] as String?) ?? '',
-        createdAt: DateTime.parse(j['created_at'] as String).toLocal(),
-        filePath: j['file_path'] as String?,
-        fileName: j['file_name'] as String?,
-        fileSize: (j['file_size'] as num?)?.toInt(),
-        mimeType: j['mime_type'] as String?,
-        replyTo: j['reply_to'] as String?,
-        deletedAt: j['deleted_at'] == null ? null : DateTime.parse(j['deleted_at'] as String).toLocal(),
-        durationMs: (j['duration_ms'] as num?)?.toInt(),
-        editedAt: j['edited_at'] == null ? null : DateTime.parse(j['edited_at'] as String).toLocal(),
-        meta: j['meta'] == null ? null : Map<String, dynamic>.from(j['meta'] as Map),
-      );
+    id: j['id'] as String,
+    chatId: j['chat_id'] as String,
+    senderId: j['sender_id'] as String,
+    kind: MsgKind.values.byName((j['kind'] as String?) ?? 'text'),
+    body: (j['body'] as String?) ?? '',
+    createdAt: DateTime.parse(j['created_at'] as String).toLocal(),
+    filePath: j['file_path'] as String?,
+    fileName: j['file_name'] as String?,
+    fileSize: (j['file_size'] as num?)?.toInt(),
+    mimeType: j['mime_type'] as String?,
+    replyTo: j['reply_to'] as String?,
+    deletedAt: j['deleted_at'] == null ? null : DateTime.parse(j['deleted_at'] as String).toLocal(),
+    durationMs: (j['duration_ms'] as num?)?.toInt(),
+    editedAt: j['edited_at'] == null ? null : DateTime.parse(j['edited_at'] as String).toLocal(),
+    meta: j['meta'] == null ? null : Map<String, dynamic>.from(j['meta'] as Map),
+  );
 }
 
 /// One story (24-hour status).
@@ -146,15 +137,15 @@ class StoryItem {
   final int? views;
 
   factory StoryItem.fromJson(Map<String, dynamic> j) => StoryItem(
-        id: j['id'] as String,
-        kind: j['kind'] as String,
-        mediaPath: j['media_path'] as String?,
-        body: (j['body'] as String?) ?? '',
-        bg: j['bg'] as String?,
-        createdAt: DateTime.parse(j['created_at'] as String).toLocal(),
-        seen: (j['seen'] as bool?) ?? false,
-        views: (j['views'] as num?)?.toInt(),
-      );
+    id: j['id'] as String,
+    kind: j['kind'] as String,
+    mediaPath: j['media_path'] as String?,
+    body: (j['body'] as String?) ?? '',
+    bg: j['bg'] as String?,
+    createdAt: DateTime.parse(j['created_at'] as String).toLocal(),
+    seen: (j['seen'] as bool?) ?? false,
+    views: (j['views'] as num?)?.toInt(),
+  );
 }
 
 /// All active stories of one person.
@@ -165,10 +156,10 @@ class StoryUser {
   bool allSeen;
 
   factory StoryUser.fromJson(Map<String, dynamic> j) => StoryUser(
-        user: Profile.fromJson(j['user'] as Map<String, dynamic>),
-        stories: (j['stories'] as List).map((e) => StoryItem.fromJson(e as Map<String, dynamic>)).toList(),
-        allSeen: (j['all_seen'] as bool?) ?? false,
-      );
+    user: Profile.fromJson(j['user'] as Map<String, dynamic>),
+    stories: (j['stories'] as List).map((e) => StoryItem.fromJson(e as Map<String, dynamic>)).toList(),
+    allSeen: (j['all_seen'] as bool?) ?? false,
+  );
 }
 
 class CallRecord {
@@ -267,22 +258,22 @@ class Chat {
   String displayTitle(String me) => isGroup ? (title ?? '') : (peer(me)?.name ?? '');
 
   factory Chat.fromJson(Map<String, dynamic> j) => Chat(
-        id: j['id'] as String,
-        isGroup: j['is_group'] as bool,
-        title: j['title'] as String?,
-        lastMessageAt: DateTime.parse(j['last_message_at'] as String).toLocal(),
-        members: ((j['members'] as List?) ?? const []).map((e) => Profile.fromJson(e as Map<String, dynamic>)).toList(),
-        lastMessage: j['last_message'] == null ? null : Message.fromJson(j['last_message'] as Map<String, dynamic>),
-        unread: (j['unread'] as num?)?.toInt() ?? 0,
-        avatarPath: j['avatar_path'] as String?,
-        pinnedMessageId: j['pinned_message_id'] as String?,
-        isSaved: (j['is_saved'] as bool?) ?? false,
-        pinnedAt: _date(j['pinned_at']),
-        muted: (j['muted'] as bool?) ?? false,
-        archived: (j['archived'] as bool?) ?? false,
-        markedUnread: (j['marked_unread'] as bool?) ?? false,
-        clearedAt: _date(j['cleared_at']),
-      );
+    id: j['id'] as String,
+    isGroup: j['is_group'] as bool,
+    title: j['title'] as String?,
+    lastMessageAt: DateTime.parse(j['last_message_at'] as String).toLocal(),
+    members: ((j['members'] as List?) ?? const []).map((e) => Profile.fromJson(e as Map<String, dynamic>)).toList(),
+    lastMessage: j['last_message'] == null ? null : Message.fromJson(j['last_message'] as Map<String, dynamic>),
+    unread: (j['unread'] as num?)?.toInt() ?? 0,
+    avatarPath: j['avatar_path'] as String?,
+    pinnedMessageId: j['pinned_message_id'] as String?,
+    isSaved: (j['is_saved'] as bool?) ?? false,
+    pinnedAt: _date(j['pinned_at']),
+    muted: (j['muted'] as bool?) ?? false,
+    archived: (j['archived'] as bool?) ?? false,
+    markedUnread: (j['marked_unread'] as bool?) ?? false,
+    clearedAt: _date(j['cleared_at']),
+  );
 }
 
 DateTime? _date(Object? v) => v == null ? null : DateTime.parse(v as String).toLocal();

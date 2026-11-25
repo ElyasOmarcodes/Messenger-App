@@ -9,6 +9,7 @@ import '../brand/brand.dart';
 import '../l10n/afghan_date.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
+import '../screens/stories.dart' show storyGradient;
 import '../services/messenger.dart';
 import 'effects.dart';
 import 'media_views.dart';
@@ -118,6 +119,8 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
   }
 
   Future<void> _openMenu() async {
+    // so the keyboard does not pop up again when the menu closes
+    FocusManager.instance.primaryFocus?.unfocus();
     final app = AppScope.read(context);
     final m = widget.message;
     final mine = m.senderId == app.myId;
@@ -290,6 +293,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
             ),
           ),
         if (m.replyTo != null) _ReplyQuote(chat: widget.chat, id: m.replyTo!),
+        if (m.meta?['story'] is Map) _StoryQuote(chat: widget.chat, story: Map<String, dynamic>.from(m.meta!['story'] as Map)),
         if (m.kind != MsgKind.text)
           Stack(
             children: [
@@ -540,6 +544,118 @@ class _ContextMenu extends StatelessWidget {
 }
 
 /// Small quoted block above a reply.
+/// Quote of a story this message answers (like Telegram's story reply).
+class _StoryQuote extends StatefulWidget {
+  const _StoryQuote({required this.chat, required this.story});
+  final Chat chat;
+  final Map<String, dynamic> story;
+
+  @override
+  State<_StoryQuote> createState() => _StoryQuoteState();
+}
+
+class _StoryQuoteState extends State<_StoryQuote> {
+  String? _url;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.story['media_path'] as String?;
+    if (p != null) {
+      AppScope.read(context).storyUrl(p).then((u) {
+        if (mounted) setState(() => _url = u);
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final app = AppScope.of(context);
+    final cs = Theme.of(context).colorScheme;
+    final owner = widget.story['owner'] as String?;
+    final mine = owner == app.myId;
+    final who = mine ? context.tr('my_story') : '${context.tr('story_label')} · ${owner == null ? '' : (app.memberById(widget.chat, owner)?.name ?? '')}';
+    final color = cs.primary;
+    final body = (widget.story['body'] as String?) ?? '';
+    final image = widget.story['kind'] == 'image';
+    final dpr = MediaQuery.devicePixelRatioOf(context);
+    Widget thumb;
+    if (image) {
+      thumb = _url == null
+          ? Container(color: Colors.black26)
+          : Image.network(
+              _url!,
+              fit: BoxFit.cover,
+              cacheWidth: (34 * dpr).round(),
+              errorBuilder: (_, _, _) => Container(color: Colors.black26),
+            );
+    } else {
+      thumb = Container(
+        decoration: BoxDecoration(gradient: LinearGradient(colors: storyGradient(widget.story['bg'] as String?))),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(2),
+        child: Text(
+          body,
+          maxLines: 3,
+          overflow: TextOverflow.clip,
+          textAlign: TextAlign.center,
+          style: const TextStyle(color: Colors.white, fontSize: 5.5, height: 1.1, fontWeight: FontWeight.w700),
+        ),
+      );
+    }
+    return Container(
+      margin: const EdgeInsets.only(bottom: 6),
+      padding: const EdgeInsetsDirectional.fromSTEB(9, 5, 6, 5),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: 0.12),
+        borderRadius: BorderRadius.circular(8),
+        border: BorderDirectional(start: BorderSide(color: color, width: 3)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Flexible(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  who,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700, color: color),
+                ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(end: 4),
+                      child: Icon(Icons.auto_stories_rounded, size: 15, color: color),
+                    ),
+                    Flexible(
+                      child: Text(
+                        body.isNotEmpty ? body.replaceAll('\n', ' ') : context.tr('story_label'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 13.5),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 8),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(5),
+            child: SizedBox(width: 34, height: 46, child: thumb),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class _ReplyQuote extends StatelessWidget {
   const _ReplyQuote({required this.chat, required this.id});
   final Chat chat;

@@ -13,13 +13,7 @@ class SolarHijri {
   factory SolarHijri.fromDate(DateTime date) {
     final gy = date.year, gm = date.month, gd = date.day;
     final gy2 = gm > 2 ? gy + 1 : gy;
-    var days = 355666 +
-        365 * gy +
-        (gy2 + 3) ~/ 4 -
-        (gy2 + 99) ~/ 100 +
-        (gy2 + 399) ~/ 400 +
-        gd +
-        _gDaysBeforeMonth[gm - 1];
+    var days = 355666 + 365 * gy + (gy2 + 3) ~/ 4 - (gy2 + 99) ~/ 100 + (gy2 + 399) ~/ 400 + gd + _gDaysBeforeMonth[gm - 1];
     var jy = -1595 + 33 * (days ~/ 12053);
     days %= 12053;
     jy += 4 * (days ~/ 1461);
@@ -39,24 +33,15 @@ class SolarHijri {
     return SolarHijri(jy, jm, jd);
   }
 
-  static const _monthsPs = [
-    'وری', 'غویی', 'غبرګولی', 'چنګاښ', 'زمری', 'وږی',
-    'تله', 'لړم', 'لیندۍ', 'مرغومی', 'سلواغه', 'کب',
-  ];
-  static const _monthsFa = [
-    'حمل', 'ثور', 'جوزا', 'سرطان', 'اسد', 'سنبله',
-    'میزان', 'عقرب', 'قوس', 'جدی', 'دلو', 'حوت',
-  ];
-  static const _monthsEn = [
-    'Hamal', 'Sawr', 'Jawza', 'Saratan', 'Asad', 'Sunbula',
-    'Mizan', 'Aqrab', 'Qaws', 'Jadi', 'Dalw', 'Hut',
-  ];
+  static const _monthsPs = ['وری', 'غویی', 'غبرګولی', 'چنګاښ', 'زمری', 'وږی', 'تله', 'لړم', 'لیندۍ', 'مرغومی', 'سلواغه', 'کب'];
+  static const _monthsFa = ['حمل', 'ثور', 'جوزا', 'سرطان', 'اسد', 'سنبله', 'میزان', 'عقرب', 'قوس', 'جدی', 'دلو', 'حوت'];
+  static const _monthsEn = ['Hamal', 'Sawr', 'Jawza', 'Saratan', 'Asad', 'Sunbula', 'Mizan', 'Aqrab', 'Qaws', 'Jadi', 'Dalw', 'Hut'];
 
   String monthName(AppLang lang) => switch (lang) {
-        AppLang.ps => _monthsPs[month - 1],
-        AppLang.fa => _monthsFa[month - 1],
-        AppLang.en => _monthsEn[month - 1],
-      };
+    AppLang.ps => _monthsPs[month - 1],
+    AppLang.fa => _monthsFa[month - 1],
+    AppLang.en => _monthsEn[month - 1],
+  };
 
   String format(AppLang lang) => localDigits('$day ${monthName(lang)} $year', lang);
 }
@@ -66,10 +51,10 @@ const _weekdaysFa = ['دوشنبه', 'سه‌شنبه', 'چهارشنبه', 'پ�
 const _weekdaysEn = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 String weekdayName(DateTime d, AppLang lang) => switch (lang) {
-      AppLang.ps => _weekdaysPs[d.weekday - 1],
-      AppLang.fa => _weekdaysFa[d.weekday - 1],
-      AppLang.en => _weekdaysEn[d.weekday - 1],
-    };
+  AppLang.ps => _weekdaysPs[d.weekday - 1],
+  AppLang.fa => _weekdaysFa[d.weekday - 1],
+  AppLang.en => _weekdaysEn[d.weekday - 1],
+};
 
 String two(int n) => n.toString().padLeft(2, '0');
 
