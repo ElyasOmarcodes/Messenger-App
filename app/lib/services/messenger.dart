@@ -9,6 +9,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
+import 'media_cache.dart';
 import 'notifier.dart';
 
 /// Result of an auth call: null on success, otherwise a translation key.
@@ -25,6 +26,40 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Glass (blur) effects; can be turned off on slow phones, like Telegram.
   bool glass = true;
+
+  // ── Storage (like Telegram's "Data and storage") ──────────────────────────
+  /// Delete media not opened for this many days (0 = keep forever).
+  int keepDays = 30;
+
+  /// Largest cache size in MB (0 = no limit).
+  int maxCacheMb = 3072;
+
+  /// Download photos automatically; otherwise they show a download button.
+  bool autoPhotos = true;
+
+  void setKeepDays(int d) {
+    keepDays = d;
+    _prefs.setInt('keep_days', d);
+    notifyListeners();
+    unawaited(cleanCache());
+  }
+
+  void setMaxCache(int mb) {
+    maxCacheMb = mb;
+    _prefs.setInt('max_cache_mb', mb);
+    notifyListeners();
+    unawaited(cleanCache());
+  }
+
+  void setAutoPhotos(bool v) {
+    autoPhotos = v;
+    _prefs.setBool('auto_photos', v);
+    notifyListeners();
+  }
+
+  Future<void> cleanCache() => MediaCache.instance.store.cleanup(keepDays: keepDays, maxBytes: maxCacheMb * 1024 * 1024);
+
+  String get _cachePrefix => 'u_${myId ?? 'none'}';
 
   SupabaseClient get _sb => Supabase.instance.client;
   Session? get session => AppConfig.configured ? _sb.auth.currentSession : null;
@@ -65,6 +100,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     lang = AppLang.fromCode(_prefs.getString('lang'));
     themeMode = ThemeMode.values.byName(_prefs.getString('theme') ?? 'system');
     glass = _prefs.getBool('glass') ?? true;
+    keepDays = _prefs.getInt('keep_days') ?? 30;
+    maxCacheMb = _prefs.getInt('max_cache_mb') ?? 3072;
+    autoPhotos = _prefs.getBool('auto_photos') ?? true;
+    await MediaCache.instance.init();
+    // Telegram's "Keep Media": old, unopened files are removed in the background.
+    unawaited(Future<void>.delayed(const Duration(seconds: 8), cleanCache));
     if (AppConfig.configured) {
       _authSub = _sb.auth.onAuthStateChange.listen((st) {
         if (st.event == AuthChangeEvent.signedIn || st.event == AuthChangeEvent.initialSession) {
@@ -178,9 +219,25 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  Future<void> signOut() => _sb.auth.signOut();
+  Future<void> signOut() async {
+    // a signed-out phone keeps no one's chats
+    await MediaCache.instance.store.clearJson(_cachePrefix);
+    await _sb.auth.signOut();
+  }
 
   Future<void> _onSignedIn() async {
+    // Show what we saw last time right away (also works offline), then refresh.
+    final cachedMe = await MediaCache.instance.store.readJson('${_cachePrefix}_me');
+    if (cachedMe is Map<String, dynamic> && me == null) me = Profile.fromJson(cachedMe);
+    final cached = await MediaCache.instance.store.readJson('${_cachePrefix}_chats');
+    if (cached is List && chats.isEmpty) {
+      try {
+        chats = cached.map((e) => Chat.fromJson(e as Map<String, dynamic>)).toList();
+        _sortChats();
+        chatsLoaded = true;
+        notifyListeners();
+      } catch (_) {}
+    }
     await _loadProfile();
     await reloadChats();
     unawaited(loadStories());
@@ -203,6 +260,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final row = await _sb.from('profiles').select().eq('id', myId!).single();
       me = Profile.fromJson(row);
+      unawaited(MediaCache.instance.store.writeJson('${_cachePrefix}_me', row));
       notifyListeners();
     } catch (_) {}
   }
@@ -352,6 +410,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     try {
       final data = await _sb.rpc('my_chats') as List<dynamic>;
       chats = data.map((e) => Chat.fromJson(e as Map<String, dynamic>)).toList();
+      unawaited(MediaCache.instance.store.writeJson('${_cachePrefix}_chats', data));
       final open = openChatId == null ? null : chatById(openChatId!);
       if (open != null) open.unread = 0;
       _sortChats();
@@ -520,11 +579,23 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> loadMessages(String chatId) async {
     unawaited(_loadReactions(chatId));
+    final cacheName = '${_cachePrefix}_m_$chatId';
+    if (_messages[chatId] == null) {
+      // last seen messages first, from the phone — instant, and works offline
+      final cached = await MediaCache.instance.store.readJson(cacheName);
+      if (cached is List && _messages[chatId] == null) {
+        try {
+          _messages[chatId] = cached.map((e) => Message.fromJson(e as Map<String, dynamic>)).toList();
+          notifyListeners();
+        } catch (_) {}
+      }
+    }
     try {
       final cleared = chatById(chatId)?.clearedAt;
       var q = _sb.from('messages').select().eq('chat_id', chatId);
       if (cleared != null) q = q.gt('created_at', cleared.toUtc().toIso8601String());
       final rows = await q.order('created_at', ascending: false).limit(300);
+      unawaited(MediaCache.instance.store.writeJson(cacheName, rows.take(150).toList()));
       final list = rows.map(Message.fromJson).toList().reversed.toList();
       for (final m in _messages[chatId] ?? const <Message>[]) {
         if (!list.any((x) => x.id == m.id)) list.add(m); // keep pending/realtime ones

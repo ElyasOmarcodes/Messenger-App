@@ -7,6 +7,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../brand/brand.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
+import '../services/media_cache.dart';
 import '../services/messenger.dart';
 
 /// Fits a photo of w×h into the bubble: keeps its shape, never too thin or tall.
@@ -41,48 +42,42 @@ class AttachmentImage extends StatefulWidget {
 }
 
 class _AttachmentImageState extends State<AttachmentImage> {
-  String? _url;
-
-  @override
-  void initState() {
-    super.initState();
-    _resolve();
-  }
-
-  @override
-  void didUpdateWidget(AttachmentImage old) {
-    super.didUpdateWidget(old);
-    if (old.path != widget.path) _resolve();
-  }
-
-  void _resolve() {
-    final p = widget.path;
-    if (p == null) return;
-    final app = AppScope.read(context);
-    _url = app.cachedFileUrl(p);
-    if (_url == null) {
-      app.fileUrl(p).then((u) {
-        if (mounted && u != null && widget.path == p) setState(() => _url = u);
-      });
-    }
-  }
+  bool _force = false; // tapped "download" while auto-download is off
 
   @override
   Widget build(BuildContext context) {
+    final app = AppScope.of(context);
     final placeholder = Container(color: Colors.black12);
     return LayoutBuilder(
       builder: (context, c) {
         final dpr = MediaQuery.devicePixelRatioOf(context);
         final w = c.hasBoundedWidth ? c.maxWidth : MediaQuery.sizeOf(context).width;
         final h = c.hasBoundedHeight ? c.maxHeight : MediaQuery.sizeOf(context).height;
-        // decode just big enough to cover the box (cover) or fit the screen (viewer)
-        final px = ((widget.full ? math.max(w, h) : math.max(w, h)) * dpr).clamp(64, 2400).round();
+        // decode just big enough for the box (or the screen, in the viewer)
+        final px = (math.max(w, h) * dpr).clamp(64, 2400).round();
         if (widget.bytes != null) {
           return Image.memory(widget.bytes!, fit: widget.fit, gaplessPlayback: true, cacheWidth: px);
         }
-        if (_url == null) return placeholder;
+        final path = widget.path;
+        if (path == null) return placeholder;
+        // auto-download off and not on the phone yet: show a download button
+        if (!app.autoPhotos && !_force && !widget.full && !MediaCache.instance.has(path)) {
+          return GestureDetector(
+            onTap: () => setState(() => _force = true),
+            child: Container(
+              color: Colors.black26,
+              alignment: Alignment.center,
+              child: Container(
+                padding: const EdgeInsets.all(10),
+                decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
+                child: const Icon(Icons.download_rounded, color: Colors.white, size: 28),
+              ),
+            ),
+          );
+        }
         return Image(
-          image: ResizeImage.resizeIfNeeded(px, null, NetworkImage(_url!)),
+          // from the phone if we already have it, else downloaded once and kept
+          image: ResizeImage.resizeIfNeeded(px, null, CachedImage(path, () => app.fileUrl(path))),
           fit: widget.fit,
           gaplessPlayback: true,
           frameBuilder: (_, child, frame, sync) => sync || frame != null ? child : placeholder,

@@ -1,8 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../brand/brand.dart';
+import '../services/media_cache.dart';
 
 /// Round avatar: initials on a brand colour, or a group icon.
+/// Decode sizes in steps, so an avatar that grows or shrinks in an
+/// animation is not decoded again on every frame.
+int _bucket(double px) => ((px / 64).ceil() * 64).clamp(64, 1024);
+
 class Avatar extends StatelessWidget {
   const Avatar({super.key, required this.seed, required this.label, this.size = 52, this.group = false, this.imageUrl});
 
@@ -24,13 +29,12 @@ class Avatar extends StatelessWidget {
     final c = Brand.avatarColor(seed);
     if (imageUrl != null) {
       return ClipOval(
-        child: Image.network(
-          imageUrl!,
+        child: Image(
+          // kept on the phone after the first download
+          image: ResizeImage(CachedImage(MediaCache.urlKey(imageUrl!), () async => imageUrl), width: _bucket(size * MediaQuery.devicePixelRatioOf(context))),
           width: size,
           height: size,
           fit: BoxFit.cover,
-          // decode at the size shown (photos can be several MB)
-          cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
           gaplessPlayback: true,
           errorBuilder: (_, _, _) => Avatar(seed: seed, label: label, size: size, group: group),
         ),

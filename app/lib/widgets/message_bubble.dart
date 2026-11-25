@@ -12,6 +12,7 @@ import '../l10n/afghan_date.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../screens/stories.dart' show storyGradient;
+import '../services/media_cache.dart';
 import '../services/messenger.dart';
 import 'effects.dart';
 import 'media_views.dart';
@@ -779,8 +780,28 @@ class VoicePlayer extends StatefulWidget {
 }
 
 class _VoicePlayerState extends State<VoicePlayer> {
-  final _player = AudioPlayer();
+  // The native player is made only when you press play (making one for
+  // every voice note on screen made scrolling stutter).
+  AudioPlayer? _p;
   final List<StreamSubscription<dynamic>> _subs = [];
+
+  AudioPlayer get _player {
+    final existing = _p;
+    if (existing != null) return existing;
+    final p = _p = AudioPlayer();
+    _subs.add(p.onPositionChanged.listen((v) => setState(() => _pos = v)));
+    _subs.add(p.onDurationChanged.listen((d) => setState(() => _dur = d)));
+    _subs.add(
+      p.onPlayerComplete.listen(
+        (_) => setState(() {
+          _playing = false;
+          _pos = Duration.zero;
+        }),
+      ),
+    );
+    return p;
+  }
+
   Duration _pos = Duration.zero;
   Duration? _dur;
   bool _playing = false;
@@ -791,16 +812,6 @@ class _VoicePlayerState extends State<VoicePlayer> {
     super.initState();
     final ms = widget.message.durationMs;
     if (ms != null) _dur = Duration(milliseconds: ms);
-    _subs.add(_player.onPositionChanged.listen((p) => setState(() => _pos = p)));
-    _subs.add(_player.onDurationChanged.listen((d) => setState(() => _dur = d)));
-    _subs.add(
-      _player.onPlayerComplete.listen(
-        (_) => setState(() {
-          _playing = false;
-          _pos = Duration.zero;
-        }),
-      ),
-    );
   }
 
   @override
@@ -808,7 +819,7 @@ class _VoicePlayerState extends State<VoicePlayer> {
     for (final s in _subs) {
       s.cancel();
     }
-    _player.dispose();
+    _p?.dispose();
     super.dispose();
   }
 
@@ -826,8 +837,23 @@ class _VoicePlayerState extends State<VoicePlayer> {
       } else if (m.localBytes != null) {
         await _player.play(BytesSource(m.localBytes!, mimeType: m.mimeType));
       } else if (m.filePath != null) {
-        final url = await AppScope.read(context).fileUrl(m.filePath!);
-        if (url != null) await _player.play(UrlSource(url, mimeType: m.mimeType));
+        final app = AppScope.read(context);
+        final key = m.filePath!;
+        final cache = MediaCache.instance;
+        if (cache.persistent) {
+          // played from the phone after the first time (also offline)
+          if (cache.filePath(key) == null) await cache.bytes(key, () => app.fileUrl(key));
+          final local = cache.filePath(key);
+          if (local != null) {
+            await _player.play(DeviceFileSource(local, mimeType: m.mimeType));
+          } else {
+            final url = await app.fileUrl(key);
+            if (url != null) await _player.play(UrlSource(url, mimeType: m.mimeType));
+          }
+        } else {
+          final url = await app.fileUrl(key);
+          if (url != null) await _player.play(UrlSource(url, mimeType: m.mimeType));
+        }
       }
       setState(() => _playing = true);
     } catch (_) {}

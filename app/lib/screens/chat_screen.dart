@@ -655,7 +655,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 right: 0,
                 height: barTop + (pinned != null ? 52 : 0) + 44,
                 child: RepaintBoundary(
-                  child: SoftEdge(fromTop: true, color: pageColor, blur: app.glass, solid: barTop + (pinned != null ? 52 : 0)),
+                  child: SoftEdge(fromTop: true, color: pageColor, blur: false, solid: barTop + (pinned != null ? 52 : 0)),
                 ),
               ),
               if (pinned != null) Positioned(top: barTop, left: 0, right: 0, child: _pinnedBar(app, chat, pinned)),
@@ -673,7 +673,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           Positioned.fill(
                             child: RepaintBoundary(
                               child: LayoutBuilder(
-                                builder: (_, c) => SoftEdge(fromTop: false, color: pageColor, blur: app.glass, solid: (c.maxHeight - 34).clamp(0.0, 400.0)),
+                                builder: (_, c) => SoftEdge(fromTop: false, color: pageColor, blur: false, solid: (c.maxHeight - 34).clamp(0.0, 400.0)),
                               ),
                             ),
                           ),

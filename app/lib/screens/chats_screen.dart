@@ -48,6 +48,18 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
   static const _searchH = 50.0; // search row (slides away on scroll)
   static const _chipsH = _searchH + 46.0; // + folder bar (stays)
   bool _initialFold = false;
+  final _searchCtl = TextEditingController();
+  final _searchFocus = FocusNode();
+
+  /// Tap on the small search icon: bring the search row back and focus it.
+  void _revealSearch() {
+    _snapFrom = _hide.value;
+    _snapTo = 0;
+    _snap.forward(from: 0);
+    Future<void>.delayed(const Duration(milliseconds: 230), () {
+      if (mounted) _searchFocus.requestFocus();
+    });
+  }
 
   @override
   void initState() {
@@ -58,6 +70,8 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
   @override
   void dispose() {
     _scroll.dispose();
+    _searchCtl.dispose();
+    _searchFocus.dispose();
     _hide.dispose();
     _snap.dispose();
     _snapTimer?.cancel();
@@ -143,29 +157,9 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
     }
     final field = dark ? const Color(0xFF202B38) : const Color(0xFFEEF1F5);
 
-    final search = Padding(
-      padding: const EdgeInsets.fromLTRB(12, 2, 12, 8),
-      child: SizedBox(
-        height: 40,
-        child: TextField(
-          onChanged: (v) => setState(() => _query = v),
-          textAlignVertical: TextAlignVertical.center,
-          style: const TextStyle(fontSize: 15),
-          decoration: InputDecoration(
-            hintText: context.tr('search'),
-            prefixIcon: Icon(Icons.search_rounded, color: cs.onSurfaceVariant, size: 21),
-            filled: true,
-            fillColor: field,
-            isDense: true,
-            contentPadding: EdgeInsets.zero,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-            enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-            focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(20), borderSide: BorderSide.none),
-          ),
-        ),
-      ),
-    );
-    // Folder chips share one slim capsule equally, like Telegram.
+    // Folder chips share one slim capsule equally, like Telegram; the active
+    // one sits on a pill with a thin outline that slides between them.
+    final filters = [_Filter.all, _Filter.personal, _Filter.groups, _Filter.unread];
     final folders = Container(
       height: 38,
       margin: const EdgeInsets.symmetric(horizontal: 12),
@@ -175,13 +169,37 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
         borderRadius: BorderRadius.circular(19),
         border: Border.all(color: dark ? const Color(0x14FFFFFF) : const Color(0x0A000000)),
       ),
-      child: Row(
-        children: [
-          Expanded(child: _chip(context, _Filter.all, 'all', app.totalUnread)),
-          Expanded(child: _chip(context, _Filter.personal, 'personal', personalUnread)),
-          Expanded(child: _chip(context, _Filter.groups, 'groups', groupsUnread)),
-          Expanded(child: _chip(context, _Filter.unread, 'unread', 0)),
-        ],
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final w = c.maxWidth / filters.length;
+          return Stack(
+            children: [
+              AnimatedPositionedDirectional(
+                duration: const Duration(milliseconds: 320),
+                curve: Curves.easeOutCubic,
+                start: filters.indexOf(_filter) * w,
+                top: 0,
+                bottom: 0,
+                width: w,
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: dark ? const Color(0xFF26405C) : Brand.blueMist,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: cs.primary.withValues(alpha: dark ? 0.55 : 0.45), width: 1),
+                  ),
+                ),
+              ),
+              Row(
+                children: [
+                  Expanded(child: _chip(context, _Filter.all, 'all', app.totalUnread)),
+                  Expanded(child: _chip(context, _Filter.personal, 'personal', personalUnread)),
+                  Expanded(child: _chip(context, _Filter.groups, 'groups', groupsUnread)),
+                  Expanded(child: _chip(context, _Filter.unread, 'unread', 0)),
+                ],
+              ),
+            ],
+          );
+        },
       ),
     );
 
@@ -301,31 +319,17 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                               minHeight: _storiesH,
                               maxHeight: _storiesH,
                               child: Transform.translate(
-                                offset: Offset(0, -o.clamp(0.0, _storiesH) * 0.45),
+                                offset: Offset.zero,
                                 child: IgnorePointer(
-                                  ignoring: t > 0.6,
+                                  ignoring: t > 0,
+                                  // the moving avatars take over as soon as it starts folding
                                   child: Opacity(
-                                    opacity: (1 - t * 1.6).clamp(0.0, 1.0),
-                                    child: Transform.scale(
-                                      scale: 1 - 0.3 * t,
-                                      alignment: Alignment.topCenter,
-                                      child: const RepaintBoundary(child: StoriesStrip()),
-                                    ),
+                                    opacity: t > 0 ? 0 : 1,
+                                    child: const RepaintBoundary(child: StoriesStrip()),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                        ),
-                        // Search slides up under the title as you scroll (Telegram)…
-                        Positioned(
-                          top: topInset + _toolbarH + storiesNow - hide,
-                          left: 0,
-                          right: 0,
-                          height: _searchH,
-                          child: Opacity(
-                            opacity: (1 - hide / (_searchH * 0.7)).clamp(0.0, 1.0),
-                            child: Transform.scale(scale: 1 - 0.08 * (hide / _searchH), child: search),
                           ),
                         ),
                         // …while the folder bar stays.
@@ -346,6 +350,10 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                             ),
                           ),
                         ),
+                        // Stories: small rings beside the title ⇄ big circles in the row.
+                        if (t > 0 && t < 1) _storyMorph(context, app, t, topInset, MediaQuery.sizeOf(context).width),
+                        // Search: full field ⇄ small round icon in the title bar.
+                        _searchMorph(context, field, topInset, storiesNow, hide, MediaQuery.sizeOf(context).width),
                       ],
                     ),
                   ),
@@ -355,6 +363,141 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
           ),
         ),
       ],
+    );
+  }
+
+  /// Story avatars glide between the row (open) and the rings beside the
+  /// title (folded), growing or shrinking on the way, at fold amount [t].
+  Widget _storyMorph(BuildContext context, AppController app, double t, double topInset, double width) {
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final cs = Theme.of(context).colorScheme;
+    final me = app.me;
+    final mine = app.myStories;
+    final mineHas = mine != null && mine.stories.isNotEmpty;
+    final others = [
+      for (final u in app.stories)
+        if (u.user.id != app.myId && u.stories.isNotEmpty) u,
+    ];
+    final row = <(Profile, bool, bool, bool, int?)>[]; // profile, unseen, seen, add-badge, folded slot
+    var j = 0;
+    if (me != null) row.add((me, false, mineHas, !mineHas, mineHas ? j++ : null));
+    for (final u in others) {
+      row.add((u.user, !u.allSeen, u.allSeen, false, j < 3 ? j++ : null));
+    }
+    final e = Curves.easeInOutCubic.transform(t);
+    double left(double start, double size) => rtl ? width - start - size : start;
+    final back = <Widget>[], front = <Widget>[];
+    for (var k = 0; k < row.length && k < 7; k++) {
+      final (p, unseen, seen, add, f) = row[k];
+      final bigStart = 14.0 + k * 74, bigTop = topInset + _toolbarH + 6;
+      const bigSize = 62.0;
+      double start, top, size, opacity = 1;
+      if (f != null) {
+        final smallStart = 17.5 + f * 20, smallTop = topInset + 12.5;
+        start = bigStart + (smallStart - bigStart) * e;
+        top = bigTop + (smallTop - bigTop) * e;
+        size = bigSize + (31 - bigSize) * e;
+      } else {
+        start = bigStart;
+        top = bigTop - 36 * e;
+        size = bigSize * (1 - 0.3 * e);
+        opacity = (1 - e * 1.6).clamp(0.0, 1.0);
+      }
+      final ring = Positioned(
+        left: left(start + (bigSize - size) * 0, size),
+        top: top,
+        width: size,
+        height: size,
+        child: Opacity(
+          opacity: opacity,
+          child: StoryRing(profile: p, size: size, unseen: unseen, seen: seen, add: add && e < 0.5),
+        ),
+      );
+      (f != null ? front : back).add(ring);
+      final nameOpacity = (1 - e * 3).clamp(0.0, 1.0);
+      if (nameOpacity > 0) {
+        back.add(
+          Positioned(
+            left: left(8.0 + k * 74, 74),
+            top: bigTop + bigSize + 5 - 20 * e,
+            width: 74,
+            child: Opacity(
+              opacity: nameOpacity,
+              child: Text(
+                me != null && p.id == me.id ? context.tr('my_story') : p.name,
+                textAlign: TextAlign.center,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontSize: 12, color: unseen ? cs.onSurface : cs.onSurfaceVariant),
+              ),
+            ),
+          ),
+        );
+      }
+    }
+    return Positioned.fill(
+      child: IgnorePointer(
+        child: Stack(clipBehavior: Clip.none, children: [...back, ...front.reversed]),
+      ),
+    );
+  }
+
+  /// The search field shrinks into a round icon in the title bar while you
+  /// scroll (Telegram); tapping the icon brings the field back.
+  Widget _searchMorph(BuildContext context, Color field, double topInset, double storiesNow, double hide, double width) {
+    final cs = Theme.of(context).colorScheme;
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final e = Curves.easeInOutCubic.transform((hide / _searchH).clamp(0.0, 1.0));
+    const fullStart = 12.0;
+    final fullTop = topInset + _toolbarH + storiesNow + 2, fullW = width - 24;
+    final iconStart = width - 4 - 48 - 2 - 40, iconTop = topInset + 8;
+    final start = fullStart + (iconStart - fullStart) * e;
+    final top = fullTop + (iconTop - fullTop) * e;
+    final w = fullW + (40 - fullW) * e;
+    final small = e > 0.55;
+    return Positioned(
+      left: rtl ? width - start - w : start,
+      top: top,
+      width: w,
+      height: 40,
+      child: GestureDetector(
+        onTap: small ? _revealSearch : null,
+        child: Container(
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(color: field, borderRadius: BorderRadius.circular(20)),
+          child: small
+              ? Semantics(
+                  button: true,
+                  label: context.tr('search'),
+                  child: Center(child: Icon(Icons.search_rounded, color: cs.onSurfaceVariant, size: 22)),
+                )
+              : Opacity(
+                  opacity: (1 - e * 1.8).clamp(0.0, 1.0),
+                  child: OverflowBox(
+                    minWidth: fullW,
+                    maxWidth: fullW,
+                    alignment: AlignmentDirectional.centerStart,
+                    child: TextField(
+                      controller: _searchCtl,
+                      focusNode: _searchFocus,
+                      onChanged: (v) => setState(() => _query = v),
+                      textAlignVertical: TextAlignVertical.center,
+                      style: const TextStyle(fontSize: 15),
+                      decoration: InputDecoration(
+                        hintText: context.tr('search'),
+                        prefixIcon: Icon(Icons.search_rounded, color: cs.onSurfaceVariant, size: 21),
+                        filled: false,
+                        isDense: true,
+                        contentPadding: EdgeInsets.zero,
+                        border: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                      ),
+                    ),
+                  ),
+                ),
+        ),
+      ),
     );
   }
 
@@ -375,10 +518,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
           curve: Curves.easeOut,
           alignment: Alignment.center,
           padding: const EdgeInsets.symmetric(horizontal: 4),
-          decoration: BoxDecoration(
-            color: sel ? (dark ? const Color(0xFF26405C) : Brand.blueMist) : Colors.transparent,
-            borderRadius: BorderRadius.circular(16),
-          ),
+          color: Colors.transparent,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -482,7 +622,9 @@ class _Toolbar extends StatelessWidget {
       child: Row(
         children: [
           // folded stories sit before the title (Telegram)
-          AnimatedSize(duration: const Duration(milliseconds: 200), curve: Curves.easeOut, child: rings),
+          // While folding, the moving avatars are drawn by the header; the title
+          // slides aside to make room for them, then the real rings appear.
+          if (t >= 0.999) rings else if (shown.isNotEmpty) SizedBox(width: (34.0 + (shown.length - 1) * 20 + 10) * Curves.easeInOutCubic.transform(t)),
           Flexible(
             fit: FlexFit.loose,
             flex: 0,

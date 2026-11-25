@@ -11,6 +11,7 @@ import '../widgets/avatar.dart';
 import 'chat_screen.dart';
 import 'chats_screen.dart';
 import 'profile_screen.dart';
+import 'storage_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   const SettingsScreen({super.key});
@@ -157,6 +158,13 @@ class SettingsScreen extends StatelessWidget {
               title: context.tr('privacy'),
               subtitle: context.tr('privacy_sub'),
               onTap: () => _info(context, context.tr('privacy'), context.tr('privacy_body')),
+            ),
+            _Tile(
+              icon: Icons.pie_chart_rounded,
+              color: const Color(0xFF3390EC),
+              title: context.tr('data_storage'),
+              subtitle: context.tr('data_storage_sub'),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const StorageScreen())),
             ),
             _Tile(
               icon: Icons.notifications_rounded,
