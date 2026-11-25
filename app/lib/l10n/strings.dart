@@ -286,6 +286,8 @@ class Strings {
     'online_now': {'ps': 'وصل', 'fa': 'آنلاین', 'en': 'online'},
     'tap_profile': {'ps': 'د معلوماتو لپاره کېکاږئ', 'fa': 'برای اطلاعات بزنید', 'en': 'tap for info'},
     // v0.6: saved messages, chat options
+    'downloading': {'ps': 'ښکته کېږي…', 'fa': 'در حال دانلود…', 'en': 'Downloading…'},
+    'stories_cache': {'ps': 'کیسې', 'fa': 'استوری‌ها', 'en': 'Stories'},
     'data_storage': {'ps': 'معلومات او زېرمه', 'fa': 'داده‌ها و ذخیره‌سازی', 'en': 'Data and storage'},
     'data_storage_sub': {'ps': 'د حافظې کارول، د رسنیو ساتنه', 'fa': 'مصرف حافظه، نگهداری رسانه', 'en': 'Storage usage, keep media'},
     'cache_used': {'ps': 'په مبایل کې کارول شوې حافظه', 'fa': 'حافظهٔ استفاده‌شده روی گوشی', 'en': 'Used on this device'},

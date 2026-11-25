@@ -178,7 +178,9 @@ class _StorageScreenState extends State<StorageScreen> {
                       leading: chat != null
                           ? ChatAvatar(chat: chat, size: 40)
                           : CircleAvatar(child: Icon(isAvatars ? Icons.account_circle_rounded : Icons.folder_rounded)),
-                      title: Text(chat != null ? app.chatTitle(chat) : context.tr(isAvatars ? 'profile_photos' : 'other_media')),
+                      title: Text(
+                        chat != null ? app.chatTitle(chat) : context.tr(isAvatars ? 'profile_photos' : (e.key == 'stories' ? 'stories_cache' : 'other_media')),
+                      ),
                       subtitle: Text(_fmt(e.value)),
                       trailing: IconButton(
                         tooltip: context.tr('clear'),

@@ -439,33 +439,53 @@ class _ProfileScreenState extends State<ProfileScreen> {
         borderRadius: BorderRadius.circular(22),
         border: Border.all(color: dark ? const Color(0x14FFFFFF) : const Color(0x0A000000)),
       ),
-      child: Row(
-        children: [
-          for (var i = 0; i < keys.length; i++)
-            Expanded(
-              child: GestureDetector(
-                onTap: () => setState(() => _tab = i),
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 220),
-                  alignment: Alignment.center,
+      // the active tab sits on a pill with a thin outline that slides
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final w = c.maxWidth / keys.length;
+          return Stack(
+            children: [
+              AnimatedPositionedDirectional(
+                duration: const Duration(milliseconds: 320),
+                curve: Curves.easeOutCubic,
+                start: _tab * w,
+                top: 0,
+                bottom: 0,
+                width: w,
+                child: Container(
                   decoration: BoxDecoration(
-                    color: _tab == i ? (dark ? const Color(0xFF26405C) : Brand.blueMist) : Colors.transparent,
+                    color: dark ? const Color(0xFF26405C) : Brand.blueMist,
                     borderRadius: BorderRadius.circular(19),
-                  ),
-                  child: Text(
-                    context.tr(keys[i]),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      fontSize: 14,
-                      fontWeight: _tab == i ? FontWeight.w700 : FontWeight.w600,
-                      color: _tab == i ? cs.primary : cs.onSurfaceVariant,
-                    ),
+                    border: Border.all(color: cs.primary.withValues(alpha: dark ? 0.28 : 0.22), width: 1),
                   ),
                 ),
               ),
-            ),
-        ],
+              Row(
+                children: [
+                  for (var i = 0; i < keys.length; i++)
+                    Expanded(
+                      child: GestureDetector(
+                        behavior: HitTestBehavior.opaque,
+                        onTap: () => setState(() => _tab = i),
+                        child: Center(
+                          child: AnimatedDefaultTextStyle(
+                            duration: const Duration(milliseconds: 220),
+                            style: TextStyle(
+                              fontFamily: Brand.fontFamily,
+                              fontSize: 14,
+                              fontWeight: _tab == i ? FontWeight.w700 : FontWeight.w600,
+                              color: _tab == i ? cs.primary : cs.onSurfaceVariant,
+                            ),
+                            child: Text(context.tr(keys[i]), maxLines: 1, overflow: TextOverflow.ellipsis),
+                          ),
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ],
+          );
+        },
       ),
     );
   }

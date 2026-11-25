@@ -86,6 +86,7 @@ class _ChatScreenState extends State<ChatScreen> {
     _input.dispose();
     _focus.dispose();
     _recTick?.cancel();
+    _holdTimer?.cancel();
     _recorder.dispose();
     super.dispose();
   }
@@ -357,14 +358,62 @@ class _ChatScreenState extends State<ChatScreen> {
     await _app!.sendVoice(chat, bytes: bytes, durationMs: ms, ext: _recExt, replyTo: _takeReply());
   }
 
-  void _onMicMove(LongPressMoveUpdateDetails d, Chat chat) {
+  // Raw touch on the mic (no long-press delay): a short hold starts recording.
+  Offset? _downPos;
+  Timer? _holdTimer;
+  bool _pressing = false;
+  bool _starting = false;
+  bool _releasedWhileStarting = false;
+
+  void _micDown(PointerDownEvent e) {
+    if (_recording) return;
+    _downPos = e.position;
+    _pressing = true;
+    HapticFeedback.selectionClick();
+    _holdTimer?.cancel();
+    _holdTimer = Timer(const Duration(milliseconds: 150), () async {
+      if (!_pressing || !mounted) return;
+      _starting = true;
+      _releasedWhileStarting = false;
+      await _startRecording();
+      _starting = false;
+      if (_releasedWhileStarting && _recording && !_locked) {
+        final chat = _app!.chatById(widget.chatId);
+        if (chat != null) await _stopRecording(chat, send: true);
+      }
+    });
+  }
+
+  void _micMove(PointerMoveEvent e, Chat chat) {
+    final d = _downPos;
+    if (d == null) return;
+    _onMicMove(e.position - d, chat);
+  }
+
+  void _micUp(Chat chat, {required bool cancelled}) {
+    final wasHold = _pressing;
+    _pressing = false;
+    _downPos = null;
+    _holdTimer?.cancel();
+    if (_starting) {
+      _releasedWhileStarting = !cancelled;
+      return;
+    }
+    if (_recording && !_locked) {
+      _stopRecording(chat, send: !cancelled);
+    } else if (!_recording && wasHold && !cancelled) {
+      _toast('hold_to_record');
+    }
+  }
+
+  void _onMicMove(Offset offset, Chat chat) {
     if (!_recording || _locked) return;
     final rtl = Directionality.of(context) == TextDirection.rtl;
     // Distance toward the start edge cancels; upward locks.
-    final toStart = rtl ? d.offsetFromOrigin.dx : -d.offsetFromOrigin.dx;
+    final toStart = rtl ? offset.dx : -offset.dx;
     setState(() {
       _slideX = toStart.clamp(0.0, 200.0);
-      _slideY = (-d.offsetFromOrigin.dy).clamp(0.0, 140.0);
+      _slideY = (-offset.dy).clamp(0.0, 140.0);
     });
     if (_slideX > 130) {
       _stopRecording(chat, send: false);
@@ -596,8 +645,8 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           actions: [
             if (!chat.isGroup && !chat.isSaved) ...[
-              IconButton(tooltip: context.tr('video_call'), onPressed: () => _call(chat, true), icon: const Icon(Icons.videocam_outlined)),
-              IconButton(tooltip: context.tr('voice_call'), onPressed: () => _call(chat, false), icon: const Icon(Icons.call_outlined)),
+              IconButton(tooltip: context.tr('video_call'), onPressed: () => _call(chat, true), icon: const Icon(Icons.videocam_rounded)),
+              IconButton(tooltip: context.tr('voice_call'), onPressed: () => _call(chat, false), icon: const Icon(Icons.call_rounded)),
             ],
             PopupMenuButton<String>(
               onOpened: () => FocusManager.instance.primaryFocus?.unfocus(),
@@ -619,21 +668,21 @@ class _ChatScreenState extends State<ChatScreen> {
                 }
               },
               itemBuilder: (ctx) => [
-                if (!chat.isSaved) _menuItem(ctx, 'info', Icons.info_outline_rounded, 'info'),
-                if (chat.isGroup) _menuItem(ctx, 'add', Icons.person_add_alt_1_outlined, 'add_member'),
+                if (!chat.isSaved) _menuItem(ctx, 'info', Icons.info_rounded, 'info'),
+                if (chat.isGroup) _menuItem(ctx, 'add', Icons.person_add_alt_1_rounded, 'add_member'),
                 if (!chat.isSaved)
                   _menuItem(
                     ctx,
                     'mute',
-                    chat.muted ? Icons.notifications_active_outlined : Icons.notifications_off_outlined,
+                    chat.muted ? Icons.notifications_active_rounded : Icons.notifications_off_rounded,
                     chat.muted ? 'unmute_chat' : 'mute_chat',
                   ),
-                _menuItem(ctx, 'clear', Icons.cleaning_services_outlined, 'clear_history'),
+                _menuItem(ctx, 'clear', Icons.cleaning_services_rounded, 'clear_history'),
                 if (!chat.isSaved)
                   _menuItem(
                     ctx,
                     'leave',
-                    chat.isGroup ? Icons.logout_rounded : Icons.delete_outline_rounded,
+                    chat.isGroup ? Icons.logout_rounded : Icons.delete_rounded,
                     chat.isGroup ? 'leave_chat' : 'delete_chat',
                     danger: true,
                   ),
@@ -946,7 +995,7 @@ class _ChatScreenState extends State<ChatScreen> {
             turns: Tween(begin: 0.75, end: 1.0).animate(a),
             child: FadeTransition(opacity: a, child: c),
           ),
-          child: Icon(_emoji ? Icons.keyboard_alt_outlined : Icons.emoji_emotions_outlined, key: ValueKey(_emoji), color: cs.onSurfaceVariant),
+          child: Icon(_emoji ? Icons.keyboard_rounded : Icons.emoji_emotions_rounded, key: ValueKey(_emoji), color: cs.onSurfaceVariant),
         ),
       ),
       Expanded(
@@ -1117,17 +1166,14 @@ class _ChatScreenState extends State<ChatScreen> {
           excludeSemantics: true,
           onTap: () => _toast('hold_to_record'),
           onLongPress: _recording ? null : _startRecording,
-          child: GestureDetector(
-            onTap: () => _toast('hold_to_record'),
-            onLongPressStart: (_) => _startRecording(),
-            onLongPressMoveUpdate: (d) => _onMicMove(d, chat),
-            onLongPressEnd: (_) {
-              if (_recording && !_locked) _stopRecording(chat, send: true);
-            },
-            onLongPressCancel: () {
-              if (_recording && !_locked) _stopRecording(chat, send: false);
-            },
-            child: button,
+          child: Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: _micDown,
+            onPointerMove: (e) => _micMove(e, chat),
+            onPointerUp: (_) => _micUp(chat, cancelled: false),
+            onPointerCancel: (_) => _micUp(chat, cancelled: true),
+            // a slightly bigger touch area than the round button
+            child: Padding(padding: const EdgeInsets.all(4), child: button),
           ),
         ),
       ],

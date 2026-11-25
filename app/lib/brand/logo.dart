@@ -128,7 +128,7 @@ class GirihWallpaper extends StatelessWidget {
                     alignment: Alignment.topLeft,
                     scale: 1024 / tile,
                     filterQuality: FilterQuality.medium,
-                    colorFilter: ColorFilter.mode(dark ? const Color(0x17FFFFFF) : const Color(0x262B5278), BlendMode.srcIn),
+                    colorFilter: ColorFilter.mode(dark ? const Color(0x0CFFFFFF) : const Color(0x172B5278), BlendMode.srcIn),
                   ),
                 ),
               ),

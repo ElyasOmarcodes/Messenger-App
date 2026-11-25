@@ -11,6 +11,7 @@ import '../brand/brand.dart';
 import '../l10n/afghan_date.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
+import '../services/media_cache.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
 
@@ -581,6 +582,8 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
 
   final _replyFocus = FocusNode();
   final Map<String, String> _urls = {};
+
+  ImageProvider _storyImage(AppController app, String path) => CachedImage('stories/$path', () => app.storyUrl(path));
   late final List<StoryItem> _items = [...widget.user.stories];
 
   bool get _mine => widget.user.user.id == AppScope.read(context).myId;
@@ -632,22 +635,16 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
     final st = _story;
     if (st.mediaPath != null) {
       final app = AppScope.read(context);
-      final url = _urls[st.mediaPath!] ??= (await app.storyUrl(st.mediaPath!)) ?? '';
+      // kept on the phone after the first view, so it opens again offline
+      _urls[st.mediaPath!] = st.mediaPath!;
+      try {
+        await precacheImage(_storyImage(app, st.mediaPath!), context);
+      } catch (_) {}
       if (!mounted || st != _story) return;
-      if (url.isNotEmpty) {
-        try {
-          await precacheImage(NetworkImage(url), context);
-        } catch (_) {}
-      }
-      if (!mounted || st != _story) return;
-      // Preload the next one in the background.
+      // Fetch the next one in the background.
       if (_i + 1 < _items.length && _items[_i + 1].mediaPath != null) {
         final np = _items[_i + 1].mediaPath!;
-        unawaited(
-          app.storyUrl(np).then((u) {
-            if (u != null) _urls[np] = u;
-          }),
-        );
+        unawaited(MediaCache.instance.bytes('stories/$np', () => app.storyUrl(np)));
       }
     }
     _ready = true;
@@ -807,6 +804,7 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
     final rtl = Directionality.of(context) == TextDirection.rtl;
     final p = widget.user.user;
     final url = st.mediaPath == null ? null : _urls[st.mediaPath!];
+    final app = AppScope.read(context);
     final top = MediaQuery.paddingOf(context).top;
 
     Widget content;
@@ -819,10 +817,13 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
                 ImageFiltered(
                   // a tiny copy stretched up already looks blurred; a light blur smooths it
                   imageFilter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
-                  child: Image.network(url, fit: BoxFit.cover, cacheWidth: 48, filterQuality: FilterQuality.low),
+                  child: Image(image: ResizeImage(_storyImage(app, url), width: 48), fit: BoxFit.cover, filterQuality: FilterQuality.low),
                 ),
                 Container(color: Colors.black26),
-                Image.network(url, fit: BoxFit.contain, cacheWidth: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round()),
+                Image(
+                  image: ResizeImage(_storyImage(app, url), width: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round()),
+                  fit: BoxFit.contain,
+                ),
               ],
             );
     } else {
@@ -1171,16 +1172,23 @@ class _StoryTile extends StatelessWidget {
         onLongPress: onLongPress,
         child: SizedBox(
           width: 74,
+          // Fixed geometry (top 6, ring 62, gap 5, name 18) — the header's
+          // fold animation uses the very same numbers, so nothing jumps.
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.start,
             children: [
+              const SizedBox(height: 6),
               StoryRing(profile: profile, size: 62, unseen: unseen, seen: seen, add: add),
               const SizedBox(height: 5),
-              Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, fontWeight: unseen ? FontWeight.w700 : FontWeight.w500, color: unseen ? cs.onSurface : cs.onSurfaceVariant),
+              SizedBox(
+                height: 18,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, height: 1.3, color: unseen ? cs.onSurface : cs.onSurfaceVariant),
+                ),
               ),
             ],
           ),

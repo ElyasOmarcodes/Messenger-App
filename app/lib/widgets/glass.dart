@@ -4,26 +4,17 @@ import 'package:flutter/material.dart';
 
 /// iOS / Telegram style "glass": a strong blur of what is behind plus a
 /// saturation boost (colours glow through, like Apple's materials), a light
-/// tint and a thin bright rim. All glass on a screen shares one backdrop
-/// (see [BackdropGroup] in main.dart), which is much cheaper than separate blurs.
+/// tint and a thin bright rim. Used only on small surfaces (tab bar, menus):
+/// live blur behind large areas is costly on Android.
 class Glass {
   Glass._();
 
-  static const double _s = 1.7; // saturation
-  static const _lr = 0.2126, _lg = 0.7152, _lb = 0.0722;
-
-  static final ui.ImageFilter filter = ui.ImageFilter.compose(
-    outer: const ColorFilter.matrix(<double>[
-      _lr * (1 - _s) + _s, _lg * (1 - _s), _lb * (1 - _s), 0, 0, //
-      _lr * (1 - _s), _lg * (1 - _s) + _s, _lb * (1 - _s), 0, 0, //
-      _lr * (1 - _s), _lg * (1 - _s), _lb * (1 - _s) + _s, 0, 0, //
-      0, 0, 0, 1, 0,
-    ]),
-    inner: ui.ImageFilter.blur(sigmaX: 22, sigmaY: 22, tileMode: TileMode.mirror),
-  );
+  /// A plain, light blur. (A saturation boost on top doubled the work, and a
+  /// shared "grouped" backdrop measured 1.8–3× slower on Android/Impeller.)
+  static final ui.ImageFilter filter = ui.ImageFilter.blur(sigmaX: 14, sigmaY: 14);
 
   /// Blur layer for a glass surface (inside a clip). Off → nothing is blurred.
-  static Widget backdrop({required bool enabled, required Widget child}) => enabled ? BackdropFilter.grouped(filter: filter, child: child) : child;
+  static Widget backdrop({required bool enabled, required Widget child}) => enabled ? BackdropFilter(filter: filter, child: child) : child;
 }
 
 /// A rounded glass panel.

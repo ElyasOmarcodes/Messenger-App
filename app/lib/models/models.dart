@@ -27,6 +27,17 @@ class Profile {
     lastReadAt: j['last_read_at'] == null ? null : DateTime.parse(j['last_read_at'] as String).toLocal(),
     role: j['role'] as String?,
   );
+
+  /// Same shape as [Profile.fromJson], for the offline copy on the phone.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'email': email,
+    'display_name': displayName,
+    'username': username,
+    'avatar_path': avatarPath,
+    'last_read_at': lastReadAt?.toUtc().toIso8601String(),
+    'role': role,
+  };
 }
 
 enum MsgKind { text, image, file, voice, album, location, contact }
@@ -125,6 +136,25 @@ class Message {
     editedAt: j['edited_at'] == null ? null : DateTime.parse(j['edited_at'] as String).toLocal(),
     meta: j['meta'] == null ? null : Map<String, dynamic>.from(j['meta'] as Map),
   );
+
+  /// Same shape as the server row, for the offline copy on the phone.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'chat_id': chatId,
+    'sender_id': senderId,
+    'kind': kind.name,
+    'body': body,
+    'created_at': createdAt.toUtc().toIso8601String(),
+    'file_path': filePath,
+    'file_name': fileName,
+    'file_size': fileSize,
+    'mime_type': mimeType,
+    'reply_to': replyTo,
+    'deleted_at': deletedAt?.toUtc().toIso8601String(),
+    'duration_ms': durationMs,
+    'edited_at': editedAt?.toUtc().toIso8601String(),
+    'meta': meta,
+  };
 }
 
 /// One story (24-hour status).
@@ -291,6 +321,25 @@ class Chat {
     markedUnread: (j['marked_unread'] as bool?) ?? false,
     clearedAt: _date(j['cleared_at']),
   );
+
+  /// Same shape as a `my_chats` row, for the offline copy on the phone.
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'is_group': isGroup,
+    'title': title,
+    'last_message_at': lastMessageAt.toUtc().toIso8601String(),
+    'members': [for (final m in members) m.toJson()],
+    'last_message': lastMessage?.pending == true ? null : lastMessage?.toJson(),
+    'unread': unread,
+    'avatar_path': avatarPath,
+    'pinned_message_id': pinnedMessageId,
+    'is_saved': isSaved,
+    'pinned_at': pinnedAt?.toUtc().toIso8601String(),
+    'muted': muted,
+    'archived': archived,
+    'marked_unread': markedUnread,
+    'cleared_at': clearedAt?.toUtc().toIso8601String(),
+  };
 }
 
 DateTime? _date(Object? v) => v == null ? null : DateTime.parse(v as String).toLocal();

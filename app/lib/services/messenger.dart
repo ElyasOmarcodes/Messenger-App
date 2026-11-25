@@ -61,6 +61,35 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   String get _cachePrefix => 'u_${myId ?? 'none'}';
 
+  // ── Offline copy: everything seen is kept on the phone ───────────────────
+  final Map<String, Timer> _saveTimers = {};
+
+  /// Saves a chat's messages (and the chat list) a moment after a change.
+  void _persistSoon(String chatId) {
+    _saveTimers[chatId]?.cancel();
+    _saveTimers[chatId] = Timer(const Duration(milliseconds: 800), () {
+      final list = _messages[chatId];
+      if (list != null) {
+        final keep = [
+          for (final m in list)
+            if (!m.pending && !m.id.startsWith('local-')) m,
+        ];
+        final tail = keep.length > 300 ? keep.sublist(keep.length - 300) : keep;
+        unawaited(MediaCache.instance.store.writeJson('${_cachePrefix}_m_$chatId', [for (final m in tail) m.toJson()]));
+      }
+      _persistChatsSoon();
+    });
+  }
+
+  Timer? _chatsTimer;
+  void _persistChatsSoon() {
+    _chatsTimer?.cancel();
+    _chatsTimer = Timer(const Duration(milliseconds: 800), () {
+      if (myId == null || chats.isEmpty) return;
+      unawaited(MediaCache.instance.store.writeJson('${_cachePrefix}_chats', [for (final c in chats) c.toJson()]));
+    });
+  }
+
   SupabaseClient get _sb => Supabase.instance.client;
   Session? get session => AppConfig.configured ? _sb.auth.currentSession : null;
   String? get myId => session?.user.id;
@@ -302,6 +331,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _onMessage(Message m) {
+    _persistSoon(m.chatId);
     final list = _messages[m.chatId];
     if (list != null && !list.any((x) => x.id == m.id)) {
       // Our own message may still be shown as a pending local copy; _replace handles it.
@@ -343,6 +373,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _onMessageUpdate(Message m) {
+    _persistSoon(m.chatId);
     final list = _messages[m.chatId];
     if (list != null) {
       final i = list.indexWhere((x) => x.id == m.id);
@@ -585,7 +616,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       final cached = await MediaCache.instance.store.readJson(cacheName);
       if (cached is List && _messages[chatId] == null) {
         try {
-          _messages[chatId] = cached.map((e) => Message.fromJson(e as Map<String, dynamic>)).toList();
+          _messages[chatId] = cached.map((e) => Message.fromJson(e as Map<String, dynamic>)).toList()..sort((a, b) => a.createdAt.compareTo(b.createdAt));
           notifyListeners();
         } catch (_) {}
       }
@@ -595,13 +626,13 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       var q = _sb.from('messages').select().eq('chat_id', chatId);
       if (cleared != null) q = q.gt('created_at', cleared.toUtc().toIso8601String());
       final rows = await q.order('created_at', ascending: false).limit(300);
-      unawaited(MediaCache.instance.store.writeJson(cacheName, rows.take(150).toList()));
       final list = rows.map(Message.fromJson).toList().reversed.toList();
       for (final m in _messages[chatId] ?? const <Message>[]) {
         if (!list.any((x) => x.id == m.id)) list.add(m); // keep pending/realtime ones
       }
       list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
       _messages[chatId] = list;
+      _persistSoon(chatId);
     } catch (_) {
       _messages.putIfAbsent(chatId, () => []);
     }
@@ -683,6 +714,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   void _replace(Chat chat, Message local, Message saved) {
+    _persistSoon(chat.id);
     final list = _messages.putIfAbsent(chat.id, () => []);
     list.removeWhere((x) => x.id == saved.id);
     final i = list.indexOf(local);
@@ -1073,9 +1105,24 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> loadStories() async {
     if (myId == null) return;
+    if (stories.isEmpty) {
+      // the stories seen last time, so they still open without internet
+      final cached = await MediaCache.instance.store.readJson('${_cachePrefix}_stories');
+      if (cached is List && stories.isEmpty) {
+        try {
+          final now = DateTime.now();
+          stories = [
+            for (final u in cached.map((e) => StoryUser.fromJson(e as Map<String, dynamic>)))
+              if (u.stories.any((st) => now.difference(st.createdAt).inHours < 24)) u,
+          ];
+          notifyListeners();
+        } catch (_) {}
+      }
+    }
     try {
       final data = await _sb.rpc('story_feed') as List<dynamic>;
       stories = data.map((e) => StoryUser.fromJson(e as Map<String, dynamic>)).toList();
+      unawaited(MediaCache.instance.store.writeJson('${_cachePrefix}_stories', data));
       notifyListeners();
     } catch (_) {}
   }

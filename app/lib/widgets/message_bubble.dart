@@ -5,6 +5,7 @@ import 'dart:async';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:open_filex/open_filex.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../brand/brand.dart';
@@ -465,10 +466,10 @@ class _ContextMenu extends StatelessWidget {
       (Icons.reply_rounded, 'reply', MsgAction.reply, false),
       if (message.body.isNotEmpty) (Icons.copy_rounded, 'copy', MsgAction.copy, false),
       if (mine && const [MsgKind.text, MsgKind.image, MsgKind.album, MsgKind.file].contains(message.kind)) (Icons.edit_rounded, 'edit', MsgAction.edit, false),
-      (pinned ? Icons.push_pin_outlined : Icons.push_pin_rounded, pinned ? 'unpin' : 'pin', MsgAction.pin, false),
+      (pinned ? Icons.push_pin_rounded : Icons.push_pin_rounded, pinned ? 'unpin' : 'pin', MsgAction.pin, false),
       (Icons.shortcut_rounded, 'forward', MsgAction.forward, false),
-      if (!chat.isSaved) (Icons.bookmark_border_rounded, 'save_message', MsgAction.save, false),
-      if (mine) (Icons.delete_outline_rounded, 'delete', MsgAction.delete, true),
+      if (!chat.isSaved) (Icons.bookmark_rounded, 'save_message', MsgAction.save, false),
+      if (mine) (Icons.delete_rounded, 'delete', MsgAction.delete, true),
     ];
     final panel = dark ? const Color(0xF2232E3B) : const Color(0xF7FFFFFF);
     final size = MediaQuery.sizeOf(context);
@@ -927,7 +928,25 @@ class _FileContent extends StatelessWidget {
 
   Future<void> _open(BuildContext context) async {
     if (message.filePath == null) return;
-    final url = await AppScope.read(context).fileUrl(message.filePath!);
+    final app = AppScope.read(context);
+    final key = message.filePath!;
+    final cache = MediaCache.instance;
+    if (cache.persistent) {
+      // like Telegram: downloaded once into "Paigham Documents", then opened
+      // from the phone (also without internet)
+      final messenger = ScaffoldMessenger.of(context);
+      final downloading = context.tr('downloading');
+      if (cache.filePath(key) == null) {
+        messenger.showSnackBar(SnackBar(content: Text(downloading), duration: const Duration(seconds: 1)));
+        await cache.bytes(key, () => app.fileUrl(key));
+      }
+      final local = cache.filePath(key);
+      if (local != null) {
+        await OpenFilex.open(local);
+        return;
+      }
+    }
+    final url = await app.fileUrl(key);
     if (url != null) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
   }
 

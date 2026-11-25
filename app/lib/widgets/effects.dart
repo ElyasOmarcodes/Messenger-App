@@ -42,7 +42,7 @@ class SoftEdge extends StatelessWidget {
                   bottom: fromTop ? null : 0,
                   height: solid,
                   child: ClipRect(
-                    child: BackdropFilter.grouped(filter: Glass.filter, child: const SizedBox.expand()),
+                    child: BackdropFilter(filter: Glass.filter, child: const SizedBox.expand()),
                   ),
                 ),
               Positioned.fill(

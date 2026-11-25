@@ -97,7 +97,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
 
   bool _onScrollEnd(ScrollEndNotification n) {
     _snapTimer?.cancel();
-    _snapTimer = Timer(const Duration(milliseconds: 180), () {
+    _snapTimer = Timer(const Duration(milliseconds: 40), () {
       if (!mounted || !_scroll.hasClients) return;
       // Stories open/close with a snap: past a small pull they finish by themselves.
       final o = _scroll.offset;
@@ -152,7 +152,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
     final personalUnread = app.totalUnread - groupsUnread;
     final topInset = MediaQuery.paddingOf(context).top;
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final glass = Theme.of(context).scaffoldBackgroundColor.withValues(alpha: app.glass ? 0.78 : 1);
+    final glass = Theme.of(context).scaffoldBackgroundColor;
     final full = topInset + _toolbarH + _storiesH + _chipsH;
     // Like Telegram: stories start folded beside the title unless someone posted something new.
     if (!_initialFold && app.chatsLoaded) {
@@ -194,7 +194,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                   decoration: BoxDecoration(
                     color: dark ? const Color(0xFF26405C) : Brand.blueMist,
                     borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: cs.primary.withValues(alpha: dark ? 0.55 : 0.45), width: 1),
+                    border: Border.all(color: cs.primary.withValues(alpha: dark ? 0.28 : 0.22), width: 1),
                   ),
                 ),
               ),
@@ -223,6 +223,8 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                 await Future.wait([app.reloadChats(), app.loadStories()]);
               },
               child: CustomScrollView(
+                // no Android stretch here: it made the list wobble against the header
+                scrollBehavior: ScrollConfiguration.of(context).copyWith(overscroll: false),
                 controller: _scroll,
                 physics: const AlwaysScrollableScrollPhysics(),
                 slivers: [
@@ -302,8 +304,9 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
               final hide = _hide.value;
               final height = topInset + _toolbarH + storiesNow + _chipsH - hide;
               return ClipRect(
-                child: BackdropFilter.grouped(
-                  enabled: app.glass,
+                // solid page colour, no live blur: the biggest cost while scrolling
+                child: BackdropFilter(
+                  enabled: false,
                   filter: Glass.filter,
                   child: Container(
                     height: height,
@@ -430,6 +433,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
             left: left(8.0 + k * 74, 74),
             top: bigTop + bigSize + 5 - 20 * e,
             width: 74,
+            height: 18,
             child: Opacity(
               opacity: nameOpacity,
               child: Text(
@@ -437,7 +441,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, color: unseen ? cs.onSurface : cs.onSurfaceVariant),
+                style: TextStyle(fontSize: 12, height: 1.3, color: unseen ? cs.onSurface : cs.onSurfaceVariant),
               ),
             ),
           ),
@@ -743,20 +747,27 @@ class ChatTile extends StatelessWidget {
                             padding: const EdgeInsetsDirectional.only(end: 4),
                             child: Icon(Icons.groups_rounded, size: 17, color: cs.onSurface),
                           ),
-                        Flexible(
-                          child: Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700),
+                        // the name takes all free room, so the time always sits at the edge
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  title,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700),
+                                ),
+                              ),
+                              if (chat.muted)
+                                Padding(
+                                  padding: const EdgeInsetsDirectional.only(start: 4),
+                                  child: Icon(Icons.volume_off_rounded, size: 16, color: cs.onSurfaceVariant),
+                                ),
+                            ],
                           ),
                         ),
-                        if (chat.muted)
-                          Padding(
-                            padding: const EdgeInsetsDirectional.only(start: 4),
-                            child: Icon(Icons.volume_off_rounded, size: 16, color: cs.onSurfaceVariant),
-                          ),
-                        const Spacer(),
+                        const SizedBox(width: 6),
                         if (mine && !chat.isSaved) ...[
                           Icon(read ? Icons.done_all_rounded : Icons.done_rounded, size: 17, color: cs.primary),
                           const SizedBox(width: 3),
