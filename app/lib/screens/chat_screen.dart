@@ -22,6 +22,7 @@ import '../services/voice_io.dart';
 import '../widgets/avatar.dart';
 import '../widgets/chat_options.dart';
 import '../widgets/effects.dart';
+import '../widgets/glass.dart';
 import '../widgets/message_bubble.dart';
 import 'call_screen.dart';
 import 'new_chat_sheet.dart';
@@ -645,7 +646,17 @@ class _ChatScreenState extends State<ChatScreen> {
       child: Scaffold(
         extendBodyBehindAppBar: true,
         appBar: AppBar(
-          automaticallyImplyLeading: !widget.embedded,
+          automaticallyImplyLeading: false,
+          // round see-through buttons, like the ones on the profile photo
+          leadingWidth: widget.embedded ? 0 : 58,
+          leading: widget.embedded
+              ? null
+              : Padding(
+                  padding: const EdgeInsetsDirectional.only(start: 8, end: 8),
+                  child: Center(
+                    child: RoundBarButton(icon: Icons.arrow_back_rounded, tooltip: context.tr('back'), onTap: () => Navigator.of(context).maybePop()),
+                  ),
+                ),
           // No colour of its own: the bar sits on the page's soft top edge.
           backgroundColor: Colors.transparent,
           surfaceTintColor: Colors.transparent,
@@ -685,12 +696,18 @@ class _ChatScreenState extends State<ChatScreen> {
           ),
           actions: [
             if (!chat.isGroup && !chat.isSaved) ...[
-              IconButton(tooltip: context.tr('video_call'), onPressed: () => _call(chat, true), icon: const Icon(Icons.videocam_rounded)),
-              IconButton(tooltip: context.tr('voice_call'), onPressed: () => _call(chat, false), icon: const Icon(Icons.call_rounded)),
+              RoundBarButton(icon: Icons.videocam_rounded, tooltip: context.tr('video_call'), onTap: () => _call(chat, true)),
+              const SizedBox(width: 8),
+              RoundBarButton(icon: Icons.call_rounded, tooltip: context.tr('voice_call'), onTap: () => _call(chat, false)),
+              const SizedBox(width: 8),
             ],
             PopupMenuButton<String>(
               onOpened: () => FocusManager.instance.primaryFocus?.unfocus(),
-              icon: const Icon(Icons.more_vert_rounded),
+              tooltip: context.tr('more'),
+              padding: EdgeInsets.zero,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              // the circle itself has no tap: the menu button handles it
+              child: const IgnorePointer(child: RoundBarButton(icon: Icons.more_vert_rounded)),
               onSelected: (v) async {
                 switch (v) {
                   case 'info':
@@ -728,6 +745,7 @@ class _ChatScreenState extends State<ChatScreen> {
                   ),
               ],
             ),
+            const SizedBox(width: 10),
           ],
         ),
         body: GirihWallpaper(

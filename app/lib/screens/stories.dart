@@ -40,8 +40,9 @@ class StoryRing extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final ring = unseen || seen;
-    final stroke = size < 36 ? 1.6 : 2.4;
-    final gap = size < 36 ? 1.6 : 2.6;
+    // Telegram: ring and gap scale with the circle (3 dp each at 62 dp)
+    final stroke = size < 40 ? 1.8 : 2.8;
+    final gap = size < 40 ? 1.6 : 2.8;
     final bg = Theme.of(context).colorScheme.surface;
     return SizedBox(
       width: size,
@@ -57,23 +58,24 @@ class StoryRing extends StatelessWidget {
             ),
           Positioned.fill(
             child: Padding(
-              padding: EdgeInsets.all(ring ? stroke + gap : 0),
+              // "My story" without a story keeps the same photo size as the others
+              padding: EdgeInsets.all(ring || add ? stroke + gap : 0),
               child: Avatar(seed: profile.id, label: profile.name, imageUrl: profile.avatarUrl, size: size),
             ),
           ),
           if (add)
             PositionedDirectional(
-              end: -1,
-              bottom: -1,
+              end: 0,
+              bottom: 0,
               child: Container(
-                width: size * 0.34,
-                height: size * 0.34,
+                width: size * 0.36,
+                height: size * 0.36,
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.primary,
                   shape: BoxShape.circle,
-                  border: Border.all(color: bg, width: 2),
+                  border: Border.all(color: bg, width: size * 0.045),
                 ),
-                child: Icon(Icons.add_rounded, color: Colors.white, size: size * 0.24),
+                child: Icon(Icons.add_rounded, color: Colors.white, size: size * 0.25),
               ),
             ),
         ],
@@ -94,9 +96,12 @@ class _RingPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = stroke;
     if (unseen) {
-      p.shader = const SweepGradient(
-        colors: [Color(0xFF34C76F), Color(0xFF3DA1FD), Color(0xFF2470C2), Color(0xFF3DA1FD), Color(0xFF34C76F)],
-        transform: GradientRotation(-math.pi / 2),
+      // Telegram's ring: green at the top-left running into sky blue
+      p.shader = const LinearGradient(
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+        colors: [Color(0xFF4FD866), Color(0xFF38C3C8), Color(0xFF3A9EEF)],
+        stops: [0.0, 0.55, 1.0],
       ).createShader(r);
     } else {
       p.color = dark ? const Color(0xFF4A5868) : const Color(0xFFC4C9CE);
@@ -1187,7 +1192,7 @@ class _StoryTile extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 12, height: 1.3, color: unseen ? cs.onSurface : cs.onSurfaceVariant),
+                  style: TextStyle(fontSize: 13, height: 1.3, fontWeight: FontWeight.w500, color: unseen || add ? cs.onSurface : cs.onSurfaceVariant),
                 ),
               ),
             ],

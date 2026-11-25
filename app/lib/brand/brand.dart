@@ -7,8 +7,12 @@ class Brand {
 
   static const String nameLatin = 'Paigham';
   static const String nameNative = 'پیغام';
-  static const String version = '0.9.0';
-  static const String fontFamily = 'Vazirmatn';
+  static const String version = '0.10.0';
+
+  /// The app's own font. Turned off for a test: null = the phone's system
+  /// font (plain text). To bring Vazirmatn back, set this to [vazirmatn].
+  static const String? fontFamily = null;
+  static const String vazirmatn = 'Vazirmatn';
 
   // ── Paigham Blue ─────────────────────────────────────────────────────────
   static const Color blue = Color(0xFF3390EC); // primary: buttons, links, unread badges

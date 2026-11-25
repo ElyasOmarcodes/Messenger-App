@@ -56,3 +56,34 @@ class GlassBox extends StatelessWidget {
     );
   }
 }
+
+/// Round, see-through bar button (the same style as the buttons on the
+/// profile photo): back, call, video, more.
+class RoundBarButton extends StatelessWidget {
+  const RoundBarButton({super.key, required this.icon, this.onTap, this.tooltip, this.size = 42});
+  final IconData icon;
+  final VoidCallback? onTap;
+  final String? tooltip;
+  final double size;
+
+  @override
+  Widget build(BuildContext context) {
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final button = Material(
+      color: dark ? const Color(0xCC202B38) : const Color(0xCCEEF1F5),
+      shape: CircleBorder(
+        side: BorderSide(color: Colors.white.withValues(alpha: dark ? 0.08 : 0.6), width: 0.8),
+      ),
+      child: InkWell(
+        customBorder: const CircleBorder(),
+        onTap: onTap,
+        child: SizedBox(
+          width: size,
+          height: size,
+          child: Icon(icon, size: 22, color: Theme.of(context).colorScheme.onSurface),
+        ),
+      ),
+    );
+    return tooltip == null || onTap == null ? button : Tooltip(message: tooltip, child: button);
+  }
+}

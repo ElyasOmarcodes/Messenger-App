@@ -78,7 +78,6 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
     super.dispose();
   }
 
-  double _dir = 0;
   Timer? _snapTimer;
 
   /// The chips may hide only as far as the list has scrolled past them,
@@ -89,7 +88,6 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
     final o = _scroll.offset;
     final d = o - _last;
     _last = o;
-    if (d != 0) _dir = d.sign;
     _snapTimer?.cancel();
     if (_snap.isAnimating) _snap.stop();
     _hide.value = (_hide.value + d).clamp(0.0, _maxHide(o));
@@ -99,28 +97,35 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
     _snapTimer?.cancel();
     _snapTimer = Timer(const Duration(milliseconds: 40), () {
       if (!mounted || !_scroll.hasClients) return;
-      // Stories open/close with a snap: past a small pull they finish by themselves.
+      // One rule for every fold (like Telegram): let go before half way and it
+      // goes back to where it was; past half way it finishes by itself.
       final o = _scroll.offset;
       if (o > 0.5 && o < _storiesH - 0.5) {
-        final target = _dir > 0 ? (o > _storiesH * 0.15 ? _storiesH : 0.0) : (o < _storiesH * 0.85 ? 0.0 : _storiesH);
-        _scroll.animateTo(target, duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
+        final target = o >= _storiesH * 0.5 ? _storiesH : 0.0;
+        _scroll.animateTo(target, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
         return;
       }
       final h = _hide.value;
-      // Never leave the search half-way between field and icon: when scrolling
-      // down, carry the list a little further so it can finish turning into the icon.
-      if (h > 0 && h < _searchH && _dir > 0) {
-        final target = _storiesH + _searchH;
-        if (o < target && _scroll.position.maxScrollExtent >= target) {
-          _scroll.animateTo(target, duration: const Duration(milliseconds: 260), curve: Curves.easeOutCubic);
+      if (h <= 0.5 || h >= _searchH - 0.5) return;
+      final searchEnd = _storiesH + _searchH;
+      if (h >= _searchH * 0.5) {
+        // more than half folded: fold the search away completely
+        if (o < searchEnd && _scroll.position.maxScrollExtent >= searchEnd) {
+          _scroll.animateTo(searchEnd, duration: const Duration(milliseconds: 240), curve: Curves.easeOutCubic);
           return;
         }
+        _snapFrom = h;
+        _snapTo = _maxHide(o);
+      } else {
+        // less than half: bring it back
+        if (o > _storiesH && o < searchEnd) {
+          _scroll.animateTo(_storiesH, duration: const Duration(milliseconds: 240), curve: Curves.easeOutCubic);
+          return;
+        }
+        _snapFrom = h;
+        _snapTo = 0;
       }
-      if (h <= 0 || h >= _searchH || (_dir > 0 && h >= _maxHide(_scroll.offset))) return;
-      _snapFrom = h;
-      // Scrolling down tucks the chips away (as far as the list allows); scrolling up brings them back.
-      _snapTo = _dir > 0 ? _maxHide(_scroll.offset) : 0;
-      _snap.forward(from: 0);
+      if (_snapTo != _snapFrom) _snap.forward(from: 0);
     });
     return false;
   }
@@ -405,10 +410,10 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
       const bigSize = 62.0;
       double start, top, size, opacity = 1;
       if (f != null) {
-        final smallStart = 17.5 + f * 20, smallTop = topInset + 12.5;
+        final smallStart = 16.0 + f * 17, smallTop = topInset + (_toolbarH - 36) / 2;
         start = bigStart + (smallStart - bigStart) * e;
         top = bigTop + (smallTop - bigTop) * e;
-        size = bigSize + (31 - bigSize) * e;
+        size = bigSize + (36 - bigSize) * e;
       } else {
         start = bigStart;
         top = bigTop - 36 * e;
@@ -441,7 +446,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                 textAlign: TextAlign.center,
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
-                style: TextStyle(fontSize: 12, height: 1.3, color: unseen ? cs.onSurface : cs.onSurfaceVariant),
+                style: TextStyle(fontSize: 13, height: 1.3, fontWeight: FontWeight.w500, color: unseen || add ? cs.onSurface : cs.onSurfaceVariant),
               ),
             ),
           ),
@@ -600,22 +605,27 @@ class _Toolbar extends StatelessWidget {
               onTap: () => openStories(context, shown.first),
               child: Padding(
                 padding: const EdgeInsetsDirectional.only(end: 10),
+                // Telegram: 36 dp rings, 17 dp apart, the first one in front,
+                // each cut out of the one behind by a thin page-coloured edge
                 child: SizedBox(
-                  width: 34.0 + (shown.length - 1) * 20,
-                  height: 34,
+                  width: 36.0 + (shown.length - 1) * 17,
+                  height: 36,
                   child: Stack(
+                    clipBehavior: Clip.none,
                     children: [
                       for (var i = shown.length - 1; i >= 0; i--)
                         PositionedDirectional(
-                          start: i * 20.0,
+                          start: i * 17.0 - 1.5,
+                          top: -1.5,
                           child: Container(
                             decoration: BoxDecoration(
                               shape: BoxShape.circle,
+                              color: Theme.of(context).scaffoldBackgroundColor,
                               border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 1.5),
                             ),
                             child: StoryRing(
                               profile: shown[i].user,
-                              size: 31,
+                              size: 36,
                               unseen: !shown[i].allSeen && shown[i].user.id != app.myId,
                               seen: shown[i].allSeen || shown[i].user.id == app.myId,
                             ),
@@ -637,7 +647,7 @@ class _Toolbar extends StatelessWidget {
           // folded stories sit before the title (Telegram)
           // While folding, the moving avatars are drawn by the header; the title
           // slides aside to make room for them, then the real rings appear.
-          if (t >= 0.999) rings else if (shown.isNotEmpty) SizedBox(width: (34.0 + (shown.length - 1) * 20 + 10) * Curves.easeInOutCubic.transform(t)),
+          if (t >= 0.999) rings else if (shown.isNotEmpty) SizedBox(width: (36.0 + (shown.length - 1) * 17 + 10) * Curves.easeInOutCubic.transform(t)),
           Flexible(
             fit: FlexFit.loose,
             flex: 0,
