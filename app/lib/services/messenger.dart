@@ -12,6 +12,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
+import '../widgets/rich_message.dart';
 import 'e2e.dart';
 import 'media_cache.dart';
 import 'notifier.dart';
@@ -1580,7 +1581,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     }
   }
 
-  String previewOf(Message m) => m.deleted
+  String previewOf(Message m) => RichMessageText.strip(_previewOf(m));
+
+  String _previewOf(Message m) => m.deleted
       ? s.get('deleted')
       : m.locked
       ? s.get('locked_message')

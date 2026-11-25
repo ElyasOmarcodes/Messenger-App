@@ -24,6 +24,7 @@ import '../widgets/chat_options.dart';
 import '../widgets/effects.dart';
 import '../widgets/glass.dart';
 import '../widgets/message_bubble.dart';
+import '../widgets/rich_message.dart';
 import 'call_screen.dart';
 import 'new_chat_sheet.dart';
 import 'profile_screen.dart';
@@ -1185,6 +1186,28 @@ class _ChatScreenState extends State<ChatScreen> {
             textInputAction: TextInputAction.newline,
             keyboardType: TextInputType.multiline,
             style: const TextStyle(fontSize: 16.5),
+            // Telegram: select text → Bold, Italic, Underline, Strike, Mono, Spoiler, Link
+            contextMenuBuilder: (ctx, state) {
+              final items = [...state.contextMenuButtonItems];
+              if (!_input.selection.isCollapsed) {
+                void f(String open, [String? close]) {
+                  wrapSelection(_input, open, close);
+                  state.hideToolbar();
+                  setState(() => _canSend = _input.text.trim().isNotEmpty);
+                }
+
+                items.addAll([
+                  ContextMenuButtonItem(label: ctx.tr('fmt_bold'), onPressed: () => f('**')),
+                  ContextMenuButtonItem(label: ctx.tr('fmt_italic'), onPressed: () => f('__')),
+                  ContextMenuButtonItem(label: ctx.tr('fmt_underline'), onPressed: () => f('++')),
+                  ContextMenuButtonItem(label: ctx.tr('fmt_strike'), onPressed: () => f('~~')),
+                  ContextMenuButtonItem(label: ctx.tr('fmt_mono'), onPressed: () => f('`')),
+                  ContextMenuButtonItem(label: ctx.tr('fmt_spoiler'), onPressed: () => f('||')),
+                  ContextMenuButtonItem(label: ctx.tr('fmt_quote'), onPressed: () => f('> ', '')),
+                ]);
+              }
+              return AdaptiveTextSelectionToolbar.buttonItems(anchors: state.contextMenuAnchors, buttonItems: items);
+            },
             onChanged: (v) {
               final can = v.trim().isNotEmpty;
               if (can != _canSend) setState(() => _canSend = can);

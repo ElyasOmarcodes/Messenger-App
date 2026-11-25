@@ -286,6 +286,15 @@ class Strings {
     'online_now': {'ps': 'وصل', 'fa': 'آنلاین', 'en': 'online'},
     'tap_profile': {'ps': 'د معلوماتو لپاره کېکاږئ', 'fa': 'برای اطلاعات بزنید', 'en': 'tap for info'},
     // v0.6: saved messages, chat options
+    // v0.12: formatting, links, groups
+    'fmt_bold': {'ps': 'غټ', 'fa': 'پررنگ', 'en': 'Bold'},
+    'fmt_italic': {'ps': 'کوږ', 'fa': 'کج', 'en': 'Italic'},
+    'fmt_underline': {'ps': 'لاندې کرښه', 'fa': 'زیرخط', 'en': 'Underline'},
+    'fmt_strike': {'ps': 'پرې کرښه', 'fa': 'خط‌خورده', 'en': 'Strikethrough'},
+    'fmt_mono': {'ps': 'کوډ', 'fa': 'کد', 'en': 'Monospace'},
+    'fmt_spoiler': {'ps': 'پټ متن', 'fa': 'متن پنهان', 'en': 'Spoiler'},
+    'fmt_quote': {'ps': 'اقتباس', 'fa': 'نقل‌قول', 'en': 'Quote'},
+    'user_not_found': {'ps': 'دا کاروونکی ونه موندل شو', 'fa': 'این کاربر پیدا نشد', 'en': 'User not found'},
     // v0.10: end-to-end encryption
     'locked_message': {'ps': 'پټ پیغام (کیلي نشته)', 'fa': 'پیام رمزگذاری‌شده (کلید نیست)', 'en': 'Encrypted message (no key)'},
     'wrong_pin': {'ps': 'PIN سم نه دی', 'fa': 'PIN درست نیست', 'en': 'Wrong PIN'},

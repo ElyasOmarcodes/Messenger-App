@@ -14,6 +14,8 @@ import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../screens/stories.dart' show storyGradient;
 import '../services/media_cache.dart';
+import 'links.dart';
+import 'rich_message.dart';
 import '../services/messenger.dart';
 import 'effects.dart';
 import 'media_views.dart';
@@ -166,7 +168,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
       await app.react(widget.chat, m, result);
     } else if (result is MsgAction) {
       if (result == MsgAction.copy) {
-        await Clipboard.setData(ClipboardData(text: m.body));
+        await Clipboard.setData(ClipboardData(text: RichMessageText.strip(m.body)));
         if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.tr('copied'))));
       } else {
         widget.onAction?.call(m, result);
@@ -293,10 +295,12 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
             crossAxisAlignment: WrapCrossAlignment.end,
             spacing: 10,
             children: [
-              Text(
-                m.body,
+              RichMessageText(
+                text: m.body,
                 textDirection: textDirOf(m.body, Directionality.of(context)),
                 style: TextStyle(fontSize: 16, height: 1.4, color: fg),
+                linkColor: out ? (dark ? const Color(0xFF9FD0FF) : const Color(0xFF1F6FC5)) : (dark ? const Color(0xFF6AB7FF) : Brand.lapis),
+                onLink: interactive ? (l) => openLink(context, l) : null,
               ),
               // with reactions, the time moves down beside them (it always ends the bubble)
               if (reacts.isEmpty || mediaOnly) Padding(padding: const EdgeInsets.only(top: 3), child: time),
