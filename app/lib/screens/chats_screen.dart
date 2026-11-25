@@ -312,15 +312,17 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
               final storiesNow = _storiesH * (1 - t);
               final hide = _hide.value;
               final height = topInset + _toolbarH + storiesNow + _chipsH - hide;
+              // iOS 27 glass once chats slide under it (light blur, cheap);
+              // solid page colour at rest or with glass off
+              final frosted = app.glass && o > 0.5;
               return ClipRect(
-                // solid page colour, no live blur: the biggest cost while scrolling
                 child: BackdropFilter(
-                  enabled: false,
+                  enabled: frosted,
                   filter: Glass.filter,
                   child: Container(
                     height: height,
                     decoration: BoxDecoration(
-                      color: glass,
+                      color: frosted ? glass.withValues(alpha: 0.80) : glass,
                       border: Border(
                         bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: hide >= _searchH ? 1 : 0.6), width: 0.6),
                       ),

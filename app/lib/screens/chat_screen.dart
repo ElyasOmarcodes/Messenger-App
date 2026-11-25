@@ -592,6 +592,39 @@ class _ChatScreenState extends State<ChatScreen> {
     },
   );
 
+  Widget _chatMenu(AppController app, Chat chat, Widget menuChild) => PopupMenuButton<String>(
+    onOpened: () => FocusManager.instance.primaryFocus?.unfocus(),
+    tooltip: context.tr('more'),
+    padding: EdgeInsets.zero,
+    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+    child: menuChild,
+    onSelected: (v) async {
+      switch (v) {
+        case 'info':
+          _openInfo(app, chat);
+        case 'add':
+          _addMember(chat);
+        case 'mute':
+          await app.toggleMute(chat);
+          _toast(chat.muted ? 'muted_toast' : 'unmuted_toast');
+        case 'clear':
+          await clearHistoryFlow(context, chat);
+        case 'leave':
+          final nav = Navigator.of(context);
+          if (await deleteChatFlow(context, chat) && !widget.embedded) nav.pop();
+      }
+    },
+    itemBuilder: (ctx) => [
+      if (!chat.isSaved) _menuItem(ctx, 'info', Icons.info_rounded, 'info'),
+      if (chat.isGroup) _menuItem(ctx, 'add', Icons.person_add_alt_1_rounded, 'add_member'),
+      if (!chat.isSaved)
+        _menuItem(ctx, 'mute', chat.muted ? Icons.notifications_active_rounded : Icons.notifications_off_rounded, chat.muted ? 'unmute_chat' : 'mute_chat'),
+      _menuItem(ctx, 'clear', Icons.cleaning_services_rounded, 'clear_history'),
+      if (!chat.isSaved)
+        _menuItem(ctx, 'leave', chat.isGroup ? Icons.logout_rounded : Icons.delete_rounded, chat.isGroup ? 'leave_chat' : 'delete_chat', danger: true),
+    ],
+  );
+
   void _openInfo(AppController app, Chat chat) {
     if (chat.isSaved) return;
     final peer = chat.isGroup ? null : chat.peer(app.myId ?? '');
@@ -678,87 +711,58 @@ class _ChatScreenState extends State<ChatScreen> {
           elevation: 0,
           scrolledUnderElevation: 0,
           titleSpacing: widget.embedded ? 16 : 0,
-          title: InkWell(
-            borderRadius: BorderRadius.circular(12),
-            onTap: () => _openInfo(app, chat),
-            child: Row(
-              children: [
-                ChatAvatar(chat: chat, size: 40),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+          title: LiquidGlass(
+            radius: 23,
+            child: InkWell(
+              borderRadius: BorderRadius.circular(23),
+              onTap: () => _openInfo(app, chat),
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(3, 3, 14, 3),
+                child: Row(
+                  children: [
+                    ChatAvatar(chat: chat, size: 40),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                          ),
+                          if (!chat.isSaved)
+                            Text(
+                              _subtitle(app, chat),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: cs.onSurfaceVariant),
+                            ),
+                        ],
                       ),
-                      if (!chat.isSaved)
-                        Text(
-                          _subtitle(app, chat),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: cs.onSurfaceVariant),
-                        ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
-              ],
+              ),
             ),
           ),
           actions: [
-            if (!chat.isGroup && !chat.isSaved) ...[
-              RoundBarButton(icon: Icons.videocam_rounded, tooltip: context.tr('video_call'), onTap: () => _call(chat, true)),
-              const SizedBox(width: 8),
-              RoundBarButton(icon: Icons.call_rounded, tooltip: context.tr('voice_call'), onTap: () => _call(chat, false)),
-              const SizedBox(width: 8),
-            ],
-            PopupMenuButton<String>(
-              onOpened: () => FocusManager.instance.primaryFocus?.unfocus(),
-              tooltip: context.tr('more'),
-              padding: EdgeInsets.zero,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              // the circle itself has no tap: the menu button handles it
-              child: const IgnorePointer(child: RoundBarButton(icon: Icons.more_vert_rounded)),
-              onSelected: (v) async {
-                switch (v) {
-                  case 'info':
-                    _openInfo(app, chat);
-                  case 'add':
-                    _addMember(chat);
-                  case 'mute':
-                    await app.toggleMute(chat);
-                    _toast(chat.muted ? 'muted_toast' : 'unmuted_toast');
-                  case 'clear':
-                    await clearHistoryFlow(context, chat);
-                  case 'leave':
-                    final nav = Navigator.of(context);
-                    if (await deleteChatFlow(context, chat) && !widget.embedded) nav.pop();
-                }
-              },
-              itemBuilder: (ctx) => [
-                if (!chat.isSaved) _menuItem(ctx, 'info', Icons.info_rounded, 'info'),
-                if (chat.isGroup) _menuItem(ctx, 'add', Icons.person_add_alt_1_rounded, 'add_member'),
-                if (!chat.isSaved)
-                  _menuItem(
-                    ctx,
-                    'mute',
-                    chat.muted ? Icons.notifications_active_rounded : Icons.notifications_off_rounded,
-                    chat.muted ? 'unmute_chat' : 'mute_chat',
-                  ),
-                _menuItem(ctx, 'clear', Icons.cleaning_services_rounded, 'clear_history'),
-                if (!chat.isSaved)
-                  _menuItem(
-                    ctx,
-                    'leave',
-                    chat.isGroup ? Icons.logout_rounded : Icons.delete_rounded,
-                    chat.isGroup ? 'leave_chat' : 'delete_chat',
-                    danger: true,
-                  ),
-              ],
-            ),
+            // Telegram: call, video and more share one glass capsule
+            if (!chat.isGroup && !chat.isSaved)
+              LiquidGlass(
+                radius: 21,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(tooltip: context.tr('voice_call'), onPressed: () => _call(chat, false), icon: const Icon(Icons.call_rounded)),
+                    IconButton(tooltip: context.tr('video_call'), onPressed: () => _call(chat, true), icon: const Icon(Icons.videocam_rounded)),
+                    _chatMenu(app, chat, const SizedBox(width: 40, height: 42, child: Icon(Icons.more_vert_rounded))),
+                  ],
+                ),
+              )
+            else
+              _chatMenu(app, chat, const IgnorePointer(child: RoundBarButton(icon: Icons.more_vert_rounded))),
             const SizedBox(width: 10),
           ],
         ),
@@ -910,11 +914,8 @@ class _ChatScreenState extends State<ChatScreen> {
       return ValueListenableBuilder<String?>(
         valueListenable: _flash,
         child: bubble,
-        builder: (_, f, child) => AnimatedContainer(
-          duration: const Duration(milliseconds: 350),
-          color: f == m.id ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.18) : Colors.transparent,
-          child: child,
-        ),
+        // only the message jumped to gets a glow; the rest stay plain (cheap)
+        builder: (_, f, child) => f == m.id ? ColoredBox(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.18), child: child) : child!,
       );
     }
 
@@ -1103,22 +1104,25 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _composer(Chat chat) {
     final cs = Theme.of(context).colorScheme;
     final app = AppScope.of(context);
-    final field = dark(context) ? Brand.nightRaised : Colors.white;
     // a group where only admins may write (Telegram shows a note instead)
     if (!chat.can(app.myId ?? '', 'send') && chat.members.isNotEmpty) {
       return SafeArea(
         top: false,
-        child: Container(
-          margin: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          decoration: BoxDecoration(color: field, borderRadius: BorderRadius.circular(24)),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.lock_rounded, size: 18, color: cs.onSurfaceVariant),
-              const SizedBox(width: 8),
-              Flexible(child: Text(context.tr('only_admins_send'), style: TextStyle(color: cs.onSurfaceVariant))),
-            ],
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: LiquidGlass(
+            radius: 24,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.lock_rounded, size: 18, color: cs.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(context.tr('only_admins_send'), style: TextStyle(color: cs.onSurfaceVariant)),
+                ),
+              ],
+            ),
           ),
         ),
       );
@@ -1140,14 +1144,9 @@ class _ChatScreenState extends State<ChatScreen> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Expanded(
-                  child: Container(
-                    constraints: const BoxConstraints(minHeight: 48),
-                    decoration: BoxDecoration(
-                      color: field,
-                      borderRadius: BorderRadius.circular(24),
-                      boxShadow: const [BoxShadow(color: Color(0x1A000000), blurRadius: 6, offset: Offset(0, 1))],
-                    ),
-                    child: _recording ? _recordingStrip(chat) : _textRow(chat, cs),
+                  child: LiquidGlass(
+                    radius: 24,
+                    child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 48), child: _recording ? _recordingStrip(chat) : _textRow(chat, cs)),
                   ),
                 ),
                 const SizedBox(width: 6),

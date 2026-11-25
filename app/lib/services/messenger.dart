@@ -600,7 +600,13 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
             'for_pub': m['public_key'],
           },
       ];
-      await _sb.from('chat_keys').upsert(rows).timeout(_net);
+      try {
+        await _sb.rpc('put_chat_keys', params: {'rows': rows}).timeout(_net);
+      } on PostgrestException catch (e) {
+        if (e.code != 'PGRST202') rethrow;
+        // a server before v10: new copies only (old ones cannot be replaced there)
+        await _sb.from('chat_keys').upsert(rows, ignoreDuplicates: true).timeout(_net);
+      }
     }
     _sendKeys[chatId] = (id: latest, key: key, at: DateTime.now());
     return (id: latest, key: key);

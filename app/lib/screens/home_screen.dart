@@ -255,31 +255,11 @@ class PillNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final page = Theme.of(context).scaffoldBackgroundColor;
-    final glass = AppScope.of(context).glass;
-    // Telegram's bar: a dark slate (or white) capsule, slightly see-through
-    // with blur behind, a hairline rim, a light top reflection.
-    final base = dark ? const Color(0xFF1E2934) : Colors.white;
-    final fill = base.withValues(alpha: glass ? (dark ? 0.66 : 0.62) : 1);
     final barW = items.length * itemWidth + 8;
     Widget capsule = Container(
       width: barW,
       height: height,
       padding: const EdgeInsets.all(4),
-      decoration: BoxDecoration(
-        color: fill,
-        borderRadius: BorderRadius.circular(height / 2),
-        border: Border.all(color: dark ? const Color(0x22FFFFFF) : const Color(0x14000000), width: 0.8),
-        gradient: glass
-            ? LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color.alphaBlend(Colors.white.withValues(alpha: dark ? 0.05 : 0.25), fill),
-                  fill,
-                ],
-              )
-            : null,
-      ),
       child: Stack(
         children: [
           // sliding lens under the selected tab
@@ -292,24 +272,6 @@ class PillNavBar extends StatelessWidget {
             width: itemWidth,
             child: DecoratedBox(
               decoration: BoxDecoration(color: dark ? const Color(0xFF253A50) : const Color(0xFFE6F0FB), borderRadius: BorderRadius.circular((height - 8) / 2)),
-            ),
-          ),
-          // top reflection (specular rim)
-          Positioned(
-            left: 20,
-            right: 20,
-            top: -3,
-            height: 1,
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.white.withValues(alpha: 0),
-                    Colors.white.withValues(alpha: dark ? 0.22 : 0.9),
-                    Colors.white.withValues(alpha: 0),
-                  ],
-                ),
-              ),
             ),
           ),
           Row(
@@ -325,12 +287,8 @@ class PillNavBar extends StatelessWidget {
         ],
       ),
     );
-    if (glass) {
-      capsule = ClipRRect(
-        borderRadius: BorderRadius.circular(height / 2),
-        child: Glass.backdrop(enabled: true, child: capsule),
-      );
-    }
+    // iOS 27 liquid glass capsule (solid when glass is off)
+    capsule = LiquidGlass(radius: height / 2, child: capsule);
     return Stack(
       clipBehavior: Clip.none,
       children: [

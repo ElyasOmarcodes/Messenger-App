@@ -7,7 +7,7 @@ class Brand {
 
   static const String nameLatin = 'Paigham';
   static const String nameNative = 'پیغام';
-  static const String version = '0.11.0';
+  static const String version = '0.12.0';
 
   /// The app's own font. Turned off for a test: null = the phone's system
   /// font (plain text). To bring Vazirmatn back, set this to [vazirmatn].

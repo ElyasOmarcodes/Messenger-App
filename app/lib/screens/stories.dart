@@ -847,8 +847,10 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
       );
     }
 
-    return Material(
-      color: Colors.black,
+    final bottomInset = MediaQuery.paddingOf(context).bottom + MediaQuery.viewInsetsOf(context).bottom;
+    // Telegram: the story is a rounded card on black; the reply bar sits under it.
+    final card = ClipRRect(
+      borderRadius: BorderRadius.circular(14),
       child: Stack(
         children: [
           Positioned.fill(child: content),
@@ -904,7 +906,7 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
                 opacity: _holding ? 0 : 1,
                 duration: const Duration(milliseconds: 180),
                 child: Container(
-                  padding: EdgeInsets.fromLTRB(8, top + 8, 4, 18),
+                  padding: const EdgeInsets.fromLTRB(8, 8, 4, 18),
                   decoration: const BoxDecoration(
                     gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x88000000), Color(0x00000000)]),
                   ),
@@ -971,12 +973,6 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
                               },
                               icon: const Icon(Icons.add_circle_outline_rounded, color: Colors.white),
                             ),
-                          if (_mine)
-                            IconButton(
-                              tooltip: s.get('delete_story'),
-                              onPressed: _delete,
-                              icon: const Icon(Icons.delete_outline_rounded, color: Colors.white),
-                            ),
                           IconButton(
                             tooltip: s.get('close'),
                             onPressed: () => Navigator.of(context).maybePop(),
@@ -990,112 +986,142 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
               ),
             ),
           ),
-          // Bottom: caption + reply or views.
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 0,
-            child: AnimatedOpacity(
-              opacity: _holding ? 0 : 1,
-              duration: const Duration(milliseconds: 180),
-              child: Container(
-                decoration: const BoxDecoration(
-                  gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Color(0x99000000), Color(0x00000000)]),
+          // caption at the foot of the card
+          if (st.kind == 'image' && st.body.isNotEmpty)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: IgnorePointer(
+                child: AnimatedOpacity(
+                  opacity: _holding ? 0 : 1,
+                  duration: const Duration(milliseconds: 180),
+                  child: Container(
+                    padding: const EdgeInsets.fromLTRB(16, 36, 16, 16),
+                    decoration: const BoxDecoration(
+                      gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Color(0xAA000000), Color(0x00000000)]),
+                    ),
+                    child: Text(
+                      st.body,
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
+                    ),
+                  ),
                 ),
-                padding: EdgeInsets.fromLTRB(12, 30, 12, 12 + MediaQuery.paddingOf(context).bottom + MediaQuery.viewInsetsOf(context).bottom),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (st.kind == 'image' && st.body.isNotEmpty)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
-                        child: Text(
-                          st.body,
-                          textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
-                        ),
-                      ),
-                    if (_mine)
-                      TextButton.icon(
-                        onPressed: _showViewers,
-                        style: TextButton.styleFrom(foregroundColor: Colors.white, backgroundColor: Colors.white12, shape: const StadiumBorder()),
-                        icon: const Icon(Icons.visibility_outlined),
-                        label: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text('${context.digits(st.views ?? 0)} ${s.get('views')}'),
-                            if ((st.likes ?? 0) > 0) ...[
-                              const SizedBox(width: 10),
-                              const Icon(Icons.favorite_rounded, size: 16, color: Color(0xFFFF4D67)),
-                              const SizedBox(width: 3),
-                              Text(context.digits(st.likes!)),
-                            ],
-                          ],
-                        ),
-                      )
-                    else
-                      Row(
+              ),
+            ),
+        ],
+      ),
+    );
+
+    final bar = AnimatedOpacity(
+      opacity: _holding ? 0 : 1,
+      duration: const Duration(milliseconds: 180),
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(8, 8, 8, 8 + bottomInset),
+        child: _mine
+            ? Row(
+                children: [
+                  // my story: who saw it, and hearts
+                  TextButton.icon(
+                    onPressed: _showViewers,
+                    style: TextButton.styleFrom(foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10)),
+                    icon: const Icon(Icons.visibility_rounded, size: 20),
+                    label: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(context.digits(st.views ?? 0), style: const TextStyle(fontWeight: FontWeight.w700)),
+                        if ((st.likes ?? 0) > 0) ...[
+                          const SizedBox(width: 12),
+                          const Icon(Icons.favorite_rounded, size: 18, color: Color(0xFFFF4D67)),
+                          const SizedBox(width: 4),
+                          Text(context.digits(st.likes!), style: const TextStyle(fontWeight: FontWeight.w700)),
+                        ],
+                      ],
+                    ),
+                  ),
+                  const Spacer(),
+                  IconButton(
+                    tooltip: s.get('delete_story'),
+                    onPressed: _delete,
+                    icon: const Icon(Icons.delete_rounded, color: Colors.white),
+                  ),
+                ],
+              )
+            : Row(
+                children: [
+                  Expanded(
+                    child: Container(
+                      height: 46,
+                      decoration: BoxDecoration(color: const Color(0xFF1F1F22), borderRadius: BorderRadius.circular(23)),
+                      padding: const EdgeInsetsDirectional.only(start: 16, end: 6),
+                      child: Row(
                         children: [
                           Expanded(
-                            child: Container(
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(24),
-                                border: Border.all(color: Colors.white54),
-                              ),
-                              padding: const EdgeInsets.symmetric(horizontal: 16),
-                              child: TextField(
-                                controller: _reply,
-                                focusNode: _replyFocus,
-                                style: const TextStyle(color: Colors.white),
-                                cursorColor: Colors.white,
-                                onSubmitted: (_) => _sendReply(),
-                                decoration: InputDecoration(
-                                  border: InputBorder.none,
-                                  enabledBorder: InputBorder.none,
-                                  focusedBorder: InputBorder.none,
-                                  hintText: s.get('reply_story'),
-                                  hintStyle: const TextStyle(color: Colors.white70),
-                                ),
+                            child: TextField(
+                              controller: _reply,
+                              focusNode: _replyFocus,
+                              style: const TextStyle(color: Colors.white, fontSize: 15.5),
+                              cursorColor: Colors.white,
+                              onSubmitted: (_) => _sendReply(),
+                              decoration: InputDecoration(
+                                isCollapsed: true,
+                                border: InputBorder.none,
+                                enabledBorder: InputBorder.none,
+                                focusedBorder: InputBorder.none,
+                                hintText: s.get('reply_story'),
+                                hintStyle: const TextStyle(color: Color(0x99FFFFFF)),
                               ),
                             ),
                           ),
-                          const SizedBox(width: 8),
-                          // empty field: heart (like Telegram); typing: send
+                          // typing: a round send button inside the field
                           ValueListenableBuilder<TextEditingValue>(
                             valueListenable: _reply,
                             builder: (_, v, _) => v.text.trim().isEmpty
-                                ? IconButton(
-                                    tooltip: s.get('like_story'),
-                                    onPressed: _toggleLike,
-                                    style: IconButton.styleFrom(backgroundColor: Colors.white12, minimumSize: const Size(48, 48)),
-                                    icon: AnimatedSwitcher(
-                                      duration: const Duration(milliseconds: 220),
-                                      transitionBuilder: (c, a) => ScaleTransition(
-                                        scale: CurvedAnimation(parent: a, curve: Curves.elasticOut),
-                                        child: c,
-                                      ),
-                                      child: Icon(
-                                        st.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
-                                        key: ValueKey(st.liked),
-                                        color: st.liked ? const Color(0xFFFF4D67) : Colors.white,
-                                        size: 27,
-                                      ),
-                                    ),
-                                  )
+                                ? const SizedBox(width: 4)
                                 : IconButton(
                                     tooltip: s.get('send'),
                                     onPressed: _sendReply,
-                                    style: IconButton.styleFrom(backgroundColor: Brand.blue, minimumSize: const Size(48, 48)),
-                                    icon: const Icon(Icons.send_rounded, color: Colors.white),
+                                    style: IconButton.styleFrom(backgroundColor: Brand.blue, minimumSize: const Size(36, 36), padding: EdgeInsets.zero),
+                                    icon: const Icon(Icons.arrow_upward_rounded, color: Colors.white, size: 20),
                                   ),
                           ),
                         ],
                       ),
-                  ],
-                ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: s.get('like_story'),
+                    onPressed: _toggleLike,
+                    icon: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 220),
+                      transitionBuilder: (c, a) => ScaleTransition(
+                        scale: CurvedAnimation(parent: a, curve: Curves.elasticOut),
+                        child: c,
+                      ),
+                      child: Icon(
+                        st.liked ? Icons.favorite_rounded : Icons.favorite_border_rounded,
+                        key: ValueKey(st.liked),
+                        color: st.liked ? const Color(0xFFFF4D67) : Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
+      ),
+    );
+
+    return Material(
+      color: Colors.black,
+      child: Column(
+        children: [
+          SizedBox(height: top + 4),
+          Expanded(
+            child: Padding(padding: const EdgeInsets.symmetric(horizontal: 2), child: card),
           ),
+          bar,
         ],
       ),
     );

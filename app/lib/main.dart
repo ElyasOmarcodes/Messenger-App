@@ -16,6 +16,7 @@ import 'screens/call_screen.dart';
 import 'services/calls.dart';
 import 'services/messenger.dart';
 import 'services/notifier.dart';
+import 'widgets/glass.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -56,7 +57,8 @@ class PaighamApp extends StatelessWidget {
                 locale: Locale(lang.code),
                 supportedLocales: [for (final l in AppLang.values) Locale(l.code)],
                 localizationsDelegates: const [GlobalMaterialLocalizations.delegate, GlobalWidgetsLocalizations.delegate, _CupertinoFallbackDelegate()],
-                builder: (context, child) => BackdropGroup(
+                builder: (context, child) => GlassScope(
+                  enabled: controller.glass,
                   child: LangScope(
                     lang: lang,
                     // The call screen floats above every page, including open chats.

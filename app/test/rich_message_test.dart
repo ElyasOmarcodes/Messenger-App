@@ -38,6 +38,6 @@ void main() {
     });
     expect(flat.firstWhere((s) => s.text == 'bold').style!.fontWeight, FontWeight.w700);
     expect(flat.firstWhere((s) => s.text == 'code').style!.fontFamily, 'monospace');
-    expect(flat.firstWhere((s) => s.text == '@someone').style!.color, Colors.blue);
+    expect(flat.firstWhere((s) => s.text == '\u2066@someone\u2069').style!.color, Colors.blue);
   });
 }

@@ -317,3 +317,21 @@ begin
         or (public.can(x.chat_id, 'delete') and exists (select 1 from chats c where c.id = x.chat_id and c.is_group)));
 end $$;
 revoke execute on function public.delete_message from anon;
+
+-- Hand out chat-key copies, replacing a member's copy made for an old key
+-- (a plain upsert is refused: the old row belongs to someone else).
+create or replace function public.put_chat_keys(rows jsonb) returns void
+language plpgsql security definer set search_path = public as $$
+declare r jsonb;
+begin
+  for r in select * from jsonb_array_elements(rows) loop
+    if not public.is_member((r->>'chat_id')::uuid) or not public.is_member_of((r->>'chat_id')::uuid, (r->>'user_id')::uuid) then
+      raise exception 'not allowed';
+    end if;
+    insert into chat_keys (chat_id, user_id, key_id, wrapped, wrapped_by, for_pub)
+    values ((r->>'chat_id')::uuid, (r->>'user_id')::uuid, (r->>'key_id')::int, r->>'wrapped', auth.uid(), r->>'for_pub')
+    on conflict (chat_id, user_id, key_id) do update
+      set wrapped = excluded.wrapped, wrapped_by = excluded.wrapped_by, for_pub = excluded.for_pub, created_at = now();
+  end loop;
+end $$;
+revoke execute on function public.put_chat_keys from anon;

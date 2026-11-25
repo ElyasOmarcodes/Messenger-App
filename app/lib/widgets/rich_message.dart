@@ -241,7 +241,8 @@ class _RichMessageTextState extends State<RichMessageText> {
       if (rest.isNotEmpty) t = t.substring(0, t.length - rest.length);
       out.add(
         TextSpan(
-          text: t,
+          // isolated left-to-right, so "@name" and links keep their order in Pashto text
+          text: '\u2066$t\u2069',
           style: (_style(f) ?? const TextStyle()).copyWith(
             color: widget.linkColor,
             decoration: m[1] != null ? TextDecoration.underline : null,
