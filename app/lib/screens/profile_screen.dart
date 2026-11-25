@@ -8,6 +8,7 @@ import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
+import '../widgets/media_views.dart';
 import 'call_screen.dart';
 import 'chat_screen.dart';
 import 'new_chat_sheet.dart';
@@ -374,15 +375,10 @@ class _SharedItemsState extends State<_SharedItems> {
         mainAxisSpacing: 3,
         crossAxisSpacing: 3,
         children: [
-          for (final m in msgs)
-            FutureBuilder<String?>(
-              future: app.fileUrl(m.filePath!),
-              builder: (_, s) => s.data == null
-                  ? Container(color: Colors.black12)
-                  : GestureDetector(
-                      onTap: () => launchUrl(Uri.parse(s.data!), mode: LaunchMode.externalApplication),
-                      child: Image.network(s.data!, fit: BoxFit.cover),
-                    ),
+          for (var k = 0; k < msgs.length; k++)
+            GestureDetector(
+              onTap: () => GalleryViewer.open(context, [for (final x in msgs) (path: x.filePath, bytes: null)], k),
+              child: Hero(tag: photoHeroTag((path: msgs[k].filePath, bytes: null)), child: AttachmentImage(path: msgs[k].filePath)),
             ),
         ],
       );

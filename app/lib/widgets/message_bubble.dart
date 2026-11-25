@@ -18,6 +18,35 @@ final _ltrChars = RegExp(r'[A-Za-z\u00C0-\u024F]');
 
 /// Direction from the first strong character, so English bubbles read
 /// left-to-right inside a Pashto interface and vice versa.
+bool _isEmojiRune(int r) =>
+    (r >= 0x1F000 && r <= 0x1FAFF) ||
+    (r >= 0x2600 && r <= 0x27BF) ||
+    (r >= 0x2300 && r <= 0x23FF) ||
+    (r >= 0x2B00 && r <= 0x2BFF) ||
+    (r >= 0x2190 && r <= 0x21FF) ||
+    r == 0x203C ||
+    r == 0x2049 ||
+    r == 0x2122 ||
+    r == 0x2139 ||
+    r == 0x3030 ||
+    r == 0x303D ||
+    r == 0x3297 ||
+    r == 0x3299 ||
+    r == 0xA9 ||
+    r == 0xAE;
+
+/// 1–3 when the text is only that many emoji (then it is drawn big), else 0.
+int bigEmojiCount(String text) {
+  final t = text.trim();
+  if (t.isEmpty || t.length > 40) return 0;
+  final chars = t.characters.where((c) => c.trim().isNotEmpty).toList();
+  if (chars.isEmpty || chars.length > 3) return 0;
+  for (final c in chars) {
+    if (!_isEmojiRune(c.runes.first)) return 0;
+  }
+  return chars.length;
+}
+
 TextDirection textDirOf(String s, TextDirection fallback) {
   for (final ch in s.characters) {
     if (_rtlChars.hasMatch(ch)) return TextDirection.rtl;
@@ -106,7 +135,12 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
           child: child,
         ),
       ),
-      pageBuilder: (ctx, _, _) => _ContextMenu(chat: widget.chat, message: m, mine: mine, preview: _bubble(ctx, interactive: false)),
+      pageBuilder: (ctx, _, _) => _ContextMenu(
+        chat: widget.chat,
+        message: m,
+        mine: mine,
+        preview: HeroMode(enabled: false, child: _bubble(ctx, interactive: false)),
+      ),
     );
     if (!mounted || result == null) return;
     if (result is String) {
@@ -202,7 +236,10 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  AttachmentImage(path: m.filePath, bytes: m.localBytes),
+                  Hero(
+                    tag: photoHeroTag((path: m.filePath, bytes: m.localBytes)),
+                    child: AttachmentImage(path: m.filePath, bytes: m.localBytes),
+                  ),
                   if (m.pending) const Center(child: CircularProgressIndicator(color: Colors.white)),
                 ],
               ),
@@ -239,8 +276,9 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
             ],
           );
 
-    final body = Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+    final shrink = textPart == null && !mediaOnly;
+    Widget body = Column(
+      crossAxisAlignment: shrink ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         if (widget.senderName != null && !out)
@@ -284,10 +322,46 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
       ],
     );
 
+    // Voice, file, contact and location cards: the bubble hugs the card.
+    if (shrink) body = IntrinsicWidth(child: body);
+
+    // A few emoji alone: shown big, without a bubble (like Telegram).
+    final emojiCount = m.kind == MsgKind.text && m.replyTo == null && !m.deleted ? bigEmojiCount(m.body) : 0;
+    if (emojiCount > 0) {
+      return GestureDetector(
+        onTap: !interactive ? null : (m.failed ? () => app.retry(widget.chat, m) : (m.pending ? null : _openMenu)),
+        onLongPress: !interactive || m.pending ? null : _openMenu,
+        onSecondaryTap: !interactive || m.pending ? null : _openMenu,
+        child: Padding(
+          padding: EdgeInsets.only(top: gap + 2, left: 6, right: 6),
+          child: Column(
+            crossAxisAlignment: out ? CrossAxisAlignment.end : CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(m.body, style: TextStyle(fontSize: const [0.0, 52.0, 44.0, 38.0][emojiCount], height: 1.15)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                decoration: BoxDecoration(color: dark ? const Color(0x66000000) : const Color(0x33000000), borderRadius: BorderRadius.circular(10)),
+                child: DefaultTextStyle.merge(
+                  style: const TextStyle(color: Colors.white),
+                  child: IconTheme.merge(
+                    data: const IconThemeData(color: Colors.white),
+                    child: time,
+                  ),
+                ),
+              ),
+              if (reacts.isNotEmpty) _Reactions(chat: widget.chat, message: m, reactions: reacts, interactive: interactive),
+            ],
+          ),
+        ),
+      );
+    }
+
     return GestureDetector(
+      // Like Telegram on phones: one tap opens the message menu.
+      onTap: !interactive ? null : (m.failed ? () => app.retry(widget.chat, m) : (m.pending ? null : _openMenu)),
       onLongPress: !interactive || m.pending ? null : _openMenu,
       onSecondaryTap: !interactive || m.pending ? null : _openMenu,
-      onTap: interactive && m.failed ? () => app.retry(widget.chat, m) : null,
       child: Container(
         margin: EdgeInsets.only(top: gap),
         constraints: BoxConstraints(maxWidth: (width * 0.8).clamp(0, 480)),

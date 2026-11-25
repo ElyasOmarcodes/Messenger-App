@@ -283,6 +283,7 @@ class Strings {
     'online_now': {'ps': 'وصل', 'fa': 'آنلاین', 'en': 'online'},
     'tap_profile': {'ps': 'د معلوماتو لپاره کېکاږئ', 'fa': 'برای اطلاعات بزنید', 'en': 'tap for info'},
     // v0.6: saved messages, chat options
+    'download': {'ps': 'ښکته کول', 'fa': 'دانلود', 'en': 'Download'},
     'saved_messages': {'ps': 'خوندي پیغامونه', 'fa': 'پیام‌های ذخیره‌شده', 'en': 'Saved Messages'},
     'saved_short': {'ps': 'خوندي', 'fa': 'ذخیره‌ها', 'en': 'Saved'},
     'saved_hint': {'ps': 'دلته پیغامونه، انځورونه او فایلونه ځانته خوندي کړئ. یوازې تاسو یې لیدلی شئ.', 'fa': 'پیام‌ها، عکس‌ها و فایل‌ها را اینجا برای خود نگه دارید. فقط شما آن‌ها را می‌بینید.', 'en': 'Keep messages, photos and files for yourself here. Only you can see them.'},

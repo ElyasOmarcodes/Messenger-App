@@ -228,76 +228,121 @@ class PillNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    final glass = dark ? const Color(0xFF1C2733) : const Color(0xFFF9FAFB);
-    return SafeArea(
-      top: false,
-      child: Center(
-        heightFactor: 1,
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+    final page = Theme.of(context).scaffoldBackgroundColor;
+    // Liquid glass: see-through tint, light rim on top, soft shadow.
+    final tint = dark ? const Color(0xFF1B2733) : Colors.white;
+    return Stack(
+      clipBehavior: Clip.none,
+      children: [
+        // The list fades out gradually toward the bottom edge behind the bar.
+        Positioned(
+          left: 0,
+          right: 0,
+          top: -56,
+          bottom: 0,
+          child: IgnorePointer(
             child: DecoratedBox(
               decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(32),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.black.withValues(alpha: dark ? 0.35 : 0.12),
-                    blurRadius: 26,
-                    offset: const Offset(0, 8),
-                  ),
-                ],
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [page.withValues(alpha: 0), page.withValues(alpha: 0.55), page.withValues(alpha: 0.9), page],
+                  stops: const [0, 0.35, 0.7, 1],
+                ),
               ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(32),
-                child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
-                  child: Container(
-                    height: 64,
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(32),
-                      gradient: LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [
-                          glass.withValues(alpha: dark ? 0.80 : 0.78),
-                          glass.withValues(alpha: dark ? 0.88 : 0.90),
-                        ],
+            ),
+          ),
+        ),
+        SafeArea(
+          top: false,
+          child: Center(
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 480),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(18, 0, 18, 8),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(32),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: dark ? 0.35 : 0.10),
+                        blurRadius: 24,
+                        offset: const Offset(0, 8),
                       ),
-                      border: Border.all(color: dark ? const Color(0x1FFFFFFF) : const Color(0x99FFFFFF), width: 0.8),
-                    ),
-                    child: LayoutBuilder(
-                      builder: (context, c) {
-                        final w = c.maxWidth / items.length;
-                        return Stack(
-                          children: [
-                            // Sliding selection pill.
-                            AnimatedPositionedDirectional(
-                              duration: const Duration(milliseconds: 420),
-                              curve: Curves.easeOutBack,
-                              start: index * w,
-                              top: 0,
-                              bottom: 0,
-                              width: w,
-                              child: Container(
-                                decoration: BoxDecoration(
-                                  color: dark ? const Color(0x1AFFFFFF) : const Color(0x0F000000),
-                                  borderRadius: BorderRadius.circular(28),
-                                ),
-                              ),
-                            ),
-                            Row(
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(32),
+                    child: BackdropFilter(
+                      filter: ImageFilter.blur(sigmaX: 16, sigmaY: 16),
+                      child: Container(
+                        height: 62,
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(32),
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              tint.withValues(alpha: dark ? 0.62 : 0.58),
+                              tint.withValues(alpha: dark ? 0.70 : 0.68),
+                            ],
+                          ),
+                          border: Border.all(color: Colors.white.withValues(alpha: dark ? 0.14 : 0.75), width: 1),
+                        ),
+                        child: LayoutBuilder(
+                          builder: (context, c) {
+                            final w = c.maxWidth / items.length;
+                            return Stack(
                               children: [
-                                for (var i = 0; i < items.length; i++)
-                                  Expanded(
-                                    child: _PillItem(item: items[i], selected: i == index, badge: badges[i] ?? 0, onTap: () => onTap(i)),
+                                // top light reflection
+                                Positioned(
+                                  left: 18,
+                                  right: 18,
+                                  top: 0,
+                                  height: 1.2,
+                                  child: DecoratedBox(
+                                    decoration: BoxDecoration(
+                                      gradient: LinearGradient(
+                                        colors: [
+                                          Colors.white.withValues(alpha: 0),
+                                          Colors.white.withValues(alpha: dark ? 0.35 : 0.95),
+                                          Colors.white.withValues(alpha: 0),
+                                        ],
+                                      ),
+                                    ),
                                   ),
+                                ),
+                                // Sliding glass lens under the selected tab.
+                                AnimatedPositionedDirectional(
+                                  duration: const Duration(milliseconds: 420),
+                                  curve: Curves.easeOutBack,
+                                  start: index * w,
+                                  top: 0,
+                                  bottom: 0,
+                                  width: w,
+                                  child: Container(
+                                    decoration: BoxDecoration(
+                                      color: dark ? Colors.white.withValues(alpha: 0.10) : Colors.black.withValues(alpha: 0.05),
+                                      borderRadius: BorderRadius.circular(28),
+                                      border: Border.all(color: Colors.white.withValues(alpha: dark ? 0.12 : 0.9), width: 0.8),
+                                    ),
+                                  ),
+                                ),
+                                Row(
+                                  children: [
+                                    for (var i = 0; i < items.length; i++)
+                                      Expanded(
+                                        child: _PillItem(item: items[i], selected: i == index, badge: badges[i] ?? 0, onTap: () => onTap(i)),
+                                      ),
+                                  ],
+                                ),
                               ],
-                            ),
-                          ],
-                        );
-                      },
+                            );
+                          },
+                        ),
+                      ),
                     ),
                   ),
                 ),
@@ -305,7 +350,7 @@ class PillNavBar extends StatelessWidget {
             ),
           ),
         ),
-      ),
+      ],
     );
   }
 }

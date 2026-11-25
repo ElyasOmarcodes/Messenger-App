@@ -5,54 +5,66 @@ import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Progressive blur: content behind fades into a soft blur, strongest at the
-// edge (bottom for the input bar, top for the header), like Telegram.
-// Several thin backdrop blurs are stacked; each covers a bit more of the
-// strip, so the blur grows smoothly instead of starting at a hard line.
+// Soft edge under the header / above the input bar, like Telegram: content
+// fades out gradually into the page colour and is softly blurred right behind
+// the bar. Only ONE light backdrop blur is used (cheap on phones); its edge
+// sits under an almost-opaque part of the fade, so no hard line is visible.
 // ─────────────────────────────────────────────────────────────────────────────
-class ProgressiveBlur extends StatelessWidget {
-  const ProgressiveBlur({super.key, required this.fromTop, this.sigma = 22, this.steps = 7, this.tint});
+class SoftEdge extends StatelessWidget {
+  const SoftEdge({super.key, required this.fromTop, required this.color, this.solid = 0, this.blur = true});
 
-  /// True: strongest at the top edge (header). False: strongest at the bottom.
+  /// True: the bar is at the top (fade goes down). False: bar at the bottom.
   final bool fromTop;
-  final double sigma;
-  final int steps;
-  final Color? tint;
+  final Color color;
+
+  /// Height (px) right behind the bar that is blurred and almost opaque.
+  final double solid;
+  final bool blur;
 
   @override
   Widget build(BuildContext context) {
-    final color = tint ?? Theme.of(context).scaffoldBackgroundColor;
     return IgnorePointer(
-      child: LayoutBuilder(builder: (context, c) {
-        final h = c.maxHeight;
-        return Stack(children: [
-          for (var i = 0; i < steps; i++)
-            Positioned(
-              left: 0,
-              right: 0,
-              top: fromTop ? 0 : h * i / steps,
-              bottom: fromTop ? h * i / steps : 0,
-              child: ClipRect(
-                child: BackdropFilter(
-                  filter: ui.ImageFilter.blur(sigmaX: sigma / steps, sigmaY: sigma / steps),
-                  child: const SizedBox.expand(),
+      child: LayoutBuilder(
+        builder: (context, c) {
+          final h = c.maxHeight;
+          final s = h <= 0 ? 0.0 : (solid / h).clamp(0.0, 0.95);
+          final begin = fromTop ? Alignment.topCenter : Alignment.bottomCenter;
+          final end = fromTop ? Alignment.bottomCenter : Alignment.topCenter;
+          return Stack(
+            children: [
+              if (blur && solid > 0)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: fromTop ? 0 : null,
+                  bottom: fromTop ? null : 0,
+                  height: solid,
+                  child: ClipRect(
+                    child: BackdropFilter(filter: ui.ImageFilter.blur(sigmaX: 10, sigmaY: 10), child: const SizedBox.expand()),
+                  ),
+                ),
+              Positioned.fill(
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: begin,
+                      end: end,
+                      colors: [
+                        color.withValues(alpha: 0.94),
+                        color.withValues(alpha: 0.82),
+                        color.withValues(alpha: 0.45),
+                        color.withValues(alpha: 0.12),
+                        color.withValues(alpha: 0),
+                      ],
+                      stops: [0, s, s + (1 - s) * 0.4, s + (1 - s) * 0.75, 1],
+                    ),
+                  ),
                 ),
               ),
-            ),
-          Positioned.fill(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: fromTop ? Alignment.bottomCenter : Alignment.topCenter,
-                  end: fromTop ? Alignment.topCenter : Alignment.bottomCenter,
-                  colors: [color.withValues(alpha: 0), color.withValues(alpha: 0.55), color.withValues(alpha: 0.82)],
-                  stops: const [0, 0.55, 1],
-                ),
-              ),
-            ),
-          ),
-        ]);
-      }),
+            ],
+          );
+        },
+      ),
     );
   }
 }
@@ -111,16 +123,18 @@ class BubblePainter extends CustomPainter {
     canvas.drawShadow(path, Colors.black, 0.6, false);
     canvas.drawPath(path, Paint()..color = color);
     if (border != null) {
-      canvas.drawPath(path, Paint()
-        ..color = border!
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 0.6);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..color = border!
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 0.6,
+      );
     }
   }
 
   @override
-  bool shouldRepaint(covariant BubblePainter o) =>
-      o.color != color || o.tailOnRight != tailOnRight || o.pos != pos || o.border != border;
+  bool shouldRepaint(covariant BubblePainter o) => o.color != color || o.tailOnRight != tailOnRight || o.pos != pos || o.border != border;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -167,14 +181,16 @@ class DissolvableState extends State<Dissolvable> with SingleTickerProviderState
           final o = (y * w + x) * 4;
           final a = bytes[o + 3];
           if (a < 40) continue;
-          ps.add(_Particle(
-            x: x.toDouble(),
-            y: y.toDouble(),
-            color: Color.fromARGB(a, bytes[o], bytes[o + 1], bytes[o + 2]),
-            delay: (x / w) * 0.45 + rnd.nextDouble() * 0.12,
-            dx: (rnd.nextDouble() * 1.4 - 0.3) * 40,
-            dy: -(rnd.nextDouble() * 50 + 10),
-          ));
+          ps.add(
+            _Particle(
+              x: x.toDouble(),
+              y: y.toDouble(),
+              color: Color.fromARGB(a, bytes[o], bytes[o + 1], bytes[o + 2]),
+              delay: (x / w) * 0.45 + rnd.nextDouble() * 0.12,
+              dx: (rnd.nextDouble() * 1.4 - 0.3) * 40,
+              dy: -(rnd.nextDouble() * 50 + 10),
+            ),
+          );
         }
       }
       img.dispose();
@@ -187,14 +203,20 @@ class DissolvableState extends State<Dissolvable> with SingleTickerProviderState
   @override
   Widget build(BuildContext context) {
     final ps = _particles;
+    // Normal case: just a repaint boundary (cheap, and lets the bubble be cached).
+    if (ps == null) return RepaintBoundary(key: _boundary, child: widget.child);
     return AnimatedSize(
       duration: const Duration(milliseconds: 260),
       curve: Curves.easeOut,
       child: _gone
           ? const SizedBox(width: double.infinity)
-          : Stack(clipBehavior: Clip.none, children: [
-              Opacity(opacity: ps == null ? 1 : 0, child: RepaintBoundary(key: _boundary, child: widget.child)),
-              if (ps != null)
+          : Stack(
+              clipBehavior: Clip.none,
+              children: [
+                Opacity(
+                  opacity: 0,
+                  child: RepaintBoundary(key: _boundary, child: widget.child),
+                ),
                 Positioned.fill(
                   child: IgnorePointer(
                     child: AnimatedBuilder(
@@ -203,7 +225,8 @@ class DissolvableState extends State<Dissolvable> with SingleTickerProviderState
                     ),
                   ),
                 ),
-            ]),
+              ],
+            ),
     );
   }
 }
@@ -239,4 +262,3 @@ class _DustPainter extends CustomPainter {
   @override
   bool shouldRepaint(covariant _DustPainter o) => o.t != t;
 }
-

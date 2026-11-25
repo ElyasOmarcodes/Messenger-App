@@ -29,6 +29,9 @@ class Avatar extends StatelessWidget {
           width: size,
           height: size,
           fit: BoxFit.cover,
+          // decode at the size shown (photos can be several MB)
+          cacheWidth: (size * MediaQuery.devicePixelRatioOf(context)).round(),
+          gaplessPlayback: true,
           errorBuilder: (_, _, _) => Avatar(seed: seed, label: label, size: size, group: group),
         ),
       );
@@ -39,16 +42,14 @@ class Avatar extends StatelessWidget {
       alignment: Alignment.center,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        gradient: LinearGradient(
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-          colors: [Color.lerp(c, Colors.white, 0.18)!, c],
-        ),
+        gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Color.lerp(c, Colors.white, 0.18)!, c]),
       ),
       child: group
           ? Icon(Icons.groups_rounded, color: Colors.white, size: size * 0.52)
-          : Text(_initials,
-              style: TextStyle(color: Colors.white, fontSize: size * 0.36, fontWeight: FontWeight.w700, height: 1.1)),
+          : Text(
+              _initials,
+              style: TextStyle(color: Colors.white, fontSize: size * 0.36, fontWeight: FontWeight.w700, height: 1.1),
+            ),
     );
   }
 }
@@ -60,14 +61,14 @@ class SavedAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: const BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Brand.blueBright, Brand.blue]),
-        ),
-        child: Icon(Icons.bookmark_rounded, color: Colors.white, size: size * 0.5),
-      );
+    width: size,
+    height: size,
+    decoration: const BoxDecoration(
+      shape: BoxShape.circle,
+      gradient: LinearGradient(begin: Alignment.topLeft, end: Alignment.bottomRight, colors: [Brand.blueBright, Brand.blue]),
+    ),
+    child: Icon(Icons.bookmark_rounded, color: Colors.white, size: size * 0.5),
+  );
 }
 
 /// Grey archive circle used for the "Archived chats" row.
@@ -77,9 +78,9 @@ class ArchiveAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
-        width: size,
-        height: size,
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF9AA6B2)),
-        child: Icon(Icons.archive_rounded, color: Colors.white, size: size * 0.48),
-      );
+    width: size,
+    height: size,
+    decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF9AA6B2)),
+    child: Icon(Icons.archive_rounded, color: Colors.white, size: size * 0.48),
+  );
 }

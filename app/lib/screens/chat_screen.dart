@@ -545,6 +545,7 @@ class _ChatScreenState extends State<ChatScreen> {
     final msgs = app.messagesOf(chat.id);
     final pinned = chat.pinnedMessageId == null ? null : app.messageById(chat.id, chat.pinnedMessageId!);
     final barTop = MediaQuery.paddingOf(context).top + kToolbarHeight;
+    final pageColor = dark(context) ? Brand.nightChatBg : Brand.lightChatBg;
 
     return PopScope(
       canPop: !_emoji,
@@ -555,10 +556,13 @@ class _ChatScreenState extends State<ChatScreen> {
         extendBodyBehindAppBar: true,
         appBar: AppBar(
           automaticallyImplyLeading: !widget.embedded,
+          // No colour of its own: the bar sits on the page's soft top edge.
           backgroundColor: Colors.transparent,
+          surfaceTintColor: Colors.transparent,
+          shadowColor: Colors.transparent,
+          elevation: 0,
           scrolledUnderElevation: 0,
           titleSpacing: widget.embedded ? 16 : 0,
-          flexibleSpace: ProgressiveBlur(fromTop: true, tint: cs.surface),
           title: InkWell(
             borderRadius: BorderRadius.circular(12),
             onTap: () => _openInfo(app, chat),
@@ -637,6 +641,14 @@ class _ChatScreenState extends State<ChatScreen> {
               Positioned.fill(
                 child: msgs == null ? const Center(child: CircularProgressIndicator()) : _list(app, chat, msgs, barTop + (pinned != null ? 52 : 0) + 8),
               ),
+              // Soft top edge: messages fade out gradually under the header.
+              Positioned(
+                top: 0,
+                left: 0,
+                right: 0,
+                height: barTop + (pinned != null ? 52 : 0) + 44,
+                child: RepaintBoundary(child: SoftEdge(fromTop: true, color: pageColor, solid: barTop + (pinned != null ? 52 : 0))),
+              ),
               if (pinned != null) Positioned(top: barTop, left: 0, right: 0, child: _pinnedBar(app, chat, pinned)),
               Positioned(
                 left: 0,
@@ -649,8 +661,10 @@ class _ChatScreenState extends State<ChatScreen> {
                     children: [
                       Stack(
                         children: [
-                          Positioned.fill(child: ProgressiveBlur(fromTop: false, tint: dark(context) ? Brand.nightChatBg : Brand.lightChatBg)),
-                          Padding(padding: const EdgeInsets.only(top: 22), child: _composer(chat)),
+                          Positioned.fill(
+                            child: RepaintBoundary(child: LayoutBuilder(builder: (_, c) => SoftEdge(fromTop: false, color: pageColor, solid: (c.maxHeight - 34).clamp(0.0, 400.0)))),
+                          ),
+                          Padding(padding: const EdgeInsets.only(top: 34), child: _composer(chat)),
                         ],
                       ),
                       if (_emoji) _emojiPanel(),
@@ -760,14 +774,11 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _pinnedBar(AppController app, Chat chat, Message pinned) {
     final cs = Theme.of(context).colorScheme;
     return Material(
-      color: cs.surface.withValues(alpha: 0.94),
+      color: Colors.transparent,
       child: InkWell(
         onTap: () {},
         child: Container(
           height: 52,
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: cs.outlineVariant, width: 0.6)),
-          ),
           padding: const EdgeInsetsDirectional.only(start: 14, end: 4),
           child: Row(
             children: [

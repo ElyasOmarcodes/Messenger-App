@@ -108,17 +108,24 @@ class GirihWallpaper extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      clipBehavior: Clip.hardEdge,
-      decoration: BoxDecoration(color: dark ? Brand.nightChatBg : Brand.lightChatBg),
-      child: CustomPaint(
-        willChange: false,
-        painter: _WallpaperPainter(
-          color: dark ? const Color(0x0FFFFFFF) : const Color(0x1A3390EC),
-          accent: dark ? const Color(0x142E9BF0) : const Color(0x1A2E9BF0),
+    // The pattern lives in its own layer, so scrolling messages never redraws it.
+    return ColoredBox(
+      color: dark ? Brand.nightChatBg : Brand.lightChatBg,
+      child: Stack(children: [
+        Positioned.fill(
+          child: RepaintBoundary(
+            child: CustomPaint(
+              isComplex: true,
+              willChange: false,
+              painter: _WallpaperPainter(
+                color: dark ? const Color(0x0FFFFFFF) : const Color(0x1A3390EC),
+                accent: dark ? const Color(0x142E9BF0) : const Color(0x1A2E9BF0),
+              ),
+            ),
+          ),
         ),
-        child: child,
-      ),
+        Positioned.fill(child: RepaintBoundary(child: child)),
+      ]),
     );
   }
 }

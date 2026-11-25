@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -213,7 +214,13 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                     )
                   else
                     SliverPadding(
-                      padding: const EdgeInsets.only(bottom: 120),
+                      // enough room under short lists so the header can still fold away
+                      padding: EdgeInsets.only(
+                        bottom: math.max(
+                          120.0,
+                          MediaQuery.sizeOf(context).height - topInset - _toolbarH - (list.length + (archived.isNotEmpty ? 1 : 0)) * 74.0,
+                        ),
+                      ),
                       sliver: SliverList.builder(
                         itemCount: list.length,
                         itemBuilder: (_, i) => SwipeArchive(
@@ -242,7 +249,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
               final height = topInset + _toolbarH + storiesNow + _chipsH - hide;
               return ClipRect(
                 child: BackdropFilter(
-                  filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+                  filter: ImageFilter.blur(sigmaX: 14, sigmaY: 14),
                   child: Container(
                     height: height,
                     decoration: BoxDecoration(
@@ -271,7 +278,11 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                                   ignoring: t > 0.6,
                                   child: Opacity(
                                     opacity: (1 - t * 1.6).clamp(0.0, 1.0),
-                                    child: Transform.scale(scale: 1 - 0.3 * t, alignment: Alignment.topCenter, child: const StoriesStrip()),
+                                    child: Transform.scale(
+                                      scale: 1 - 0.3 * t,
+                                      alignment: Alignment.topCenter,
+                                      child: const RepaintBoundary(child: StoriesStrip()),
+                                    ),
                                   ),
                                 ),
                               ),
@@ -371,6 +382,8 @@ class _Toolbar extends StatelessWidget {
         children: [
           if (!wide) ...[const PaighamLogo(size: 32), const SizedBox(width: 10)],
           Flexible(
+            fit: FlexFit.loose,
+            flex: 0,
             child: GestureDetector(
               onTap: onScrollTop,
               child: Text(

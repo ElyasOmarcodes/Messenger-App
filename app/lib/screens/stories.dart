@@ -251,11 +251,11 @@ class _StoryComposerState extends State<StoryComposer> {
                       fit: StackFit.expand,
                       children: [
                         ImageFiltered(
-                          imageFilter: ImageFilter.blur(sigmaX: 30, sigmaY: 30),
-                          child: Image.memory(widget.image!, fit: BoxFit.cover),
+                          imageFilter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                          child: Image.memory(widget.image!, fit: BoxFit.cover, cacheWidth: 48, filterQuality: FilterQuality.low),
                         ),
                         Container(color: Colors.black26),
-                        Image.memory(widget.image!, fit: BoxFit.contain),
+                        Image.memory(widget.image!, fit: BoxFit.contain, cacheWidth: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round()),
                       ],
                     )
                   : AnimatedContainer(
@@ -790,11 +790,12 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
               fit: StackFit.expand,
               children: [
                 ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 28, sigmaY: 28),
-                  child: Image.network(url, fit: BoxFit.cover),
+                  // a tiny copy stretched up already looks blurred; a light blur smooths it
+                  imageFilter: ImageFilter.blur(sigmaX: 6, sigmaY: 6),
+                  child: Image.network(url, fit: BoxFit.cover, cacheWidth: 48, filterQuality: FilterQuality.low),
                 ),
                 Container(color: Colors.black26),
-                Image.network(url, fit: BoxFit.contain),
+                Image.network(url, fit: BoxFit.contain, cacheWidth: (MediaQuery.sizeOf(context).width * MediaQuery.devicePixelRatioOf(context)).round()),
               ],
             );
     } else {

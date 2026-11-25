@@ -731,6 +731,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Short-lived link to a private attachment (cached for the session).
+  /// Already-known link (no network), so images can show on the first frame.
+  String? cachedFileUrl(String path) => _signedUrls[path];
+
   Future<String?> fileUrl(String path) async {
     final cached = _signedUrls[path];
     if (cached != null) return cached;
