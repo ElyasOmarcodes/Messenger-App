@@ -298,7 +298,8 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
                 textDirection: textDirOf(m.body, Directionality.of(context)),
                 style: TextStyle(fontSize: 16, height: 1.4, color: fg),
               ),
-              Padding(padding: const EdgeInsets.only(top: 3), child: time),
+              // with reactions, the time moves down beside them (it always ends the bubble)
+              if (reacts.isEmpty || mediaOnly) Padding(padding: const EdgeInsets.only(top: 3), child: time),
             ],
           );
 
@@ -341,12 +342,22 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
           ),
         if (textPart != null)
           Padding(padding: EdgeInsets.fromLTRB(media ? 6 : 0, media ? 6 : 0, media ? 6 : 0, media ? 2 : 0), child: textPart)
-        else if (!mediaOnly)
+        else if (!mediaOnly && reacts.isEmpty)
           Align(
             alignment: AlignmentDirectional.centerEnd,
             child: Padding(padding: const EdgeInsets.only(top: 2), child: time),
           ),
-        if (reacts.isNotEmpty) _Reactions(chat: widget.chat, message: m, reactions: reacts, interactive: interactive),
+        if (reacts.isNotEmpty)
+          mediaOnly
+              ? _Reactions(chat: widget.chat, message: m, reactions: reacts, interactive: interactive)
+              : Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Flexible(child: _Reactions(chat: widget.chat, message: m, reactions: reacts, interactive: interactive)),
+                    const SizedBox(width: 8),
+                    Padding(padding: const EdgeInsets.only(bottom: 2), child: time),
+                  ],
+                ),
         if (m.failed)
           Padding(
             padding: const EdgeInsets.only(top: 4),
@@ -885,46 +896,88 @@ class _VoicePlayerState extends State<VoicePlayer> {
   Widget build(BuildContext context) {
     final total = _dur ?? Duration.zero;
     final progress = total.inMilliseconds == 0 ? 0.0 : (_pos.inMilliseconds / total.inMilliseconds).clamp(0.0, 1.0);
+    // Like Telegram: play on the left, waveform to the right, in every language.
     return SizedBox(
       width: 230,
-      child: Row(
-        children: [
-          Material(
-            color: Brand.accent,
-            shape: const CircleBorder(),
-            child: InkWell(
-              customBorder: const CircleBorder(),
-              onTap: widget.message.pending || _loading ? null : _toggle,
-              child: SizedBox(
-                width: 44,
-                height: 44,
-                child: _loading || widget.message.pending
-                    ? const Padding(
-                        padding: EdgeInsets.all(12),
-                        child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
-                      )
-                    : Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 28),
+      child: Directionality(
+        textDirection: TextDirection.ltr,
+        child: Row(
+          children: [
+            Material(
+              color: Brand.accent,
+              shape: const CircleBorder(),
+              child: InkWell(
+                customBorder: const CircleBorder(),
+                onTap: widget.message.pending || _loading ? null : _toggle,
+                child: SizedBox(
+                  width: 44,
+                  height: 44,
+                  child: _loading || widget.message.pending
+                      ? const Padding(
+                          padding: EdgeInsets.all(12),
+                          child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
+                        )
+                      : Icon(_playing ? Icons.pause_rounded : Icons.play_arrow_rounded, color: Colors.white, size: 28),
+                ),
               ),
             ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: LinearProgressIndicator(value: progress, minHeight: 5, backgroundColor: widget.meta.withValues(alpha: 0.25), color: Brand.accentDeep),
-                ),
-                const SizedBox(height: 5),
-                Text(localDigits(_fmt(_playing || _pos > Duration.zero ? _pos : total), context.lang), style: TextStyle(fontSize: 12, color: widget.meta)),
-              ],
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  SizedBox(
+                    height: 26,
+                    width: double.infinity,
+                    child: RepaintBoundary(
+                      child: CustomPaint(
+                        painter: _WavePainter(
+                          seed: widget.message.id.hashCode,
+                          progress: progress,
+                          played: Brand.accentDeep,
+                          rest: widget.meta.withValues(alpha: 0.45),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(localDigits(_fmt(_playing || _pos > Duration.zero ? _pos : total), context.lang), style: TextStyle(fontSize: 12, color: widget.meta)),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
+}
+
+/// Voice-note waveform bars (a steady pattern per message), the played part coloured.
+class _WavePainter extends CustomPainter {
+  _WavePainter({required this.seed, required this.progress, required this.played, required this.rest});
+  final int seed;
+  final double progress;
+  final Color played, rest;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const bars = 34;
+    final step = size.width / bars;
+    final w = math.max(2.0, step * 0.55);
+    final r = math.Random(seed);
+    final a = Paint()..color = played, b = Paint()..color = rest;
+    var level = 0.4;
+    for (var i = 0; i < bars; i++) {
+      // a smooth random walk looks like speech
+      level = (level + (r.nextDouble() - 0.5) * 0.5).clamp(0.12, 1.0);
+      final h = math.max(3.0, size.height * level);
+      final x = i * step + (step - w) / 2;
+      canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, (size.height - h) / 2, w, h), Radius.circular(w / 2)), (i + 0.5) / bars <= progress ? a : b);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_WavePainter o) => o.progress != progress || o.seed != seed || o.played != played || o.rest != rest;
 }
 
 class _FileContent extends StatelessWidget {

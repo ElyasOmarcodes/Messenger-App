@@ -1202,3 +1202,82 @@ class _StoryTile extends StatelessWidget {
     );
   }
 }
+
+/// Telegram's folded stories in the title bar: rings overlap, the first in
+/// front. Where they cross, the rings run into each other, but each photo
+/// behind is cut away around the ring in front, with a thin gap, so the
+/// circles stay apart.
+class FoldedStoryRings extends StatelessWidget {
+  const FoldedStoryRings({super.key, required this.users, required this.unseen, this.size = 36, this.step = 17});
+  final List<Profile> users;
+  final List<bool> unseen;
+  final double size, step;
+
+  @override
+  Widget build(BuildContext context) {
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final n = users.length;
+    final w = size + (n - 1) * step;
+    const stroke = 2.0, gap = 2.0, cut = 2.0;
+    final inner = size - 2 * (stroke + gap);
+    double left(int i) => rtl ? w - size - i * step : i * step;
+    final children = <Widget>[];
+    // photos, back to front, each cut around every ring in front of it
+    for (var i = n - 1; i >= 0; i--) {
+      final cuts = [for (var j = 0; j < i; j++) Offset(left(j) - left(i) + size / 2, size / 2)];
+      children.add(
+        Positioned(
+          left: left(i),
+          top: 0,
+          width: size,
+          height: size,
+          child: ClipPath(
+            clipper: _CutOut(cuts, size / 2 + cut),
+            child: Padding(
+              padding: const EdgeInsets.all(stroke + gap),
+              child: Avatar(seed: users[i].id, label: users[i].name, imageUrl: users[i].avatarUrl, size: inner),
+            ),
+          ),
+        ),
+      );
+    }
+    // rings on top (they may run into each other)
+    for (var i = n - 1; i >= 0; i--) {
+      children.add(
+        Positioned(
+          left: left(i),
+          top: 0,
+          width: size,
+          height: size,
+          child: CustomPaint(
+            painter: _RingPainter(unseen: unseen[i], stroke: stroke, dark: dark),
+          ),
+        ),
+      );
+    }
+    return SizedBox(
+      width: w,
+      height: size,
+      child: Stack(clipBehavior: Clip.none, children: children),
+    );
+  }
+}
+
+class _CutOut extends CustomClipper<Path> {
+  _CutOut(this.centers, this.radius);
+  final List<Offset> centers;
+  final double radius;
+
+  @override
+  Path getClip(Size size) {
+    var p = Path()..addOval(Offset.zero & size);
+    for (final c in centers) {
+      p = Path.combine(PathOperation.difference, p, Path()..addOval(Rect.fromCircle(center: c, radius: radius)));
+    }
+    return p;
+  }
+
+  @override
+  bool shouldReclip(_CutOut old) => old.centers.length != centers.length || old.radius != radius;
+}

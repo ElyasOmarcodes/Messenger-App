@@ -103,10 +103,14 @@ class BubblePainter extends CustomPainter {
       bottomLeft: Radius.circular(tailOnRight ? big : bottom),
       bottomRight: Radius.circular(tailOnRight ? bottom : big),
     );
-    var path = Path()..addRRect(rr);
+    // No path union and no shadow blur: both are slow to draw for every
+    // bubble while scrolling. The tail is simply painted with the same paint.
+    final fill = Paint()..color = color;
+    canvas.drawRRect(rr, fill);
+    Path? tail;
     if (hasTail) {
       final h = size.height;
-      final tail = Path();
+      tail = Path();
       if (tailOnRight) {
         tail
           ..moveTo(r - 14, h)
@@ -120,18 +124,14 @@ class BubblePainter extends CustomPainter {
           ..quadraticBezierTo(l, h - 3, 0, h)
           ..close();
       }
-      path = Path.combine(PathOperation.union, path, tail);
+      canvas.drawPath(tail, fill);
     }
-    canvas.drawShadow(path, Colors.black, 0.6, false);
-    canvas.drawPath(path, Paint()..color = color);
     if (border != null) {
-      canvas.drawPath(
-        path,
-        Paint()
-          ..color = border!
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 0.6,
-      );
+      final stroke = Paint()
+        ..color = border!
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 0.6;
+      canvas.drawRRect(rr, stroke);
     }
   }
 

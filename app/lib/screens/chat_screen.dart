@@ -375,41 +375,54 @@ class _ChatScreenState extends State<ChatScreen> {
     await _app!.sendVoice(chat, bytes: bytes, durationMs: ms, ext: _recExt, replyTo: _takeReply());
   }
 
-  // Raw touch on the mic (no long-press delay): a short hold starts recording.
+  // Raw touch on the mic (Telegram): press shows at once; a short hold, or
+  // sliding up right away, starts recording; sliding up far enough locks it
+  // (also when that happens before the recorder has started); letting go
+  // sends; sliding toward the start edge cancels.
   Offset? _downPos;
+  Offset _lastOffset = Offset.zero;
   Timer? _holdTimer;
   bool _pressing = false;
   bool _starting = false;
   bool _releasedWhileStarting = false;
+  static const _lockAt = 70.0, _cancelAt = 130.0;
 
   void _micDown(PointerDownEvent e) {
     if (_recording) return;
     _downPos = e.position;
-    _pressing = true;
+    _lastOffset = Offset.zero;
+    setState(() => _pressing = true);
     HapticFeedback.selectionClick();
     _holdTimer?.cancel();
-    _holdTimer = Timer(const Duration(milliseconds: 150), () async {
-      if (!_pressing || !mounted) return;
-      _starting = true;
-      _releasedWhileStarting = false;
-      await _startRecording();
-      _starting = false;
-      if (_releasedWhileStarting && _recording && !_locked) {
-        final chat = _app!.chatById(widget.chatId);
-        if (chat != null) await _stopRecording(chat, send: true);
-      }
-    });
+    _holdTimer = Timer(const Duration(milliseconds: 150), _beginHold);
+  }
+
+  Future<void> _beginHold() async {
+    _holdTimer?.cancel();
+    if (!_pressing || !mounted || _starting || _recording) return;
+    _starting = true;
+    _releasedWhileStarting = false;
+    await _startRecording();
+    _starting = false;
+    final chat = _app!.chatById(widget.chatId);
+    if (!_recording || chat == null) return;
+    // what the finger did while the recorder was starting
+    _onMicMove(_lastOffset, chat);
+    if (_releasedWhileStarting && _recording && !_locked) await _stopRecording(chat, send: true);
   }
 
   void _micMove(PointerMoveEvent e, Chat chat) {
     final d = _downPos;
     if (d == null) return;
-    _onMicMove(e.position - d, chat);
+    _lastOffset = e.position - d;
+    // sliding up straight away starts recording without waiting for the hold
+    if (!_recording && _pressing && !_starting && -_lastOffset.dy > 20) _beginHold();
+    _onMicMove(_lastOffset, chat);
   }
 
   void _micUp(Chat chat, {required bool cancelled}) {
     final wasHold = _pressing;
-    _pressing = false;
+    setState(() => _pressing = false);
     _downPos = null;
     _holdTimer?.cancel();
     if (_starting) {
@@ -432,9 +445,9 @@ class _ChatScreenState extends State<ChatScreen> {
       _slideX = toStart.clamp(0.0, 200.0);
       _slideY = (-offset.dy).clamp(0.0, 140.0);
     });
-    if (_slideX > 130) {
+    if (_slideX > _cancelAt) {
       _stopRecording(chat, send: false);
-    } else if (_slideY > 90) {
+    } else if (_slideY > _lockAt) {
       HapticFeedback.mediumImpact();
       setState(() => _locked = true);
     }
@@ -854,8 +867,14 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
 
+    // Big emoji have no bubble, so their neighbours keep full corners.
+    bool bare(Message m) => m.kind == MsgKind.text && m.replyTo == null && !m.deleted && bigEmojiCount(m.body) > 0;
     bool joined(Message a, Message b) =>
-        a.senderId == b.senderId && sameDay(a.createdAt, b.createdAt) && b.createdAt.difference(a.createdAt).inMinutes.abs() < 5;
+        a.senderId == b.senderId &&
+        sameDay(a.createdAt, b.createdAt) &&
+        b.createdAt.difference(a.createdAt).inMinutes.abs() < 5 &&
+        !bare(a) &&
+        !bare(b);
 
     // Only light data here; the bubbles themselves are built lazily,
     // just for the rows that are on screen.
@@ -1258,9 +1277,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final sendMode = _canSend || _locked || _editing != null;
     final icon = _locked ? Icons.send_rounded : (_editing != null ? Icons.check_rounded : (sendMode ? Icons.send_rounded : Icons.mic_rounded));
     final button = AnimatedScale(
-      scale: _recording && !_locked ? 1.5 : 1,
-      duration: const Duration(milliseconds: 200),
-      curve: Curves.easeOutBack,
+      // pressed: a quick dip; recording: the big Telegram circle
+      scale: _recording && !_locked ? 1.5 : (_pressing ? 0.86 : 1),
+      duration: Duration(milliseconds: _pressing && !_recording ? 90 : 200),
+      curve: _recording ? Curves.easeOutBack : Curves.easeOut,
       child: Container(
         width: 48,
         height: 48,
@@ -1304,7 +1324,7 @@ class _ChatScreenState extends State<ChatScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(_slideY > 55 ? Icons.lock_rounded : Icons.lock_open_rounded, size: 20, color: cs.onSurfaceVariant),
+                  Icon(_slideY > _lockAt * 0.6 ? Icons.lock_rounded : Icons.lock_open_rounded, size: 20, color: cs.onSurfaceVariant),
                   Icon(Icons.keyboard_arrow_up_rounded, size: 18, color: cs.onSurfaceVariant),
                 ],
               ),

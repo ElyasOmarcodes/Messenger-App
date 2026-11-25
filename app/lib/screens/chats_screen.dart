@@ -244,32 +244,36 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                   if (!app.chatsLoaded)
                     const SliverFillRemaining(child: Center(child: CircularProgressIndicator()))
                   else if (list.isEmpty)
-                    SliverFillRemaining(
-                      hasScrollBody: false,
-                      child: Padding(
-                        padding: const EdgeInsets.all(32),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Container(
-                              width: 96,
-                              height: 96,
-                              decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), shape: BoxShape.circle),
-                              child: Icon(Icons.forum_rounded, size: 48, color: cs.primary),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(context.tr(q.isEmpty ? 'no_chats' : 'no_results'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-                            if (q.isEmpty && _filter == _Filter.all)
-                              Padding(
-                                padding: const EdgeInsets.only(top: 6),
-                                child: Text(
-                                  context.tr('no_chats_sub'),
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: cs.onSurfaceVariant),
-                                ),
+                    // a full screen of room even when empty, so a folded header
+                    // stays folded when switching to an empty folder
+                    SliverToBoxAdapter(
+                      child: SizedBox(
+                        height: math.max(320.0, MediaQuery.sizeOf(context).height - topInset - _toolbarH),
+                        child: Padding(
+                          padding: const EdgeInsets.all(32),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Container(
+                                width: 96,
+                                height: 96,
+                                decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.12), shape: BoxShape.circle),
+                                child: Icon(Icons.forum_rounded, size: 48, color: cs.primary),
                               ),
-                            const SizedBox(height: 90),
-                          ],
+                              const SizedBox(height: 16),
+                              Text(context.tr(q.isEmpty ? 'no_chats' : 'no_results'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+                              if (q.isEmpty && _filter == _Filter.all)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 6),
+                                  child: Text(
+                                    context.tr('no_chats_sub'),
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(color: cs.onSurfaceVariant),
+                                  ),
+                                ),
+                              const SizedBox(height: 90),
+                            ],
+                          ),
                         ),
                       ),
                     )
@@ -540,6 +544,17 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
+              Icon(
+                switch (f) {
+                  _Filter.all => Icons.forum_rounded,
+                  _Filter.personal => Icons.person_rounded,
+                  _Filter.groups => Icons.groups_rounded,
+                  _Filter.unread => Icons.mark_chat_unread_rounded,
+                },
+                size: 16,
+                color: sel ? cs.primary : cs.onSurfaceVariant,
+              ),
+              const SizedBox(width: 5),
               Flexible(
                 child: Text(
                   context.tr(key),
@@ -605,35 +620,7 @@ class _Toolbar extends StatelessWidget {
               onTap: () => openStories(context, shown.first),
               child: Padding(
                 padding: const EdgeInsetsDirectional.only(end: 10),
-                // Telegram: 36 dp rings, 17 dp apart, the first one in front,
-                // each cut out of the one behind by a thin page-coloured edge
-                child: SizedBox(
-                  width: 36.0 + (shown.length - 1) * 17,
-                  height: 36,
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      for (var i = shown.length - 1; i >= 0; i--)
-                        PositionedDirectional(
-                          start: i * 17.0 - 1.5,
-                          top: -1.5,
-                          child: Container(
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: Theme.of(context).scaffoldBackgroundColor,
-                              border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: 1.5),
-                            ),
-                            child: StoryRing(
-                              profile: shown[i].user,
-                              size: 36,
-                              unseen: !shown[i].allSeen && shown[i].user.id != app.myId,
-                              seen: shown[i].allSeen || shown[i].user.id == app.myId,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
+                child: FoldedStoryRings(users: [for (final u in shown) u.user], unseen: [for (final u in shown) !u.allSeen && u.user.id != app.myId]),
               ),
             ),
           ),
