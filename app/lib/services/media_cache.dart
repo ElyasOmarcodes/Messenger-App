@@ -24,6 +24,9 @@ class MediaCache extends ChangeNotifier {
   ValueListenable<double>? progressOf(String key) => _progress[key];
   bool isDownloading(String key) => _progress.containsKey(key);
 
+  /// Runs on every downloaded file before it is kept (opens encrypted files).
+  Future<Uint8List?> Function(String key, Uint8List raw)? transform;
+
   /// Stops a download (the X on the progress ring).
   void cancel(String key) => _clients.remove(key)?.close();
 
@@ -55,8 +58,13 @@ class MediaCache extends ChangeNotifier {
           out.add(chunk);
           if (total > 0) prog.value = (out.length / total).clamp(0.0, 1.0);
         }
-        final b = out.takeBytes();
+        var b = out.takeBytes();
         if (total > 0 && b.length < total) return null; // cut off
+        if (transform != null) {
+          final t = await transform!(key, b);
+          if (t == null) return null;
+          b = t;
+        }
         await store.save(key, b);
         return b;
       } catch (_) {

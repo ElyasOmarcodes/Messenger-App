@@ -10,6 +10,7 @@ import 'brand/logo.dart';
 import 'config.dart';
 import 'l10n/strings.dart';
 import 'screens/home_screen.dart';
+import 'screens/key_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/call_screen.dart';
 import 'services/calls.dart';
@@ -78,7 +79,11 @@ class PaighamApp extends StatelessWidget {
                     ? const _Splash()
                     : controller.session == null
                     ? const OnboardingScreen()
-                    : const HomeScreen(),
+                    // end-to-end key first: create a PIN, or restore with it
+                    : switch (controller.keyState) {
+                        KeyState.needCreate || KeyState.needRestore || KeyState.offline => const KeyScreen(),
+                        _ => const HomeScreen(),
+                      },
               ),
             );
           },

@@ -157,7 +157,7 @@ class SettingsScreen extends StatelessWidget {
               color: const Color(0xFF31B545),
               title: context.tr('privacy'),
               subtitle: context.tr('privacy_sub'),
-              onTap: () => _info(context, context.tr('privacy'), context.tr('privacy_body')),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const _PrivacyPage())),
             ),
             _Tile(
               icon: Icons.pie_chart_rounded,
@@ -436,6 +436,106 @@ class _Tile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+/// Privacy: what end-to-end encryption protects, and the message PIN.
+class _PrivacyPage extends StatelessWidget {
+  const _PrivacyPage();
+
+  Future<void> _changePin(BuildContext context) async {
+    final app = AppScope.read(context);
+    final a = TextEditingController(), b = TextEditingController();
+    final messenger = ScaffoldMessenger.of(context);
+    final pin = await showDialog<String>(
+      context: context,
+      builder: (d) {
+        String? err;
+        return StatefulBuilder(
+          builder: (d, set) => AlertDialog(
+            title: Text(d.tr('change_pin')),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: a,
+                  obscureText: true,
+                  autofocus: true,
+                  textDirection: TextDirection.ltr,
+                  decoration: InputDecoration(hintText: d.tr('pin_hint')),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: b,
+                  obscureText: true,
+                  textDirection: TextDirection.ltr,
+                  decoration: InputDecoration(hintText: d.tr('pin_again')),
+                ),
+                if (err != null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 10),
+                    child: Text(d.tr(err!), style: const TextStyle(color: Brand.pomegranate)),
+                  ),
+              ],
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(d), child: Text(d.tr('cancel'))),
+              TextButton(
+                onPressed: () {
+                  if (a.text.length < 6) return set(() => err = 'pin_short');
+                  if (a.text != b.text) return set(() => err = 'pin_mismatch');
+                  Navigator.pop(d, a.text);
+                },
+                child: Text(d.tr('save')),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+    if (pin == null) return;
+    final err = await app.changePin(pin);
+    messenger.showSnackBar(SnackBar(content: Text(app.s.get(err ?? 'pin_changed'))));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Scaffold(
+      appBar: AppBar(title: Text(context.tr('privacy'))),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(color: cs.primary.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(20)),
+            child: Column(
+              children: [
+                Icon(Icons.lock_rounded, size: 44, color: cs.primary),
+                const SizedBox(height: 10),
+                Text(context.tr('e2e_title'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 8),
+                Text(
+                  context.tr('e2e_create_body'),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(height: 1.6, color: cs.onSurfaceVariant),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Card(
+            margin: EdgeInsets.zero,
+            child: ListTile(
+              leading: const Icon(Icons.password_rounded),
+              title: Text(context.tr('change_pin')),
+              subtitle: Text(context.tr('pin_tip')),
+              onTap: () => _changePin(context),
+            ),
+          ),
+        ],
       ),
     );
   }

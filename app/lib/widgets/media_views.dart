@@ -314,9 +314,9 @@ class _GalleryViewerState extends State<GalleryViewer> {
 
   Future<void> _saveToGallery() async {
     if (kIsWeb) {
-      final p = widget.items[_i].path;
-      final url = p == null ? null : await AppScope.read(context).fileUrl(p);
-      if (url != null) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      // the decrypted photo as a download (the link would give ciphertext)
+      final b = await _bytes();
+      if (b != null) await launchUrl(Uri.dataFromBytes(b, mimeType: mimeFor(_name)));
       return;
     }
     final b = await _bytes();

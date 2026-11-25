@@ -91,6 +91,37 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return app.startDirectChat(p);
   }
 
+  /// Both phones show the same 60 digits when no one is in between.
+  void _showSafety(AppController app, String userId) {
+    showDialog<void>(
+      context: context,
+      builder: (d) => AlertDialog(
+        icon: const Icon(Icons.lock_rounded),
+        title: Text(d.tr('safety_number')),
+        content: FutureBuilder<String?>(
+          future: app.safetyNumber(userId),
+          builder: (_, snap) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (snap.connectionState != ConnectionState.done)
+                const Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())
+              else
+                SelectableText(
+                  snap.data ?? '—',
+                  textAlign: TextAlign.center,
+                  textDirection: TextDirection.ltr,
+                  style: const TextStyle(fontSize: 19, height: 1.7, letterSpacing: 1.5, fontFeatures: [FontFeature.tabularFigures()]),
+                ),
+              const SizedBox(height: 14),
+              Text(d.tr('safety_body'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 13.5, height: 1.5)),
+            ],
+          ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.pop(d), child: Text(d.tr('close')))],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
@@ -400,6 +431,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     _Info(icon: Icons.alternate_email_rounded, value: widget.profile!.email, label: context.tr('email'), ltr: true),
                     if (widget.profile!.username != null)
                       _Info(icon: Icons.tag_rounded, value: '@${widget.profile!.username}', label: context.tr('username'), ltr: true),
+                    ListTile(
+                      leading: const Icon(Icons.lock_rounded),
+                      title: Text(context.tr('safety_number')),
+                      subtitle: Text(context.tr('e2e_chat_note')),
+                      onTap: () => _showSafety(app, widget.profile!.id),
+                    ),
                   ],
                   if (widget._kind == _Kind.group && chat != null)
                     for (final m in chat.members)

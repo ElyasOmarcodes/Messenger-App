@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
+import 'package:cryptography/cryptography.dart' show SecretKey;
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -10,6 +11,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../config.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
+import 'e2e.dart';
 import 'media_cache.dart';
 import 'notifier.dart';
 
@@ -18,6 +20,9 @@ typedef AuthError = String?;
 
 /// Central app state: account, chats, messages, realtime and settings.
 /// Backend: Supabase (Postgres + Auth + Realtime + Storage).
+/// Where this phone is with its end-to-end key.
+enum KeyState { unknown, ready, needCreate, needRestore, offline, unsupported }
+
 class AppController extends ChangeNotifier with WidgetsBindingObserver {
   late SharedPreferences _prefs;
   bool ready = false;
@@ -134,6 +139,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     maxCacheMb = _prefs.getInt('max_cache_mb') ?? 3072;
     autoPhotos = _prefs.getBool('auto_photos') ?? true;
     await MediaCache.instance.init();
+    // encrypted files are opened right after they are downloaded
+    MediaCache.instance.transform = _openDownloaded;
     // Telegram's "Keep Media": old, unopened files are removed in the background.
     unawaited(Future<void>.delayed(const Duration(seconds: 8), cleanCache));
     if (AppConfig.configured) {
@@ -250,8 +257,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> signOut() async {
-    // a signed-out phone keeps no one's chats
+    // a signed-out phone keeps no one's chats, and not the key either
     await MediaCache.instance.store.clearJson(_cachePrefix);
+    await E2E.instance.forget();
+    _chatKeys.clear();
+    _sendKeys.clear();
+    keyState = KeyState.unknown;
     await _sb.auth.signOut();
   }
 
@@ -272,11 +283,269 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     await _loadOutbox();
     _showOutboxInChats();
     notifyListeners();
+    await _initKeys();
     _subscribe();
     unawaited(_loadProfile());
     unawaited(loadStories());
     await reloadChats();
     unawaited(_drain());
+  }
+
+  // ── End-to-end encryption ────────────────────────────────────────────────
+  KeyState keyState = KeyState.unknown;
+  Map<String, dynamic>? _backup;
+  final Map<String, Map<int, SecretKey>> _chatKeys = {};
+  final Map<String, Future<void>> _keyLoads = {};
+  final Map<String, ({int id, SecretKey key, DateTime at})> _sendKeys = {};
+  final Map<String, String> _pubs = {};
+
+  /// Key on this phone? Otherwise: is there a locked backup to restore?
+  Future<void> _initKeys() async {
+    if (await E2E.instance.loadLocal(myId!)) {
+      keyState = KeyState.ready;
+      unawaited(_publishKey());
+      return;
+    }
+    await checkKeyBackup();
+  }
+
+  Future<void> checkKeyBackup() async {
+    try {
+      final row = await _sb.from('key_backups').select('data').eq('user_id', myId!).maybeSingle().timeout(_net);
+      _backup = row == null ? null : Map<String, dynamic>.from(row['data'] as Map);
+      keyState = _backup == null ? KeyState.needCreate : KeyState.needRestore;
+    } on PostgrestException catch (e) {
+      // the server has no encryption tables yet (database update v8 not run):
+      // keep working as before instead of locking everyone out
+      keyState = e.code == 'PGRST205' || e.code == '42P01' ? KeyState.unsupported : KeyState.offline;
+    } catch (_) {
+      keyState = KeyState.offline;
+    }
+    notifyListeners();
+  }
+
+  Future<void> _publishKey() async {
+    final pub = E2E.instance.publicKey;
+    if (pub == null) return;
+    try {
+      await _sb.from('user_keys').upsert({'user_id': myId, 'public_key': pub, 'updated_at': DateTime.now().toUtc().toIso8601String()}).timeout(_net);
+    } catch (_) {}
+  }
+
+  /// First time (or "forgot PIN"): a new key, locked with [pin] as a backup.
+  /// Returns a translation key on failure.
+  Future<String?> createKeys(String pin) async {
+    try {
+      final backup = await E2E.instance.create(myId!, pin);
+      await _sb.from('key_backups').upsert({'user_id': myId, 'data': backup, 'updated_at': DateTime.now().toUtc().toIso8601String()}).timeout(_net);
+      await _sb
+          .from('user_keys')
+          .upsert({'user_id': myId, 'public_key': E2E.instance.publicKey, 'updated_at': DateTime.now().toUtc().toIso8601String()})
+          .timeout(_net);
+    } catch (_) {
+      await E2E.instance.forget(); // no key without its backup
+      return 'err_network';
+    }
+    _backup = null;
+    await _keysChanged();
+    return null;
+  }
+
+  /// New phone: open the backup with the PIN.
+  Future<String?> restoreKeys(String pin) async {
+    final b = _backup;
+    if (b == null) return 'err_generic';
+    if (!await E2E.instance.restore(myId!, b, pin)) return 'wrong_pin';
+    await _publishKey();
+    await _keysChanged();
+    return null;
+  }
+
+  Future<String?> changePin(String pin) async {
+    final backup = await E2E.instance.relock(pin);
+    if (backup == null) return 'err_generic';
+    try {
+      await _sb.from('key_backups').upsert({'user_id': myId, 'data': backup, 'updated_at': DateTime.now().toUtc().toIso8601String()}).timeout(_net);
+      return null;
+    } catch (_) {
+      return 'err_network';
+    }
+  }
+
+  Future<void> _keysChanged() async {
+    keyState = KeyState.ready;
+    _chatKeys.clear();
+    _sendKeys.clear();
+    notifyListeners();
+    // messages that could not be opened before
+    for (final id in _messages.keys.toList()) {
+      if (_messages[id]!.any((m) => m.locked)) {
+        _messages[id]!.removeWhere((m) => m.locked);
+        unawaited(loadMessages(id));
+      }
+    }
+    await reloadChats();
+    unawaited(_drain());
+  }
+
+  Future<String?> _pubOf(String uid) async {
+    final c = _pubs[uid];
+    if (c != null) return c;
+    final row = await _sb.from('user_keys').select('public_key').eq('user_id', uid).maybeSingle().timeout(_net);
+    final k = row?['public_key'] as String?;
+    if (k != null) _pubs[uid] = k;
+    return k;
+  }
+
+  /// Opens my copies of the chat keys ([chatId] = one chat, null = all chats).
+  Future<void> _loadMyChatKeys([String? chatId]) async {
+    if (!E2E.instance.ready) return;
+    try {
+      var q = _sb.from('chat_keys').select('chat_id,key_id,wrapped,wrapped_by').eq('user_id', myId!);
+      if (chatId != null) q = q.eq('chat_id', chatId);
+      final rows = await q.timeout(_net);
+      final need = {for (final r in rows) r['wrapped_by'] as String}..removeWhere(_pubs.containsKey);
+      if (need.isNotEmpty) {
+        final ks = await _sb.from('user_keys').select('user_id,public_key').inFilter('user_id', need.toList()).timeout(_net);
+        for (final k in ks) {
+          _pubs[k['user_id'] as String] = k['public_key'] as String;
+        }
+      }
+      for (final r in rows) {
+        final c = r['chat_id'] as String, id = (r['key_id'] as num).toInt();
+        if (_chatKeys[c]?[id] != null) continue;
+        final pub = _pubs[r['wrapped_by'] as String];
+        if (pub == null) continue;
+        final k = await E2E.instance.unwrap(r['wrapped'] as String, chatId: c, keyId: id, wrapperPub: pub);
+        if (k != null) _chatKeys.putIfAbsent(c, () => {})[id] = k;
+      }
+    } catch (_) {}
+  }
+
+  Future<SecretKey?> _keyFor(String chatId, int keyId) async {
+    final k = _chatKeys[chatId]?[keyId];
+    if (k != null) return k;
+    await (_keyLoads[chatId] ??= _loadMyChatKeys(chatId).whenComplete(() => _keyLoads.remove(chatId)));
+    return _chatKeys[chatId]?[keyId];
+  }
+
+  /// The key new messages in this chat are sealed with. Makes a new chat key
+  /// when there is none, when I have no copy, or when someone left; hands
+  /// copies to members who have none yet. Needs the network.
+  Future<({int id, SecretKey key})> _sendKey(String chatId, {int depth = 0}) async {
+    final cached = _sendKeys[chatId];
+    if (cached != null && DateTime.now().difference(cached.at) < const Duration(minutes: 2)) return (id: cached.id, key: cached.key);
+    final st = Map<String, dynamic>.from(await _sb.rpc('chat_key_state', params: {'c': chatId}).timeout(_net) as Map);
+    final latest = (st['latest'] as num?)?.toInt();
+    final keys = (st['keys'] as List).cast<Map>();
+    final missing = (st['missing'] as List).cast<Map>();
+    var key = latest == null ? null : await _keyFor(chatId, latest);
+    if (latest == null || key == null || st['stale'] == true || missing.any((m) => m['user_id'] == myId)) {
+      final id = (latest ?? 0) + 1;
+      final k = await E2E.instance.newChatKey();
+      final rows = [
+        for (final m in keys)
+          {
+            'chat_id': chatId,
+            'user_id': m['user_id'],
+            'key_id': id,
+            'wrapped': await E2E.instance.wrap(k, chatId: chatId, keyId: id, recipientId: m['user_id'] as String, recipientPub: m['public_key'] as String),
+            'wrapped_by': myId,
+            'for_pub': m['public_key'],
+          },
+      ];
+      try {
+        await _sb.from('chat_keys').insert(rows).timeout(_net);
+      } on PostgrestException catch (e) {
+        // someone else made this key number at the same moment: use theirs
+        if (e.code == '23505' && depth < 3) return await _sendKey(chatId, depth: depth + 1);
+        rethrow;
+      }
+      _chatKeys.putIfAbsent(chatId, () => {})[id] = k;
+      _sendKeys[chatId] = (id: id, key: k, at: DateTime.now());
+      return (id: id, key: k);
+    }
+    if (missing.isNotEmpty) {
+      final rows = [
+        for (final m in missing)
+          {
+            'chat_id': chatId,
+            'user_id': m['user_id'],
+            'key_id': latest,
+            'wrapped': await E2E.instance.wrap(
+              key,
+              chatId: chatId,
+              keyId: latest,
+              recipientId: m['user_id'] as String,
+              recipientPub: m['public_key'] as String,
+            ),
+            'wrapped_by': myId,
+            'for_pub': m['public_key'],
+          },
+      ];
+      await _sb.from('chat_keys').upsert(rows).timeout(_net);
+    }
+    _sendKeys[chatId] = (id: latest, key: key, at: DateTime.now());
+    return (id: latest, key: key);
+  }
+
+  /// Opening a chat: give the key to members who joined or set up keys since.
+  void _shareKeysSoon(String chatId) {
+    if (!E2E.instance.ready) return;
+    _sendKeys.remove(chatId);
+    unawaited(_sendKey(chatId).then((_) {}, onError: (_) {}));
+  }
+
+  /// A server row → the same row with the sealed content opened.
+  Future<Map<String, dynamic>> _open(Map<String, dynamic> row) async {
+    final c = row['cipher'] as String?;
+    final keyId = (row['key_id'] as num?)?.toInt();
+    if (c == null || keyId == null) return row;
+    final out = Map<String, dynamic>.from(row)..remove('cipher');
+    final chatId = row['chat_id'] as String;
+    final key = E2E.instance.ready ? await _keyFor(chatId, keyId) : null;
+    final p = key == null
+        ? null
+        : await E2E.instance.open(key, c, chatId: chatId, msgId: row['id'] as String, senderId: row['sender_id'] as String, keyId: keyId);
+    if (p == null) return out..['locked'] = true;
+    out['body'] = p['b'] ?? '';
+    if (p['m'] != null) out['meta'] = p['m'];
+    if (p['fn'] != null) out['file_name'] = p['fn'];
+    if (p['mt'] != null) out['mime_type'] = p['mt'];
+    if (p['d'] != null) out['duration_ms'] = p['d'];
+    return out;
+  }
+
+  /// The key of an encrypted file, from the message it belongs to.
+  String? _fileKeyOf(String path) {
+    final chatId = path.split('/').first;
+    for (final m in _messages[chatId] ?? const <Message>[]) {
+      if (m.filePath == path) return m.fileKey;
+      for (final it in m.albumItems) {
+        if (it['path'] == path) return it['k'] as String?;
+      }
+    }
+    final last = chatById(chatId)?.lastMessage;
+    if (last?.filePath == path) return last!.fileKey;
+    return null;
+  }
+
+  Future<Uint8List?> _openDownloaded(String key, Uint8List raw) async {
+    final fk = _fileKeyOf(key);
+    return fk == null ? raw : E2E.openFile(raw, fk);
+  }
+
+  /// Safety number with [other] (compare on both phones), or null.
+  Future<String?> safetyNumber(String other) async {
+    final mine = E2E.instance.publicKey;
+    if (mine == null) return null;
+    try {
+      _pubs.remove(other);
+      final theirs = await _pubOf(other);
+      return theirs == null ? null : await E2E.safetyNumber(mine, theirs);
+    } catch (_) {
+      return null;
+    }
   }
 
   /// A chat whose newest message is still waiting to be sent shows it (with a clock).
@@ -323,12 +592,17 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _channel?.unsubscribe();
     _channel = _sb
         .channel('paigham-${myId!}')
-        .onPostgresChanges(event: PostgresChangeEvent.insert, schema: 'public', table: 'messages', callback: (p) => _onMessage(Message.fromJson(p.newRecord)))
+        .onPostgresChanges(
+          event: PostgresChangeEvent.insert,
+          schema: 'public',
+          table: 'messages',
+          callback: (p) async => _onMessage(Message.fromJson(await _open(p.newRecord))),
+        )
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
           schema: 'public',
           table: 'messages',
-          callback: (p) => _onMessageUpdate(Message.fromJson(p.newRecord)),
+          callback: (p) async => _onMessageUpdate(Message.fromJson(await _open(p.newRecord))),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
@@ -338,7 +612,15 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         )
         .onPostgresChanges(event: PostgresChangeEvent.all, schema: 'public', table: 'stories', callback: (_) => loadStories())
         .onPostgresChanges(event: PostgresChangeEvent.update, schema: 'public', table: 'chats', callback: (_) => _scheduleReload())
-        .onPostgresChanges(event: PostgresChangeEvent.update, schema: 'public', table: 'chat_members', callback: (p) => _onMemberUpdate(p.newRecord))
+        .onPostgresChanges(
+          event: PostgresChangeEvent.update,
+          schema: 'public',
+          table: 'chat_members',
+          callback: (p) {
+            _sendKeys.clear();
+            _onMemberUpdate(p.newRecord);
+          },
+        )
         .onPostgresChanges(event: PostgresChangeEvent.insert, schema: 'public', table: 'chat_members', callback: (_) => _scheduleReload())
         .onPostgresChanges(
           event: PostgresChangeEvent.update,
@@ -475,6 +757,13 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     if (myId == null) return;
     try {
       final data = await _sb.rpc('my_chats').timeout(_net) as List<dynamic>;
+      if (E2E.instance.ready && data.any((e) => (e as Map)['last_message'] is Map && e['last_message']['cipher'] != null)) {
+        await _loadMyChatKeys(); // one query for all chats
+        for (final e in data.cast<Map<String, dynamic>>()) {
+          final lm = e['last_message'];
+          if (lm is Map && lm['cipher'] != null) e['last_message'] = await _open(Map<String, dynamic>.from(lm));
+        }
+      }
       chats = data.map((e) => Chat.fromJson(e as Map<String, dynamic>)).toList();
       unawaited(MediaCache.instance.store.writeJson('${_cachePrefix}_chats', data));
       _showOutboxInChats();
@@ -667,7 +956,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       var q = _sb.from('messages').select().eq('chat_id', chatId);
       if (cleared != null) q = q.gt('created_at', cleared.toUtc().toIso8601String());
       final rows = await q.order('created_at', ascending: false).limit(300).timeout(_net);
-      final list = rows.map(Message.fromJson).toList().reversed.toList();
+      final opened = await Future.wait(rows.map(_open));
+      final list = opened.map(Message.fromJson).toList().reversed.toList();
       for (final m in _messages[chatId] ?? const <Message>[]) {
         if (!list.any((x) => x.id == m.id)) list.add(m); // keep pending/realtime ones
       }
@@ -682,6 +972,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   void openChat(String id) {
     openChatId = id;
+    _shareKeysSoon(id);
     if (_messages[id] == null || !_diskLoaded.contains(id)) loadMessages(id);
     final c = chatById(id);
     if (c != null) markRead(c);
@@ -812,6 +1103,22 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       // kept under its server path: shows offline now, and is already cached after sending
       await MediaCache.instance.store.save(u.path, u.bytes);
     }
+    // end-to-end: every file gets its own key, carried inside the sealed message
+    final fileKeys = <String, String>{};
+    if (E2E.instance.ready && uploads.isNotEmpty) {
+      for (final u in uploads) {
+        fileKeys[u.path] = E2E.newFileKey();
+      }
+      final meta = Map<String, dynamic>.from((fields['meta'] as Map?) ?? const {});
+      if (meta['items'] is List) {
+        meta['items'] = [
+          for (final it in (meta['items'] as List).cast<Map>()) {...it, 'k': ?fileKeys[it['path']]},
+        ];
+      } else {
+        meta['fk'] = fileKeys[uploads.first.path];
+      }
+      fields['meta'] = meta;
+    }
     for (final c in copies) {
       final b = await MediaCache.instance.store.read(c.from);
       if (b != null) await MediaCache.instance.store.save(c.to, b);
@@ -822,7 +1129,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       'kind': local.kind.name,
       'fields': fields,
       'uploads': [
-        for (final u in uploads) {'path': u.path, 'mime': u.mime, 'done': false},
+        for (final u in uploads) {'path': u.path, 'mime': u.mime, 'done': false, 'fk': ?fileKeys[u.path]},
       ],
       'copies': [
         for (final c in copies) {'from': c.from, 'to': c.to, 'done': false},
@@ -891,6 +1198,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// true = sent, false = refused (won't work by retrying), null = no network.
   Future<bool?> _sendItem(Map<String, dynamic> it) async {
     const wait = Duration(seconds: 25);
+    // nothing leaves the phone unencrypted: wait until the key is here
+    // (only a server without the encryption update gets plain messages)
+    if (!E2E.instance.ready && keyState != KeyState.unsupported) return null;
     try {
       for (final c in (it['copies'] as List).cast<Map>()) {
         if (c['done'] == true) continue;
@@ -904,12 +1214,14 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       }
       for (final u in (it['uploads'] as List).cast<Map>()) {
         if (u['done'] == true) continue;
-        final bytes = await MediaCache.instance.store.read(u['path'] as String);
+        var bytes = await MediaCache.instance.store.read(u['path'] as String);
         if (bytes == null) return false;
+        final fk = u['fk'] as String?;
+        if (fk != null) bytes = await E2E.sealFile(bytes, fk); // the server only gets ciphertext
         try {
           await _sb.storage
               .from(AppConfig.attachmentsBucket)
-              .uploadBinary(u['path'] as String, bytes, fileOptions: FileOptions(contentType: u['mime'] as String))
+              .uploadBinary(u['path'] as String, bytes, fileOptions: FileOptions(contentType: fk != null ? 'application/octet-stream' : u['mime'] as String))
               .timeout(wait);
         } on StorageException catch (e) {
           // already there from an earlier try that lost its answer
@@ -919,11 +1231,26 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         await _saveOutbox();
       }
       final chatId = it['chat'] as String;
+      final fields = Map<String, dynamic>.from(it['fields'] as Map);
+      if (E2E.instance.ready) {
+        // seal the content: the server keeps only the kind, time and sizes
+        final sk = await _sendKey(chatId);
+        final payload = <String, dynamic>{
+          'b': fields.remove('body') ?? '',
+          'm': fields.remove('meta'),
+          'fn': fields.remove('file_name'),
+          'mt': fields.remove('mime_type'),
+          'd': fields.remove('duration_ms'),
+        }..removeWhere((_, v) => v == null);
+        fields['body'] = '';
+        fields['key_id'] = sk.id;
+        fields['cipher'] = await E2E.instance.seal(sk.key, payload, chatId: chatId, msgId: it['id'] as String, senderId: myId!, keyId: sk.id);
+      }
       Map<String, dynamic> row;
       try {
         row = await _sb
             .from('messages')
-            .insert({'id': it['id'], 'chat_id': chatId, 'sender_id': myId, 'kind': it['kind'], ...Map<String, dynamic>.from(it['fields'] as Map)})
+            .insert({'id': it['id'], 'chat_id': chatId, 'sender_id': myId, 'kind': it['kind'], ...fields})
             .select()
             .single()
             .timeout(wait);
@@ -931,7 +1258,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         if (e.code != '23505') rethrow; // 23505 = it was saved already
         row = await _sb.from('messages').select().eq('id', it['id'] as String).single().timeout(wait);
       }
-      final saved = Message.fromJson(row);
+      final saved = Message.fromJson(await _open(row));
       final chat = chatById(chatId);
       final local = messageById(chatId, saved.id);
       if (chat != null && local != null) {
@@ -1056,6 +1383,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   String previewOf(Message m) => m.deleted
       ? s.get('deleted')
+      : m.locked
+      ? s.get('locked_message')
       : switch (m.kind) {
           MsgKind.voice => s.get('voice_message'),
           MsgKind.image => m.body.isEmpty ? s.get('photo') : m.body,
@@ -1069,6 +1398,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// Icon shown before a message preview (chat list, reply quotes).
   IconData? previewIcon(Message m) => m.deleted
       ? Icons.block_rounded
+      : m.locked
+      ? Icons.lock_rounded
       : switch (m.kind) {
           MsgKind.voice => Icons.mic_rounded,
           MsgKind.image => Icons.photo_rounded,
@@ -1130,7 +1461,15 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     if (i >= 0) list![i] = m.copyWith(body: body, editedAt: DateTime.now());
     notifyListeners();
     try {
-      await _sb.rpc('edit_message', params: {'m': m.id, 'new_body': body});
+      if (m.e2e) {
+        final key = await _keyFor(chat.id, m.keyId!);
+        if (key == null) throw StateError('no key');
+        final payload = <String, dynamic>{'b': body, 'm': m.meta, 'fn': m.fileName, 'mt': m.mimeType, 'd': m.durationMs}..removeWhere((_, v) => v == null);
+        final cipher = await E2E.instance.seal(key, payload, chatId: chat.id, msgId: m.id, senderId: m.senderId, keyId: m.keyId!);
+        await _sb.rpc('edit_message_e2e', params: {'m': m.id, 'new_cipher': cipher});
+      } else {
+        await _sb.rpc('edit_message', params: {'m': m.id, 'new_body': body});
+      }
       return true;
     } catch (_) {
       if (i >= 0) list![i] = m;

@@ -220,7 +220,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
 
   Widget _bubble(BuildContext context, {required bool interactive}) {
     final app = AppScope.of(context);
-    final m = widget.message;
+    final m = widget.message.locked ? widget.message.lockedAs(context.tr('locked_message')) : widget.message;
     final dark = Theme.of(context).brightness == Brightness.dark;
     final rtl = Directionality.of(context) == TextDirection.rtl;
     final out = m.senderId == app.myId;
@@ -868,10 +868,14 @@ class _VoicePlayerState extends State<VoicePlayer> {
           final local = cache.filePath(key);
           if (local != null) {
             await _player.play(DeviceFileSource(local, mimeType: m.mimeType));
-          } else {
+          } else if (m.fileKey == null) {
             final url = await app.fileUrl(key);
             if (url != null) await _player.play(UrlSource(url, mimeType: m.mimeType));
           }
+        } else if (m.fileKey != null) {
+          // encrypted: the link only gives ciphertext, so play the opened bytes
+          final b = await cache.bytes(key, () => app.fileUrl(key));
+          if (b != null) await _player.play(BytesSource(b, mimeType: m.mimeType));
         } else {
           final url = await app.fileUrl(key);
           if (url != null) await _player.play(UrlSource(url, mimeType: m.mimeType));
@@ -980,6 +984,12 @@ class _FileContent extends StatelessWidget {
         await OpenFilex.open(local);
         return;
       }
+    }
+    if (message.fileKey != null) {
+      // encrypted: open the decrypted bytes, never the ciphertext link
+      final b = await cache.bytes(key, () => app.fileUrl(key));
+      if (b != null) await launchUrl(Uri.dataFromBytes(b, mimeType: message.mimeType ?? 'application/octet-stream'));
+      return;
     }
     final url = await app.fileUrl(key);
     if (url != null) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);

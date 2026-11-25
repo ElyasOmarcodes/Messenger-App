@@ -51,6 +51,27 @@ Run each file in `backend/supabase/migrations/` once, in order, in the Supabase 
 3. `20261126000000_paigham_v5.sql`: message edit, reactions, pinned messages, albums, location and contact messages, group photos, and 24-hour stories (`stories`, `story_views`, `story_feed`, `story_viewers`, private `stories` bucket)
 4. `20261127000000_paigham_v6.sql`: Saved Messages (`saved_chat`) and per-person chat options on `chat_members` (pinned, muted, archived, marked unread, cleared history)
 5. `20261128000000_paigham_v7.sql`: hearts on stories (`story_views.liked`, `like_story`, likes in `story_feed` / `story_viewers`)
+6. `20261129000000_paigham_v8.sql`: end-to-end encryption (`user_keys`, `key_backups`, `chat_keys`, `chat_key_state`, `messages.cipher` / `key_id`, `edit_message_e2e`). Until it is run, the app keeps working without encryption.
+
+## End-to-end encryption
+
+- Each user has an X25519 key pair; the private key stays on the phone
+  (Keystore / Keychain). Its backup is locked with the user's PIN through
+  Argon2id (64 MiB, 2 passes; 19 MiB on the web) and AES-256-GCM; the PIN
+  never leaves the phone.
+- Each chat has random AES-256 keys, numbered. Every member gets a copy
+  locked with X25519 + HKDF-SHA256 between the sender and that member. A new
+  key is made when someone leaves; members who join or set up keys later get
+  a copy from the next member who opens the chat.
+- Message content (text, captions, metadata, file names, types, durations,
+  file keys) is sealed with AES-256-GCM; chat, message id, sender and key
+  number are bound in, so the server cannot move or re-attribute it.
+- Each file has its own random AES-256-GCM key; storage holds ciphertext.
+- The server still sees who talks to whom and when, the message kind, file
+  sizes, reactions and stories (not encrypted). There is no forward secrecy
+  yet (no ratchet): a stolen private key opens past messages of its chats.
+- Safety numbers (profile page) let two people check that no one is in
+  between.
 
 ## Offline sending (outbox)
 

@@ -65,6 +65,8 @@ class Message {
     this.localAlbum,
     this.pending = false,
     this.failed = false,
+    this.keyId,
+    this.locked = false,
   });
 
   final String id;
@@ -89,6 +91,21 @@ class Message {
   /// Album images being uploaded (shown before the upload finishes).
   final List<Uint8List>? localAlbum;
 
+  /// Number of the chat key it was sealed with (null = not end-to-end encrypted).
+  final int? keyId;
+
+  /// Encrypted, but this phone has no key to open it.
+  final bool locked;
+
+  bool get e2e => keyId != null;
+
+  /// Key of the encrypted file (inside the sealed message), if any.
+  String? get fileKey => meta?['fk'] as String?;
+
+  /// A message this phone cannot open, shown as a plain note.
+  Message lockedAs(String note) =>
+      Message(id: id, chatId: chatId, senderId: senderId, kind: MsgKind.text, body: note, createdAt: createdAt, replyTo: replyTo, keyId: keyId, locked: true);
+
   bool get deleted => deletedAt != null;
   bool get edited => editedAt != null;
 
@@ -112,6 +129,8 @@ class Message {
     durationMs: durationMs,
     editedAt: editedAt ?? this.editedAt,
     meta: meta,
+    keyId: keyId,
+    locked: locked,
   );
 
   /// Bytes of a file we are uploading (shown before the upload finishes).
@@ -135,6 +154,8 @@ class Message {
     durationMs: (j['duration_ms'] as num?)?.toInt(),
     editedAt: j['edited_at'] == null ? null : DateTime.parse(j['edited_at'] as String).toLocal(),
     meta: j['meta'] == null ? null : Map<String, dynamic>.from(j['meta'] as Map),
+    keyId: (j['key_id'] as num?)?.toInt(),
+    locked: j['locked'] == true,
   );
 
   /// Same shape as the server row, for the offline copy on the phone.
@@ -154,6 +175,8 @@ class Message {
     'duration_ms': durationMs,
     'edited_at': editedAt?.toUtc().toIso8601String(),
     'meta': meta,
+    'key_id': keyId,
+    if (locked) 'locked': true,
   };
 }
 
