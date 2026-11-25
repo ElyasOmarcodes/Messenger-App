@@ -766,6 +766,8 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
               if (pinned != null) Positioned(top: barTop, left: 0, right: 0, child: _pinnedBar(app, chat, pinned)),
+              // someone's encryption key changed: nothing is sealed for that key until checked
+              for (final uid in app.keyChangedIn(chat).take(1)) Positioned(left: 12, right: 12, bottom: _bottomH + 8, child: _keyChangedBar(app, chat, uid)),
               Positioned(
                 left: 0,
                 right: 0,
@@ -924,6 +926,79 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   String _entryKey(Object e) => e is String ? 'day-$e' : 'msg-${(e as (Message, GroupPos, bool)).$1.id}';
+
+  Widget _keyChangedBar(AppController app, Chat chat, String uid) {
+    final name = app.memberById(chat, uid)?.name ?? '';
+    return Material(
+      color: const Color(0xFFFFF3CD),
+      borderRadius: BorderRadius.circular(16),
+      elevation: 2,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(14, 10, 8, 6),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Icon(Icons.gpp_maybe_rounded, color: Color(0xFF8A6100)),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(context.tr('key_changed', {'name': name}), style: const TextStyle(color: Color(0xFF4A3800), height: 1.45)),
+                ),
+              ],
+            ),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton(onPressed: () => _showSafety(app, uid), child: Text(context.tr('verify_key'))),
+                TextButton(onPressed: () => app.acceptKeyChange(uid), child: Text(context.tr('accept_key'))),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showSafety(AppController app, String uid) {
+    showDialog<void>(
+      context: context,
+      builder: (d) => AlertDialog(
+        icon: const Icon(Icons.lock_rounded),
+        title: Text(d.tr('safety_number')),
+        content: FutureBuilder<String?>(
+          future: app.safetyNumber(uid),
+          builder: (_, snap) => Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (snap.connectionState != ConnectionState.done)
+                const Padding(padding: EdgeInsets.all(16), child: CircularProgressIndicator())
+              else
+                SelectableText(
+                  snap.data ?? '—',
+                  textAlign: TextAlign.center,
+                  textDirection: TextDirection.ltr,
+                  style: const TextStyle(fontSize: 19, height: 1.7, letterSpacing: 1.5),
+                ),
+              const SizedBox(height: 14),
+              Text(d.tr('safety_body'), textAlign: TextAlign.center, style: const TextStyle(fontSize: 13.5, height: 1.5)),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(d), child: Text(d.tr('close'))),
+          TextButton(
+            onPressed: () {
+              Navigator.pop(d);
+              app.acceptKeyChange(uid);
+            },
+            child: Text(d.tr('accept_key')),
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _pinnedBar(AppController app, Chat chat, Message pinned) {
     final cs = Theme.of(context).colorScheme;

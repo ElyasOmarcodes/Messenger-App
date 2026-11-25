@@ -6,6 +6,7 @@ import '../brand/brand.dart';
 import '../brand/logo.dart';
 import '../config.dart';
 import '../l10n/strings.dart';
+import '../services/e2e.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
 import 'chat_screen.dart';
@@ -484,7 +485,8 @@ class _PrivacyPage extends StatelessWidget {
               TextButton(onPressed: () => Navigator.pop(d), child: Text(d.tr('cancel'))),
               TextButton(
                 onPressed: () {
-                  if (a.text.length < 6) return set(() => err = 'pin_short');
+                  final weak = E2E.pinProblem(a.text);
+                  if (weak != null) return set(() => err = weak);
                   if (a.text != b.text) return set(() => err = 'pin_mismatch');
                   Navigator.pop(d, a.text);
                 },

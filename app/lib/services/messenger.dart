@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
@@ -21,7 +22,7 @@ typedef AuthError = String?;
 /// Central app state: account, chats, messages, realtime and settings.
 /// Backend: Supabase (Postgres + Auth + Realtime + Storage).
 /// Where this phone is with its end-to-end key.
-enum KeyState { unknown, ready, needCreate, needRestore, offline, unsupported }
+enum KeyState { unknown, ready, needCreate, needRestore, needStrengthen, offline, unsupported }
 
 class AppController extends ChangeNotifier with WidgetsBindingObserver {
   late SharedPreferences _prefs;
@@ -299,11 +300,105 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   final Map<String, ({int id, SecretKey key, DateTime at})> _sendKeys = {};
   final Map<String, String> _pubs = {};
 
+  /// Server has the v9 update (sealed stories, reactions, old messages).
+  bool _v9 = false;
+
+  /// Keys registered for downloaded files (stories, quotes): cache key → file key.
+  final Map<String, String> _fileKeys = {};
+
+  /// Public keys seen before (trust on first use, like Signal): userId → key.
+  /// A key that changes later is NOT used until the person is checked.
+  final Map<String, String> _pins = {};
+
+  /// People whose key changed since we first saw it: userId → new key.
+  final Map<String, String> keyChanges = {};
+
+  void registerFileKey(String cacheKey, String? fileKey) {
+    if (fileKey != null) _fileKeys[cacheKey] = fileKey;
+  }
+
+  // kept in preferences (also on the web, and kept after signing out)
+  Future<void> _loadPins() async {
+    _pins.clear();
+    final raw = _prefs.getString('key_pins_${myId!}');
+    if (raw == null) return;
+    try {
+      _pins.addAll((jsonDecode(raw) as Map).map((k, v) => MapEntry(k as String, v as String)));
+    } catch (_) {}
+  }
+
+  void _savePins() => unawaited(_prefs.setString('key_pins_${myId!}', jsonEncode(_pins)));
+
+  /// May [pub] be used as [uid]'s key? Mine must be exactly mine; someone
+  /// else's must match the key we saw first (a server cannot swap it).
+  bool _trusted(String uid, String pub) {
+    if (uid == myId) return pub == E2E.instance.publicKey;
+    final pinned = _pins[uid];
+    if (pinned == null) {
+      _pins[uid] = pub;
+      _savePins();
+      return true;
+    }
+    if (pinned == pub) return true;
+    if (keyChanges[uid] != pub) {
+      keyChanges[uid] = pub;
+      notifyListeners();
+    }
+    return false;
+  }
+
+  /// The key to open things [uid] locked: never a key the server swapped in,
+  /// but the one we saw first (so a swap can neither read nor block old messages).
+  String? _trustedPub(String uid, String? serverPub) {
+    if (uid == myId) return E2E.instance.publicKey;
+    if (serverPub == null) return _pins[uid];
+    return _trusted(uid, serverPub) ? serverPub : _pins[uid];
+  }
+
+  /// "Accept" on the key-changed notice (after checking the safety number).
+  Future<void> acceptKeyChange(String uid) async {
+    final pub = keyChanges.remove(uid);
+    if (pub == null) return;
+    _pins[uid] = pub;
+    _savePins();
+    _sendKeys.clear();
+    await _keysChanged();
+  }
+
+  /// Members of [chat] whose key changed.
+  List<String> keyChangedIn(Chat chat) => [
+    for (final m in chat.members)
+      if (keyChanges.containsKey(m.id)) m.id,
+  ];
+
+  /// Who may hold this chat's key: in a one-to-one chat only the two people
+  /// (a server cannot slip in a third), in Saved Messages only me.
+  bool _mayHold(String chatId, String uid) {
+    final chat = chatById(chatId);
+    if (chat == null || chat.isGroup) return true;
+    if (chat.isSaved) return uid == myId;
+    if (uid == myId) return true;
+    final peer = chat.peer(myId ?? '');
+    return peer != null && peer.id == uid;
+  }
+
+  Future<void> _probeV9() async {
+    try {
+      await _sb.rpc('story_audience').timeout(_net);
+      _v9 = true;
+      unawaited(_resealOld());
+    } catch (_) {
+      _v9 = false;
+    }
+  }
+
   /// Key on this phone? Otherwise: is there a locked backup to restore?
   Future<void> _initKeys() async {
+    await _loadPins();
     if (await E2E.instance.loadLocal(myId!)) {
       keyState = KeyState.ready;
       unawaited(_publishKey());
+      unawaited(_probeV9());
       return;
     }
     await checkKeyBackup();
@@ -335,6 +430,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   /// First time (or "forgot PIN"): a new key, locked with [pin] as a backup.
   /// Returns a translation key on failure.
   Future<String?> createKeys(String pin) async {
+    final weak = E2E.pinProblem(pin);
+    if (weak != null) return weak;
     try {
       final backup = await E2E.instance.create(myId!, pin);
       await _sb.from('key_backups').upsert({'user_id': myId, 'data': backup, 'updated_at': DateTime.now().toUtc().toIso8601String()}).timeout(_net);
@@ -358,14 +455,25 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     if (!await E2E.instance.restore(myId!, b, pin)) return 'wrong_pin';
     await _publishKey();
     await _keysChanged();
+    if (E2E.pinProblem(pin) != null) {
+      // an old short PIN: make a stronger one before going on
+      keyState = KeyState.needStrengthen;
+      notifyListeners();
+    }
     return null;
   }
 
   Future<String?> changePin(String pin) async {
+    final weak = E2E.pinProblem(pin);
+    if (weak != null) return weak;
     final backup = await E2E.instance.relock(pin);
     if (backup == null) return 'err_generic';
     try {
       await _sb.from('key_backups').upsert({'user_id': myId, 'data': backup, 'updated_at': DateTime.now().toUtc().toIso8601String()}).timeout(_net);
+      if (keyState == KeyState.needStrengthen) {
+        keyState = KeyState.ready;
+        notifyListeners();
+      }
       return null;
     } catch (_) {
       return 'err_network';
@@ -374,6 +482,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _keysChanged() async {
     keyState = KeyState.ready;
+    unawaited(_probeV9());
     _chatKeys.clear();
     _sendKeys.clear();
     notifyListeners();
@@ -414,18 +523,24 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       for (final r in rows) {
         final c = r['chat_id'] as String, id = (r['key_id'] as num).toInt();
         if (_chatKeys[c]?[id] != null) continue;
-        final pub = _pubs[r['wrapped_by'] as String];
+        final by = r['wrapped_by'] as String;
+        final pub = _trustedPub(by, _pubs[by]);
         if (pub == null) continue;
         final k = await E2E.instance.unwrap(r['wrapped'] as String, chatId: c, keyId: id, wrapperPub: pub);
         if (k != null) _chatKeys.putIfAbsent(c, () => {})[id] = k;
       }
-    } catch (_) {}
+    } catch (_) {
+      // offline: the messages stay locked until the next try
+    }
   }
 
   Future<SecretKey?> _keyFor(String chatId, int keyId) async {
     final k = _chatKeys[chatId]?[keyId];
     if (k != null) return k;
-    await (_keyLoads[chatId] ??= _loadMyChatKeys(chatId).whenComplete(() => _keyLoads.remove(chatId)));
+    // (a block body: returning the removed Future here would make it wait on itself)
+    await (_keyLoads[chatId] ??= _loadMyChatKeys(chatId).whenComplete(() {
+      _keyLoads.remove(chatId);
+    }));
     return _chatKeys[chatId]?[keyId];
   }
 
@@ -437,8 +552,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     if (cached != null && DateTime.now().difference(cached.at) < const Duration(minutes: 2)) return (id: cached.id, key: cached.key);
     final st = Map<String, dynamic>.from(await _sb.rpc('chat_key_state', params: {'c': chatId}).timeout(_net) as Map);
     final latest = (st['latest'] as num?)?.toInt();
-    final keys = (st['keys'] as List).cast<Map>();
-    final missing = (st['missing'] as List).cast<Map>();
+    bool ok(Map m) => _mayHold(chatId, m['user_id'] as String) && _trusted(m['user_id'] as String, m['public_key'] as String);
+    final keys = (st['keys'] as List).cast<Map>().where(ok).toList();
+    final missing = (st['missing'] as List).cast<Map>().where(ok).toList();
     var key = latest == null ? null : await _keyFor(chatId, latest);
     if (latest == null || key == null || st['stale'] == true || missing.any((m) => m['user_id'] == myId)) {
       final id = (latest ?? 0) + 1;
@@ -489,6 +605,89 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     return (id: latest, key: key);
   }
 
+  bool _resealing = false;
+
+  /// My messages from before encryption: sealed now, and their plain files
+  /// replaced by encrypted copies and deleted, so nothing old stays readable
+  /// on the server. Runs in the background, a batch per start.
+  Future<void> _resealOld() async {
+    if (!E2E.instance.ready || !_v9 || _resealing || myId == null) return;
+    _resealing = true;
+    final touched = <String>{};
+    try {
+      for (var round = 0; round < 20; round++) {
+        final rows = await _sb.from('messages').select().eq('sender_id', myId!).isFilter('cipher', null).isFilter('deleted_at', null).limit(50).timeout(_net);
+        if (rows.isEmpty) break;
+        var done = 0;
+        for (final r in rows) {
+          final chatId = r['chat_id'] as String;
+          final id = r['id'] as String;
+          try {
+            final sk = await _sendKey(chatId);
+            var meta = r['meta'] == null ? null : Map<String, dynamic>.from(r['meta'] as Map);
+            String? newPath;
+            final old = <String>[];
+            final fp = r['file_path'] as String?;
+            if (fp != null) {
+              final enc = await _resealFile(fp);
+              if (enc == null) continue;
+              newPath = enc.path;
+              old.add(fp);
+              meta = {...?meta, 'fk': enc.key};
+            }
+            if (meta?['items'] is List) {
+              final items = <Map<String, dynamic>>[];
+              for (final it in (meta!['items'] as List).cast<Map>()) {
+                final ip = it['path'] as String?;
+                final enc = ip == null ? null : await _resealFile(ip);
+                if (enc == null) throw StateError('file');
+                old.add(ip!);
+                items.add({...Map<String, dynamic>.from(it), 'path': enc.path, 'k': enc.key});
+              }
+              meta['items'] = items;
+            }
+            final body = (r['body'] as String?) ?? '';
+            final payload = <String, dynamic>{'b': body, 'm': meta, 'fn': r['file_name'], 'mt': r['mime_type'], 'd': r['duration_ms']}
+              ..removeWhere((_, v) => v == null);
+            final cipher = await E2E.instance.seal(sk.key, payload, chatId: chatId, msgId: id, senderId: myId!, keyId: sk.id);
+            await _sb.rpc('seal_old_message', params: {'m': id, 'new_cipher': cipher, 'new_key_id': sk.id, 'new_file_path': newPath}).timeout(_net);
+            if (old.isNotEmpty) {
+              try {
+                await _sb.storage.from(AppConfig.attachmentsBucket).remove(old).timeout(_net);
+              } catch (_) {}
+            }
+            touched.add(chatId);
+            done++;
+          } catch (_) {}
+        }
+        if (done == 0) break; // nothing more we can do now
+      }
+    } catch (_) {
+    } finally {
+      _resealing = false;
+    }
+    for (final c in touched) {
+      if (_messages[c] != null) unawaited(loadMessages(c));
+    }
+  }
+
+  /// A plain file → an encrypted copy beside it (same chat folder).
+  Future<({String path, String key})?> _resealFile(String path) async {
+    final raw = await MediaCache.instance.bytes(path, () => fileUrl(path));
+    if (raw == null) return null;
+    final key = E2E.newFileKey();
+    final sealed = await E2E.sealFile(raw, key);
+    final parts = path.split('/');
+    final np = '${parts.first}/${DateTime.now().microsecondsSinceEpoch}-e-${parts.last}';
+    await _sb.storage
+        .from(AppConfig.attachmentsBucket)
+        .uploadBinary(np, sealed, fileOptions: const FileOptions(contentType: 'application/octet-stream'))
+        .timeout(const Duration(seconds: 60));
+    await MediaCache.instance.store.save(np, raw);
+    registerFileKey(np, key);
+    return (path: np, key: key);
+  }
+
   /// Opening a chat: give the key to members who joined or set up keys since.
   void _shareKeysSoon(String chatId) {
     if (!E2E.instance.ready) return;
@@ -531,7 +730,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<Uint8List?> _openDownloaded(String key, Uint8List raw) async {
-    final fk = _fileKeyOf(key);
+    final fk = _fileKeys[key] ?? (key.startsWith('stories/') || key.startsWith('avatars/') ? null : _fileKeyOf(key));
     return fk == null ? raw : E2E.openFile(raw, fk);
   }
 
@@ -1416,21 +1615,38 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   Future<void> _loadReactions(String chatId) async {
     try {
-      final rows = await _sb.from('message_reactions').select('message_id,user_id,emoji').eq('chat_id', chatId);
+      final rows = await _sb
+          .from('message_reactions')
+          .select(_v9 ? 'message_id,user_id,emoji,cipher,key_id' : 'message_id,user_id,emoji')
+          .eq('chat_id', chatId);
       for (final r in rows) {
-        reactions.putIfAbsent(r['message_id'] as String, () => {})[r['user_id'] as String] = r['emoji'] as String;
+        final e = await _openReaction(chatId, r);
+        if (e != null) reactions.putIfAbsent(r['message_id'] as String, () => {})[r['user_id'] as String] = e;
       }
       notifyListeners();
     } catch (_) {}
   }
 
-  void _onReaction(PostgresChangeEvent type, Map<String, dynamic> row, Map<String, dynamic> old) {
+  /// The emoji of a reaction row (opened when it is sealed).
+  Future<String?> _openReaction(String chatId, Map<String, dynamic> r) async {
+    final c = r['cipher'] as String?;
+    final keyId = (r['key_id'] as num?)?.toInt();
+    if (c == null || keyId == null) return r['emoji'] as String?;
+    final key = await _keyFor(chatId, keyId);
+    if (key == null) return null;
+    final p = await E2E.instance.open(key, c, chatId: chatId, msgId: 'r:${r['message_id']}', senderId: r['user_id'] as String, keyId: keyId);
+    return p?['e'] as String?;
+  }
+
+  Future<void> _onReaction(PostgresChangeEvent type, Map<String, dynamic> row, Map<String, dynamic> old) async {
     if (type == PostgresChangeEvent.delete) {
       final mid = old['message_id'] as String?;
       final uid = old['user_id'] as String?;
       if (mid != null && uid != null) reactions[mid]?.remove(uid);
     } else {
-      reactions.putIfAbsent(row['message_id'] as String, () => {})[row['user_id'] as String] = row['emoji'] as String;
+      final e = await _openReaction(row['chat_id'] as String, row);
+      if (e == null) return;
+      reactions.putIfAbsent(row['message_id'] as String, () => {})[row['user_id'] as String] = e;
     }
     notifyListeners();
   }
@@ -1447,7 +1663,21 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       } else {
         map[myId!] = emoji;
         notifyListeners();
-        await _sb.from('message_reactions').upsert({'message_id': m.id, 'chat_id': chat.id, 'user_id': myId, 'emoji': emoji});
+        if (E2E.instance.ready && _v9) {
+          // the server only sees that someone reacted, not with what
+          final sk = await _sendKey(chat.id);
+          final cipher = await E2E.instance.seal(sk.key, {'e': emoji}, chatId: chat.id, msgId: 'r:${m.id}', senderId: myId!, keyId: sk.id);
+          await _sb.from('message_reactions').upsert({
+            'message_id': m.id,
+            'chat_id': chat.id,
+            'user_id': myId,
+            'emoji': '•',
+            'cipher': cipher,
+            'key_id': sk.id,
+          });
+        } else {
+          await _sb.from('message_reactions').upsert({'message_id': m.id, 'chat_id': chat.id, 'user_id': myId, 'emoji': emoji});
+        }
       }
     } catch (_) {}
   }
@@ -1635,6 +1865,11 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         for (final u in cached.map((e) => StoryUser.fromJson(e as Map<String, dynamic>)))
           if (u.stories.any((st) => now.difference(st.createdAt).inHours < 24)) u,
       ];
+      for (final u in stories) {
+        for (final st in u.stories) {
+          if (st.mediaPath != null) registerFileKey('stories/${st.mediaPath}', st.key);
+        }
+      }
       notifyListeners();
     } catch (_) {}
   }
@@ -1643,14 +1878,51 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     if (myId == null) return;
     await _loadCachedStories();
     try {
-      final data = await _sb.rpc('story_feed').timeout(_net) as List<dynamic>;
+      final data = await _openStories(await _sb.rpc('story_feed').timeout(_net) as List<dynamic>);
       stories = data.map((e) => StoryUser.fromJson(e as Map<String, dynamic>)).toList();
       unawaited(MediaCache.instance.store.writeJson('${_cachePrefix}_stories', data));
       notifyListeners();
     } catch (_) {}
   }
 
+  /// Opens sealed stories (my copy of each story key); ones I cannot open are left out.
+  Future<List<dynamic>> _openStories(List<dynamic> data) async {
+    final out = <dynamic>[];
+    for (final u in data.cast<Map<String, dynamic>>()) {
+      final author = (u['user'] as Map)['id'] as String;
+      final items = <Map<String, dynamic>>[];
+      for (final it in (u['stories'] as List).cast<Map<String, dynamic>>()) {
+        final c = it['cipher'] as String?;
+        if (c == null) {
+          items.add(it);
+          continue;
+        }
+        final w = it['wrapped'] as String?;
+        if (w == null || !E2E.instance.ready) continue;
+        try {
+          final pub = _trustedPub(author, await _pubOf(author));
+          if (pub == null) continue;
+          final key = await E2E.instance.unwrap(w, chatId: 'story-${it['id']}', keyId: 1, wrapperPub: pub);
+          if (key == null) continue;
+          final p = await E2E.instance.open(key, c, chatId: 'story', msgId: it['id'] as String, senderId: author, keyId: 0);
+          if (p == null) continue;
+          final k = E2E.b64(await key.extractBytes());
+          final mp = it['media_path'] as String?;
+          if (mp != null) registerFileKey('stories/$mp', k);
+          items.add(
+            {...it, 'body': p['b'] ?? '', 'bg': p['bg'], 'k': k}
+              ..remove('cipher')
+              ..remove('wrapped'),
+          );
+        } catch (_) {}
+      }
+      if (items.isNotEmpty) out.add({...u, 'stories': items});
+    }
+    return out;
+  }
+
   Future<bool> postStory({Uint8List? image, String? imageName, String text = '', String? bg}) async {
+    if (E2E.instance.ready && _v9) return _postSealedStory(image: image, imageName: imageName, text: text, bg: bg);
     try {
       String? path;
       if (image != null) {
@@ -1658,6 +1930,47 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         await _sb.storage.from('stories').uploadBinary(path, image, fileOptions: FileOptions(contentType: mimeFor(imageName ?? 'x.jpg')));
       }
       await _sb.from('stories').insert({'kind': image != null ? 'image' : 'text', 'media_path': path, 'body': text.trim(), 'bg': bg});
+      await loadStories();
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// A story only the people who may see it can open: its text and photo are
+  /// sealed with a fresh key, and each viewer gets a copy locked for them.
+  Future<bool> _postSealedStory({Uint8List? image, String? imageName, String text = '', String? bg}) async {
+    try {
+      final id = _uuid();
+      final k = E2E.newFileKey();
+      final key = SecretKey(E2E.unb64(k));
+      String? path;
+      if (image != null) {
+        path = '${myId!}/${DateTime.now().millisecondsSinceEpoch}-${_safe(imageName ?? 'story.jpg')}';
+        final sealed = await E2E.sealFile(image, k);
+        await _sb.storage.from('stories').uploadBinary(path, sealed, fileOptions: const FileOptions(contentType: 'application/octet-stream')).timeout(_net);
+        await MediaCache.instance.store.save('stories/$path', image);
+        registerFileKey('stories/$path', k);
+      }
+      final cipher = await E2E.instance.seal(key, {'b': text.trim(), 'bg': ?bg}, chatId: 'story', msgId: id, senderId: myId!, keyId: 0);
+      await _sb.from('stories').insert({'id': id, 'kind': image != null ? 'image' : 'text', 'media_path': path, 'body': '', 'cipher': cipher}).timeout(_net);
+      final audience = (await _sb.rpc('story_audience').timeout(_net) as List).cast<Map>();
+      final rows = [
+        for (final a in audience)
+          if (_trusted(a['user_id'] as String, a['public_key'] as String))
+            {
+              'story_id': id,
+              'viewer_id': a['user_id'],
+              'wrapped': await E2E.instance.wrap(
+                key,
+                chatId: 'story-$id',
+                keyId: 1,
+                recipientId: a['user_id'] as String,
+                recipientPub: a['public_key'] as String,
+              ),
+            },
+      ];
+      if (rows.isNotEmpty) await _sb.from('story_keys').insert(rows).timeout(_net);
       await loadStories();
       return true;
     } catch (_) {

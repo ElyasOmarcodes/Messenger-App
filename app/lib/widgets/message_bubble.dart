@@ -641,17 +641,12 @@ class _StoryQuote extends StatefulWidget {
 }
 
 class _StoryQuoteState extends State<_StoryQuote> {
-  String? _url;
-
   @override
   void initState() {
     super.initState();
+    // a sealed story's photo opens with the key carried in the (sealed) reply
     final p = widget.story['media_path'] as String?;
-    if (p != null) {
-      AppScope.read(context).storyUrl(p).then((u) {
-        if (mounted) setState(() => _url = u);
-      });
-    }
+    if (p != null) AppScope.read(context).registerFileKey('stories/$p', widget.story['k'] as String?);
   }
 
   @override
@@ -667,14 +662,12 @@ class _StoryQuoteState extends State<_StoryQuote> {
     final dpr = MediaQuery.devicePixelRatioOf(context);
     Widget thumb;
     if (image) {
-      thumb = _url == null
-          ? Container(color: Colors.black26)
-          : Image.network(
-              _url!,
-              fit: BoxFit.cover,
-              cacheWidth: (34 * dpr).round(),
-              errorBuilder: (_, _, _) => Container(color: Colors.black26),
-            );
+      final p = widget.story['media_path'] as String;
+      thumb = Image(
+        image: ResizeImage(CachedImage('stories/$p', () => app.storyUrl(p)), width: (34 * dpr).round()),
+        fit: BoxFit.cover,
+        errorBuilder: (_, _, _) => Container(color: Colors.black26),
+      );
     } else {
       thumb = Container(
         decoration: BoxDecoration(gradient: LinearGradient(colors: storyGradient(widget.story['bg'] as String?))),

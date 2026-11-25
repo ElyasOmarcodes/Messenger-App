@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../brand/brand.dart';
 import '../l10n/strings.dart';
+import '../services/e2e.dart';
 import '../services/messenger.dart';
 
 /// End-to-end key: create a PIN (first time) or open the backup with it
@@ -32,7 +33,8 @@ class _KeyScreenState extends State<KeyScreen> {
 
   Future<void> _submit(AppController app, bool create) async {
     final pin = _pin.text;
-    if (pin.length < 6) return setState(() => _error = 'pin_short');
+    final weak = create ? E2E.pinProblem(pin) : null;
+    if (weak != null) return setState(() => _error = weak);
     if (create && pin != _again.text) return setState(() => _error = 'pin_mismatch');
     setState(() {
       _busy = true;
@@ -40,7 +42,11 @@ class _KeyScreenState extends State<KeyScreen> {
     });
     // Argon2id takes a few seconds on purpose (slow for guessing, too)
     await Future<void>.delayed(const Duration(milliseconds: 50));
-    final err = create ? await app.createKeys(pin) : await app.restoreKeys(pin);
+    final err = !create
+        ? await app.restoreKeys(pin)
+        : app.keyState == KeyState.needStrengthen
+        ? await app.changePin(pin)
+        : await app.createKeys(pin);
     if (!mounted) return;
     setState(() {
       _busy = false;
@@ -98,7 +104,8 @@ class _KeyScreenState extends State<KeyScreen> {
         ),
       );
     }
-    final create = _forceCreate || app.keyState == KeyState.needCreate;
+    final strengthen = app.keyState == KeyState.needStrengthen;
+    final create = _forceCreate || strengthen || app.keyState == KeyState.needCreate;
     InputDecoration deco(String hint) => InputDecoration(
       hintText: hint,
       filled: true,
@@ -126,13 +133,13 @@ class _KeyScreenState extends State<KeyScreen> {
                   ),
                   const SizedBox(height: 20),
                   Text(
-                    context.tr(create ? 'e2e_create_title' : 'e2e_restore_title'),
+                    context.tr(strengthen ? 'pin_strengthen_title' : (create ? 'e2e_create_title' : 'e2e_restore_title')),
                     textAlign: TextAlign.center,
                     style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w800),
                   ),
                   const SizedBox(height: 10),
                   Text(
-                    context.tr(create ? 'e2e_create_body' : 'e2e_restore_body'),
+                    context.tr(strengthen ? 'pin_strengthen_body' : (create ? 'e2e_create_body' : 'e2e_restore_body')),
                     textAlign: TextAlign.center,
                     style: TextStyle(fontSize: 14.5, height: 1.6, color: cs.onSurfaceVariant),
                   ),
@@ -184,8 +191,7 @@ class _KeyScreenState extends State<KeyScreen> {
                     ),
                   ),
                   if (!create) ...[const SizedBox(height: 8), TextButton(onPressed: _busy ? null : _forgot, child: Text(context.tr('pin_forgot')))],
-                  const SizedBox(height: 8),
-                  TextButton(onPressed: _busy ? null : app.signOut, child: Text(context.tr('logout'))),
+                  if (!strengthen) ...[const SizedBox(height: 8), TextButton(onPressed: _busy ? null : app.signOut, child: Text(context.tr('logout')))],
                 ],
               ),
             ),

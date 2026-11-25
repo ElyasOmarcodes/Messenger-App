@@ -193,8 +193,12 @@ class StoryItem {
     this.views,
     this.liked = false,
     this.likes,
+    this.key,
   });
   final String id, kind, body;
+
+  /// Key of a sealed story (opens its photo), from my copy of the story key.
+  final String? key;
   final String? mediaPath, bg;
   final DateTime createdAt;
   bool seen;
@@ -215,6 +219,7 @@ class StoryItem {
     views: (j['views'] as num?)?.toInt(),
     liked: (j['liked'] as bool?) ?? false,
     likes: (j['likes'] as num?)?.toInt(),
+    key: j['k'] as String?,
   );
 }
 

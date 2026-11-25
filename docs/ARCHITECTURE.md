@@ -52,6 +52,7 @@ Run each file in `backend/supabase/migrations/` once, in order, in the Supabase 
 4. `20261127000000_paigham_v6.sql`: Saved Messages (`saved_chat`) and per-person chat options on `chat_members` (pinned, muted, archived, marked unread, cleared history)
 5. `20261128000000_paigham_v7.sql`: hearts on stories (`story_views.liked`, `like_story`, likes in `story_feed` / `story_viewers`)
 6. `20261129000000_paigham_v8.sql`: end-to-end encryption (`user_keys`, `key_backups`, `chat_keys`, `chat_key_state`, `messages.cipher` / `key_id`, `edit_message_e2e`). Until it is run, the app keeps working without encryption.
+7. `20261130000000_paigham_v9.sql`: nothing readable after a server break-in: sealed stories (`stories.cipher`, `story_keys`, `story_audience`), sealed reactions, `seal_old_message` for messages from before v8, and deleting one's own old attachment files.
 
 ## End-to-end encryption
 
@@ -67,9 +68,24 @@ Run each file in `backend/supabase/migrations/` once, in order, in the Supabase 
   file keys) is sealed with AES-256-GCM; chat, message id, sender and key
   number are bound in, so the server cannot move or re-attribute it.
 - Each file has its own random AES-256-GCM key; storage holds ciphertext.
-- The server still sees who talks to whom and when, the message kind, file
-  sizes, reactions and stories (not encrypted). There is no forward secrecy
-  yet (no ratchet): a stolen private key opens past messages of its chats.
+- Stories are sealed the same way (a fresh key per story, a copy locked for
+  each person who may see it); reactions are sealed with the chat key.
+- Messages from before encryption are sealed by their sender's phone, and
+  their plain files are replaced by encrypted copies and deleted.
+- The PIN must be strong (8+ characters with letters and digits, or 12+),
+  so the locked backups cannot be guessed offline after a break-in.
+- Keys are pinned on first sight (like Signal): if the server shows a
+  different key for someone, nothing is locked for it, old messages still
+  open with the pinned key, and the chat shows a warning until the person
+  is checked (safety number) and accepted. A one-to-one chat never hands its
+  key to a third member.
+
+What a server break-in still reveals: who talks to whom and when, message
+kinds and sizes, profile names, usernames, emails and photos, and group
+names and photos. A server that is not only read but taken over could add a
+new member to a group (members see it in the member list). There is no
+forward secrecy yet (no ratchet): a stolen phone key opens past messages of
+its chats.
 - Safety numbers (profile page) let two people check that no one is in
   between.
 

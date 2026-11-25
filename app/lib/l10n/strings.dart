@@ -302,10 +302,10 @@ class Strings {
       'fa': 'این حساب کلید رمزشده دارد. برای باز کردن پیام‌ها PIN را که ساخته بودید وارد کنید.',
       'en': 'This account already has an encrypted key. Enter the PIN you created to open your messages.',
     },
-    'pin_hint': {'ps': 'لږ تر لږه ۶ توري یا شمېرې', 'fa': 'دست‌کم ۶ حرف یا رقم', 'en': 'At least 6 letters or digits'},
+    'pin_hint': {'ps': 'لږ تر لږه ۸ توري (توري او شمېرې ګډې)', 'fa': 'دست‌کم ۸ نویسه (حرف و رقم)', 'en': 'At least 8 characters (letters and digits)'},
     'pin_again': {'ps': 'PIN بیا ولیکئ', 'fa': 'PIN را دوباره وارد کنید', 'en': 'Enter the PIN again'},
     'pin_mismatch': {'ps': 'دواړه PIN یو شان نه دي', 'fa': 'دو PIN یکسان نیستند', 'en': 'The PINs do not match'},
-    'pin_short': {'ps': 'PIN باید لږ تر لږه ۶ توري وي', 'fa': 'PIN باید دست‌کم ۶ نویسه باشد', 'en': 'The PIN must be at least 6 characters'},
+    'pin_short': {'ps': 'PIN باید لږ تر لږه ۸ توري وي', 'fa': 'PIN باید دست‌کم ۸ نویسه باشد', 'en': 'The PIN must be at least 8 characters'},
     'pin_tip': {
       'ps': 'اوږد PIN (توري او شمېرې ګډې) تر ټولو خوندي دی.',
       'fa': 'PIN بلندتر (حرف و رقم) امن‌تر است.',
@@ -319,6 +319,24 @@ class Strings {
       'en': 'A new key will be made. Messages encrypted with the old key may no longer open. Continue?',
     },
     'e2e_offline': {'ps': 'د کیلي د چک لپاره انټرنېټ ته اړتیا ده', 'fa': 'برای بررسی کلید به اینترنت نیاز است', 'en': 'Internet is needed to check your key'},
+    'pin_weak': {
+      'ps': 'دا PIN کمزوری دی. توري او شمېرې ګډې کړئ (یا ۱۲+ توري) او عام PIN مه کاروئ.',
+      'fa': 'این PIN ضعیف است. حرف و رقم را ترکیب کنید (یا ۱۲+ نویسه) و از PIN رایج استفاده نکنید.',
+      'en': 'This PIN is weak. Mix letters and digits (or use 12+ characters) and avoid common ones.',
+    },
+    'pin_strengthen_title': {'ps': 'قوي PIN جوړ کړئ', 'fa': 'PIN قوی بسازید', 'en': 'Make a stronger PIN'},
+    'pin_strengthen_body': {
+      'ps': 'ستاسو پخوانی PIN لنډ دی. که څوک سرور هک هم کړي، باید ستاسو کیلي پرانیستل ناشوني وي؛ نو یو قوي PIN وټاکئ.',
+      'fa': 'PIN قبلی شما کوتاه است. حتی اگر کسی سرور را هک کند، باز کردن کلید شما باید ناممکن باشد؛ پس PIN قوی انتخاب کنید.',
+      'en': 'Your old PIN is short. Even if someone breaks into the server, your key must stay impossible to open, so choose a strong PIN.',
+    },
+    'key_changed': {
+      'ps': 'د {name} د کوډ کیلي بدله شوې. تر هغو چې یې تایید نه کړئ، نوي پیغامونه ورته نه کوډ کېږي.',
+      'fa': 'کلید رمزگذاری {name} تغییر کرده. تا تأیید نکنید، پیام تازه برایش رمز نمی‌شود.',
+      'en': '{name}\'s encryption key changed. New messages are not encrypted for them until you confirm.',
+    },
+    'verify_key': {'ps': 'تایید وګورئ', 'fa': 'بررسی', 'en': 'Verify'},
+    'accept_key': {'ps': 'منل', 'fa': 'پذیرفتن', 'en': 'Accept'},
     'retry': {'ps': 'بیا هڅه', 'fa': 'تلاش دوباره', 'en': 'Try again'},
     'safety_number': {'ps': 'د خوندیتوب شمېره', 'fa': 'شماره امنیتی', 'en': 'Safety number'},
     'safety_body': {

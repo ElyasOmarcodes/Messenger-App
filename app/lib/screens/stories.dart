@@ -692,7 +692,7 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
       chat,
       t,
       meta: {
-        'story': {'id': st.id, 'owner': widget.user.user.id, 'kind': st.kind, 'body': st.body, 'bg': ?st.bg, 'media_path': ?st.mediaPath},
+        'story': {'id': st.id, 'owner': widget.user.user.id, 'kind': st.kind, 'body': st.body, 'bg': ?st.bg, 'media_path': ?st.mediaPath, 'k': ?st.key},
       },
     );
     messenger.showSnackBar(SnackBar(content: Text(sent), duration: const Duration(seconds: 2)));

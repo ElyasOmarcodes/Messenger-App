@@ -109,7 +109,51 @@ class E2E {
 
   // Argon2id: memory-hard, so guessing PINs is slow even on big hardware.
   // Web runs it in JavaScript, so it uses lighter settings there.
-  static Map<String, int> get _params => kIsWeb ? {'m': 19456, 't': 2, 'p': 1} : {'m': 65536, 't': 2, 'p': 1};
+  static Map<String, int> get _params => kIsWeb ? {'m': 19456, 't': 2, 'p': 1} : {'m': 65536, 't': 3, 'p': 1};
+
+  static const _common = {
+    '12345678',
+    '123456789',
+    '1234567890',
+    '87654321',
+    'password',
+    'password1',
+    'passw0rd',
+    'qwerty123',
+    'qwertyui',
+    'abc12345',
+    'abcd1234',
+    '1q2w3e4r',
+    '1qaz2wsx',
+    'iloveyou',
+    'paigham1',
+    'paigham123',
+    'afghanistan',
+    'kabul123',
+    '11223344',
+    '12341234',
+    '00000000',
+    'aa123456',
+    'a1234567',
+    '123456aa',
+    'asdf1234',
+    'zxcv1234',
+    '123qwe123',
+  };
+
+  /// Why a PIN is too weak to guard the backup, or null if it is fine.
+  ///
+  /// If the server is broken into, the locked backups can be guessed at
+  /// offline, so the PIN must be long enough that guessing takes ages even
+  /// with Argon2id: 8+ characters with letters and digits, or 12+ of anything.
+  static String? pinProblem(String pin) {
+    if (pin.length < 8) return 'pin_short';
+    final letters = RegExp(r'[^\d\s]').hasMatch(pin), digits = RegExp(r'\d').hasMatch(pin);
+    if (pin.length < 12 && !(letters && digits)) return 'pin_weak';
+    if (_common.contains(pin.toLowerCase()) || RegExp(r'^(.)\1+$').hasMatch(pin)) return 'pin_weak';
+    if (RegExp(r'^(.{1,4})\1+$').hasMatch(pin)) return 'pin_weak'; // abcabcabc, 12121212
+    return null;
+  }
 
   Future<SecretKey> _kdf(String pin, List<int> salt, Map<String, dynamic> p) => Argon2id(
     parallelism: (p['p'] as num).toInt(),
