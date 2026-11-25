@@ -95,12 +95,13 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   List<NavItem> _items(BuildContext context) => [
-    NavItem(Icons.forum_outlined, Icons.forum_rounded, context.tr('chats')),
-    NavItem(Icons.account_circle_outlined, Icons.account_circle, context.tr('contacts')),
-    NavItem(Icons.settings_outlined, Icons.settings_rounded, context.tr('settings')),
+    // round, filled icons (like Telegram's tab bar); the colour shows the chosen tab
+    NavItem(Icons.chat_bubble_rounded, Icons.chat_bubble_rounded, context.tr('chats')),
+    NavItem(Icons.people_alt_rounded, Icons.people_alt_rounded, context.tr('contacts')),
+    NavItem(Icons.settings_rounded, Icons.settings_rounded, context.tr('settings')),
     NavItem(
-      Icons.account_circle_outlined,
-      Icons.account_circle,
+      Icons.account_circle_rounded,
+      Icons.account_circle_rounded,
       context.tr('profile_tab'),
       custom: AppScope.read(context).me == null
           ? null

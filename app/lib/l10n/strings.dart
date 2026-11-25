@@ -286,6 +286,18 @@ class Strings {
     'online_now': {'ps': 'وصل', 'fa': 'آنلاین', 'en': 'online'},
     'tap_profile': {'ps': 'د معلوماتو لپاره کېکاږئ', 'fa': 'برای اطلاعات بزنید', 'en': 'tap for info'},
     // v0.6: saved messages, chat options
+    // v0.9: photo viewer, outbox, downloads
+    'more': {'ps': 'نور', 'fa': 'بیشتر', 'en': 'More'},
+    'share': {'ps': 'شریکول', 'fa': 'اشتراک‌گذاری', 'en': 'Share'},
+    'save_gallery': {'ps': 'ګالرۍ ته خوندي کول', 'fa': 'ذخیره در گالری', 'en': 'Save to Gallery'},
+    'saved_gallery': {'ps': 'ګالرۍ ته خوندي شو', 'fa': 'در گالری ذخیره شد', 'en': 'Saved to Gallery'},
+    'show_all_media': {'ps': 'ټولې رسنۍ ښودل', 'fa': 'نمایش همهٔ رسانه‌ها', 'en': 'Show All Media'},
+    'show_in_chat': {'ps': 'په چټ کې ښودل', 'fa': 'نمایش در گفتگو', 'en': 'Show in Chat'},
+    'n_of_m': {'ps': '{a} له {b}', 'fa': '{a} از {b}', 'en': '{a} of {b}'},
+    'day_at': {'ps': '{d} په {t}', 'fa': '{d} ساعت {t}', 'en': '{d} at {t}'},
+    'draw': {'ps': 'انځور کښل', 'fa': 'نقاشی', 'en': 'Draw'},
+    'waiting_network': {'ps': 'د انټرنېټ په تمه…', 'fa': 'در انتظار شبکه…', 'en': 'Waiting for network…'},
+    'cancel_download': {'ps': 'ښکته کول بندول', 'fa': 'لغو دانلود', 'en': 'Cancel download'},
     'downloading': {'ps': 'ښکته کېږي…', 'fa': 'در حال دانلود…', 'en': 'Downloading…'},
     'stories_cache': {'ps': 'کیسې', 'fa': 'استوری‌ها', 'en': 'Stories'},
     'data_storage': {'ps': 'معلومات او زېرمه', 'fa': 'داده‌ها و ذخیره‌سازی', 'en': 'Data and storage'},

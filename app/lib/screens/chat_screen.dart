@@ -1,9 +1,11 @@
 import 'dart:async';
+import 'dart:math' as math;
 
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:image_picker/image_picker.dart';
@@ -56,6 +58,10 @@ class _ChatScreenState extends State<ChatScreen> {
 
   // Delete animation bookkeeping.
   final Map<String, GlobalKey<DissolvableState>> _keys = {};
+  final _listCtl = ScrollController();
+
+  /// The message just jumped to glows for a moment.
+  final _flash = ValueNotifier<String?>(null);
   final Set<String> _dissolving = {};
   final Set<String> _shown = {};
   final Set<String> _gone = {};
@@ -85,6 +91,8 @@ class _ChatScreenState extends State<ChatScreen> {
     _app?.closeChat(widget.chatId);
     _input.dispose();
     _focus.dispose();
+    _listCtl.dispose();
+    _flash.dispose();
     _recTick?.cancel();
     _holdTimer?.cancel();
     _recorder.dispose();
@@ -126,10 +134,18 @@ class _ChatScreenState extends State<ChatScreen> {
       _replyTo = null;
     });
     _app!.sendText(chat, t, replyTo: reply);
+    _toBottom();
     if (!_emoji) _focus.requestFocus();
   }
 
+  /// After sending, show the newest message (like Telegram).
+  void _toBottom() {
+    if (!_listCtl.hasClients || _listCtl.offset <= 0) return;
+    _listCtl.animateTo(0, duration: const Duration(milliseconds: 280), curve: Curves.easeOutCubic);
+  }
+
   String? _takeReply() {
+    _toBottom();
     final r = _replyTo?.id;
     if (r != null) setState(() => _replyTo = null);
     return r;
@@ -487,6 +503,30 @@ class _ChatScreenState extends State<ChatScreen> {
     }
   }
 
+  /// Scrolls to a message (older ones are further up), then makes it glow.
+  Future<void> _jumpTo(String id) async {
+    for (var n = 0; n < 60 && mounted && _listCtl.hasClients; n++) {
+      final ctx = _keys[id]?.currentContext;
+      if (ctx != null && ctx.mounted) {
+        await Scrollable.ensureVisible(ctx, alignment: 0.45, duration: const Duration(milliseconds: 320), curve: Curves.easeOutCubic);
+        if (!mounted) return;
+        _flash.value = id;
+        Timer(const Duration(milliseconds: 1300), () {
+          if (mounted && _flash.value == id) _flash.value = null;
+        });
+        return;
+      }
+      final pos = _listCtl.position;
+      if (pos.pixels >= pos.maxScrollExtent - 1) {
+        await WidgetsBinding.instance.endOfFrame;
+        if (_listCtl.position.pixels >= _listCtl.position.maxScrollExtent - 1 && _keys[id]?.currentContext == null) return;
+        continue;
+      }
+      pos.jumpTo(math.min(pos.pixels + pos.viewportDimension * 0.8, pos.maxScrollExtent));
+      await WidgetsBinding.instance.endOfFrame;
+    }
+  }
+
   /// Plays the dust animation, then drops the bubble from the list.
   Future<void> _dissolve(String id, [Future<void> Function()? alongside]) async {
     setState(() => _dissolving.add(id));
@@ -816,7 +856,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final e = entries[entries.length - 1 - i];
       if (e is String) return SystemChip(text: e);
       final (m, pos, jp) = e as (Message, GroupPos, bool);
-      return Dissolvable(
+      final bubble = Dissolvable(
         key: _keys.putIfAbsent(m.id, () => GlobalKey<DissolvableState>()),
         child: MessageBubble(
           key: ValueKey(m.id),
@@ -827,12 +867,29 @@ class _ChatScreenState extends State<ChatScreen> {
           onReply: m.deleted ? null : (msg) => _onAction(chat, msg, MsgAction.reply),
           onAction: (msg, a) => _onAction(chat, msg, a),
           onOpenUser: _openUser,
+          onJump: _jumpTo,
+          onShowAll: chat.isSaved ? null : () => _openInfo(app, chat),
+        ),
+      );
+      return ValueListenableBuilder<String?>(
+        valueListenable: _flash,
+        child: bubble,
+        builder: (_, f, child) => AnimatedContainer(
+          duration: const Duration(milliseconds: 350),
+          color: f == m.id ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.18) : Colors.transparent,
+          child: child,
         ),
       );
     }
 
     return ListView.builder(
+      controller: _listCtl,
       reverse: true,
+      // each bubble already has its own repaint boundary (Dissolvable)
+      addRepaintBoundaries: false,
+      addAutomaticKeepAlives: false,
+      // build a bit beyond the screen, so fast flings don't build mid-frame
+      scrollCacheExtent: const ScrollCacheExtent.pixels(600),
       keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
       padding: EdgeInsets.fromLTRB(8, topPad, 8, _bottomH + 4),
       itemCount: entries.length,
@@ -855,7 +912,7 @@ class _ChatScreenState extends State<ChatScreen> {
     return Material(
       color: Colors.transparent,
       child: InkWell(
-        onTap: () {},
+        onTap: () => _jumpTo(pinned.id),
         child: Container(
           height: 52,
           padding: const EdgeInsetsDirectional.only(start: 14, end: 4),

@@ -721,7 +721,7 @@ class ChatTile extends StatelessWidget {
       who = chat.isSaved ? '' : (mine ? '${context.tr('you')}: ' : (chat.isGroup ? '${app.memberById(chat, last.senderId)?.name ?? ''}: ' : ''));
       preview = app.previewOf(last).replaceAll('\n', ' ');
     }
-    final read = last != null && mine && !chat.isSaved && app.statusOf(chat, last) == MsgStatus.read;
+    final status = last == null ? null : app.statusOf(chat, last);
     final badgeColor = chat.muted ? cs.onSurfaceVariant.withValues(alpha: 0.55) : cs.primary;
 
     return Material(
@@ -768,8 +768,17 @@ class ChatTile extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 6),
-                        if (mine && !chat.isSaved) ...[
-                          Icon(read ? Icons.done_all_rounded : Icons.done_rounded, size: 17, color: cs.primary),
+                        if (mine && (!chat.isSaved || status == MsgStatus.sending || status == MsgStatus.failed)) ...[
+                          Icon(
+                            switch (status) {
+                              MsgStatus.sending => Icons.schedule_rounded,
+                              MsgStatus.failed => Icons.error_rounded,
+                              MsgStatus.read => Icons.done_all_rounded,
+                              _ => Icons.done_rounded,
+                            },
+                            size: status == MsgStatus.sending ? 15 : 17,
+                            color: status == MsgStatus.failed ? Brand.pomegranate : (status == MsgStatus.sending ? cs.onSurfaceVariant : cs.primary),
+                          ),
                           const SizedBox(width: 3),
                         ],
                         if (last != null)

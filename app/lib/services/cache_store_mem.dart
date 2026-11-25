@@ -11,6 +11,8 @@ class CacheStore {
   String? filePath(String key) => null;
   Uint8List? memory(String key) => _mem[key];
   Future<Uint8List?> read(String key) async => _mem[key];
+  bool exists(String key) => _mem.containsKey(key);
+
   Future<void> save(String key, Uint8List bytes) async {
     if (_mem.length > 200) _mem.remove(_mem.keys.first);
     _mem[key] = bytes;

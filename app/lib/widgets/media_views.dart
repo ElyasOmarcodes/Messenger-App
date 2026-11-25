@@ -1,14 +1,22 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:gal/gal.dart';
+import 'package:share_plus/share_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../brand/brand.dart';
+import '../l10n/afghan_date.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/media_cache.dart';
 import '../services/messenger.dart';
+import 'message_bubble.dart' show MsgAction;
 
 /// Fits a photo of w×h into the bubble: keeps its shape, never too thin or tall.
 Size photoBox(double? w, double? h, {double maxW = 270, double maxH = 340, double minW = 150}) {
@@ -29,7 +37,7 @@ Object photoHeroTag(({String? path, Uint8List? bytes}) item) => item.path != nul
 /// The picture is decoded at the size it is shown, not at full camera size,
 /// and the link is fetched once, so scrolling stays smooth.
 class AttachmentImage extends StatefulWidget {
-  const AttachmentImage({super.key, this.path, this.bytes, this.fit = BoxFit.cover, this.full = false});
+  const AttachmentImage({super.key, this.path, this.bytes, this.fit = BoxFit.cover, this.full = false, this.size});
   final String? path;
   final Uint8List? bytes;
   final BoxFit fit;
@@ -37,17 +45,21 @@ class AttachmentImage extends StatefulWidget {
   /// Full-screen viewer: decode at screen size.
   final bool full;
 
+  /// File size, shown on the download button.
+  final int? size;
+
   @override
   State<AttachmentImage> createState() => _AttachmentImageState();
 }
 
 class _AttachmentImageState extends State<AttachmentImage> {
   bool _force = false; // tapped "download" while auto-download is off
+  bool _stopped = false; // tapped X while it was downloading
 
   @override
   Widget build(BuildContext context) {
     final app = AppScope.of(context);
-    final placeholder = Container(color: Colors.black12);
+    final placeholder = Container(color: Colors.black26);
     return LayoutBuilder(
       builder: (context, c) {
         final dpr = MediaQuery.devicePixelRatioOf(context);
@@ -60,19 +72,26 @@ class _AttachmentImageState extends State<AttachmentImage> {
         }
         final path = widget.path;
         if (path == null) return placeholder;
-        // auto-download off and not on the phone yet: show a download button
-        if (!app.autoPhotos && !_force && !widget.full && !MediaCache.instance.has(path)) {
-          return GestureDetector(
-            onTap: () => setState(() => _force = true),
-            child: Container(
-              color: Colors.black26,
-              alignment: Alignment.center,
-              child: Container(
-                padding: const EdgeInsets.all(10),
-                decoration: const BoxDecoration(color: Colors.black45, shape: BoxShape.circle),
-                child: const Icon(Icons.download_rounded, color: Colors.white, size: 28),
+        final small = w < 120 || h < 120;
+        final want = (app.autoPhotos || _force || widget.full) && !_stopped;
+        // not on the phone and not wanted yet: a download button (with the size)
+        if (!want && !MediaCache.instance.has(path)) {
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              placeholder,
+              Center(
+                child: DownloadRing(
+                  cacheKey: path,
+                  size: small ? 36 : 48,
+                  onStart: () => setState(() {
+                    _force = true;
+                    _stopped = false;
+                  }),
+                ),
               ),
-            ),
+              if (widget.size != null && !small) PositionedDirectional(top: 8, start: 8, child: _SizePill(bytes: widget.size!)),
+            ],
           );
         }
         return Image(
@@ -80,31 +99,159 @@ class _AttachmentImageState extends State<AttachmentImage> {
           image: ResizeImage.resizeIfNeeded(px, null, CachedImage(path, () => app.fileUrl(path))),
           fit: widget.fit,
           gaplessPlayback: true,
-          frameBuilder: (_, child, frame, sync) => sync || frame != null ? child : placeholder,
-          errorBuilder: (_, _, _) => Container(color: Colors.black12, child: const Icon(Icons.broken_image_outlined)),
+          frameBuilder: (_, child, frame, sync) => sync || frame != null
+              ? child
+              : Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    placeholder,
+                    // the ring fills while it downloads; X stops it
+                    Center(
+                      child: DownloadRing(
+                        cacheKey: path,
+                        size: small ? 36 : 48,
+                        onStart: () {},
+                        showIdle: false,
+                        onCancel: () => setState(() => _stopped = true),
+                      ),
+                    ),
+                  ],
+                ),
+          errorBuilder: (_, _, _) => GestureDetector(
+            onTap: () => setState(() {
+              _stopped = false;
+              _force = true;
+            }),
+            child: Container(
+              color: Colors.black26,
+              child: const Icon(Icons.refresh_rounded, color: Colors.white),
+            ),
+          ),
         );
       },
     );
   }
 }
 
-/// Full-screen, swipeable photo viewer. Opens like Telegram: the photo grows
-/// out of the bubble, the black backdrop fades in, the bars slide in from the
-/// top and bottom edges. Swipe up or down to close.
+class _SizePill extends StatelessWidget {
+  const _SizePill({required this.bytes});
+  final int bytes;
+
+  @override
+  Widget build(BuildContext context) => Container(
+    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+    decoration: BoxDecoration(color: Colors.black45, borderRadius: BorderRadius.circular(10)),
+    child: Text('\u2066${localDigits(formatBytes(bytes), context.lang)}\u2069', style: const TextStyle(color: Colors.white, fontSize: 12)),
+  );
+}
+
+/// Telegram-style round download control: an arrow to start, a ring that
+/// fills while the file arrives (tap it to stop), and [done] once the file
+/// is on the phone.
+class DownloadRing extends StatelessWidget {
+  const DownloadRing({
+    super.key,
+    required this.cacheKey,
+    required this.onStart,
+    this.onCancel,
+    this.size = 48,
+    this.background = Colors.black45,
+    this.done,
+    this.idleIcon = Icons.download_rounded,
+    this.showIdle = true,
+  });
+  final String cacheKey;
+  final VoidCallback onStart;
+  final VoidCallback? onCancel;
+  final double size;
+  final Color background;
+  final Widget? done;
+  final IconData idleIcon;
+
+  /// false: nothing until a download is really running (photos read from disk).
+  final bool showIdle;
+
+  @override
+  Widget build(BuildContext context) {
+    final cache = MediaCache.instance;
+    return ListenableBuilder(
+      listenable: cache,
+      builder: (context, _) {
+        final prog = cache.progressOf(cacheKey);
+        if (prog == null && done != null && cache.has(cacheKey)) return done!;
+        if (prog == null && !showIdle) return const SizedBox.shrink();
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTap: prog == null
+              ? onStart
+              : () {
+                  cache.cancel(cacheKey);
+                  onCancel?.call();
+                },
+          child: Container(
+            width: size,
+            height: size,
+            decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (prog != null)
+                  Padding(
+                    padding: const EdgeInsets.all(3),
+                    child: ValueListenableBuilder<double>(
+                      valueListenable: prog,
+                      builder: (_, v, _) => TweenAnimationBuilder<double>(
+                        tween: Tween(end: v),
+                        duration: const Duration(milliseconds: 200),
+                        builder: (_, a, _) =>
+                            CircularProgressIndicator(value: a < 0.02 ? null : a, strokeWidth: 2.6, strokeCap: StrokeCap.round, color: Colors.white),
+                      ),
+                    ),
+                  ),
+                Icon(prog == null ? idleIcon : Icons.close_rounded, color: Colors.white, size: size * 0.5),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// What the photo viewer can do with the message a photo belongs to.
+class ViewerActions {
+  const ViewerActions({this.chat, this.onAction, this.onShowInChat, this.onShowAll});
+  final Chat? chat;
+  final void Function(Message, MsgAction)? onAction;
+  final void Function(Message)? onShowInChat;
+  final VoidCallback? onShowAll;
+}
+
+enum _ViewerMenu { gallery, all, inChat, reply, share, delete }
+
+/// Telegram-style photo viewer: sender and time on top, forward / draw / ⋮,
+/// swipe between photos, pinch to zoom, drag down to close.
 class GalleryViewer extends StatefulWidget {
-  const GalleryViewer({super.key, required this.items, this.initial = 0});
+  const GalleryViewer({super.key, required this.items, this.initial = 0, this.messages, this.actions});
   final List<({String? path, Uint8List? bytes})> items;
   final int initial;
 
-  static void open(BuildContext context, List<({String? path, Uint8List? bytes})> items, int i) => Navigator.of(context).push(
-    PageRouteBuilder(
-      opaque: false,
-      barrierColor: Colors.transparent,
-      transitionDuration: const Duration(milliseconds: 300),
-      reverseTransitionDuration: const Duration(milliseconds: 250),
-      pageBuilder: (_, _, _) => GalleryViewer(items: items, initial: i),
-    ),
-  );
+  /// The message each photo comes from (same length as [items]), if known.
+  final List<Message?>? messages;
+  final ViewerActions? actions;
+
+  static void open(BuildContext context, List<({String? path, Uint8List? bytes})> items, int i, {List<Message?>? messages, ViewerActions? actions}) {
+    FocusManager.instance.primaryFocus?.unfocus();
+    Navigator.of(context).push(
+      PageRouteBuilder(
+        opaque: false,
+        barrierColor: Colors.transparent,
+        transitionDuration: const Duration(milliseconds: 300),
+        reverseTransitionDuration: const Duration(milliseconds: 250),
+        pageBuilder: (_, _, _) => GalleryViewer(items: items, initial: i, messages: messages, actions: actions),
+      ),
+    );
+  }
 
   @override
   State<GalleryViewer> createState() => _GalleryViewerState();
@@ -117,6 +264,8 @@ class _GalleryViewerState extends State<GalleryViewer> {
   bool _bars = true;
   bool _zoomed = false;
   double _drag = 0;
+  String? _note;
+  Timer? _noteTimer;
 
   @override
   void initState() {
@@ -131,14 +280,188 @@ class _GalleryViewerState extends State<GalleryViewer> {
   void dispose() {
     _ctl.dispose();
     _zoom.dispose();
+    _noteTimer?.cancel();
     super.dispose();
   }
 
-  Future<void> _download() async {
+  Message? get _msg {
+    final ms = widget.messages;
+    return ms == null || _i >= ms.length ? null : ms[_i];
+  }
+
+  void _toast(String key) {
+    _noteTimer?.cancel();
+    setState(() => _note = context.tr(key));
+    _noteTimer = Timer(const Duration(milliseconds: 1800), () {
+      if (mounted) setState(() => _note = null);
+    });
+  }
+
+  Future<Uint8List?> _bytes() async {
+    final it = widget.items[_i];
+    if (it.bytes != null) return it.bytes;
+    final p = it.path;
+    if (p == null) return null;
+    final app = AppScope.read(context);
+    return MediaCache.instance.bytes(p, () => app.fileUrl(p));
+  }
+
+  String get _name {
     final p = widget.items[_i].path;
-    if (p == null) return;
-    final url = await AppScope.read(context).fileUrl(p);
-    if (url != null) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+    final n = p?.split('/').last ?? 'photo.jpg';
+    return n.contains('.') ? n : '$n.jpg';
+  }
+
+  Future<void> _saveToGallery() async {
+    if (kIsWeb) {
+      final p = widget.items[_i].path;
+      final url = p == null ? null : await AppScope.read(context).fileUrl(p);
+      if (url != null) await launchUrl(Uri.parse(url), mode: LaunchMode.externalApplication);
+      return;
+    }
+    final b = await _bytes();
+    if (b == null) return _toast('err_generic');
+    try {
+      await Gal.putImageBytes(b, album: 'Paigham', name: 'Paigham-${DateTime.now().millisecondsSinceEpoch}');
+      _toast('saved_gallery');
+    } catch (_) {
+      _toast('err_generic');
+    }
+  }
+
+  Future<void> _share() async {
+    final b = await _bytes();
+    if (b == null) return _toast('err_generic');
+    try {
+      await SharePlus.instance.share(
+        ShareParams(
+          files: [XFile.fromData(b, name: _name, mimeType: mimeFor(_name))],
+          fileNameOverrides: [_name],
+        ),
+      );
+    } catch (_) {
+      _toast('err_generic');
+    }
+  }
+
+  Future<void> _draw() async {
+    final chat = widget.actions?.chat;
+    final b = await _bytes();
+    if (b == null || chat == null || !mounted) return;
+    final app = AppScope.read(context);
+    final out = await Navigator.of(context).push<Uint8List>(MaterialPageRoute(builder: (_) => PhotoDrawScreen(bytes: b)));
+    if (out == null || !mounted) return;
+    Navigator.of(context).pop();
+    await app.sendPhotos(chat, [(name: 'photo-${DateTime.now().millisecondsSinceEpoch}.png', bytes: out)]);
+  }
+
+  void _menu(_ViewerMenu v) {
+    final m = _msg;
+    final a = widget.actions;
+    switch (v) {
+      case _ViewerMenu.gallery:
+        _saveToGallery();
+      case _ViewerMenu.share:
+        _share();
+      case _ViewerMenu.all:
+        Navigator.of(context).pop();
+        a?.onShowAll?.call();
+      case _ViewerMenu.inChat:
+        Navigator.of(context).pop();
+        if (m != null) a?.onShowInChat?.call(m);
+      case _ViewerMenu.reply:
+        Navigator.of(context).pop();
+        if (m != null) a?.onAction?.call(m, MsgAction.reply);
+      case _ViewerMenu.delete:
+        Navigator.of(context).pop();
+        if (m != null) a?.onAction?.call(m, MsgAction.delete);
+    }
+  }
+
+  Widget _topBar(BuildContext context) {
+    final app = AppScope.of(context);
+    final m = _msg;
+    final a = widget.actions;
+    final chat = a?.chat;
+    final ready = m != null && !m.pending;
+    String? who;
+    String? when;
+    if (m != null) {
+      who = m.senderId == app.myId ? (app.me?.name ?? context.tr('you')) : (chat == null ? null : app.memberById(chat, m.senderId)?.name);
+      final s = Strings(context.lang);
+      final day = sameDay(m.createdAt, DateTime.now()) ? s.get('today') : chatListTime(m.createdAt, context.lang, s);
+      when = s.get('day_at', {'d': day, 't': hhmm(m.createdAt, context.lang)});
+    }
+    final n = widget.items.length;
+    final counter = context.tr('n_of_m', {'a': context.digits('${_i + 1}'), 'b': context.digits('$n')});
+    const white = TextStyle(color: Colors.white);
+    final mine = m != null && m.senderId == app.myId;
+    return SizedBox(
+      height: 56,
+      child: Row(
+        children: [
+          const BackButton(color: Colors.white),
+          Expanded(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  who ?? counter,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: white.copyWith(fontSize: 16.5, fontWeight: FontWeight.w700),
+                ),
+                if (when != null || n > 1)
+                  Text(
+                    [?when, if (who != null && n > 1) counter].join('  ·  '),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: white.copyWith(fontSize: 12.5, color: Colors.white70),
+                  ),
+              ],
+            ),
+          ),
+          if (ready && chat != null)
+            IconButton(
+              tooltip: context.tr('draw'),
+              onPressed: _draw,
+              icon: const Icon(Icons.brush_rounded, color: Colors.white),
+            ),
+          if (ready && a?.onAction != null)
+            IconButton(
+              tooltip: context.tr('forward'),
+              onPressed: () => a!.onAction!(m, MsgAction.forward),
+              icon: const Icon(Icons.shortcut_rounded, color: Colors.white),
+            ),
+          PopupMenuButton<_ViewerMenu>(
+            tooltip: context.tr('more'),
+            icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+            onSelected: _menu,
+            itemBuilder: (c) {
+              PopupMenuItem<_ViewerMenu> item(_ViewerMenu v, IconData icon, String key, {Color? color}) => PopupMenuItem(
+                value: v,
+                child: Row(
+                  children: [
+                    Icon(icon, size: 21, color: color),
+                    const SizedBox(width: 14),
+                    Text(c.tr(key), style: TextStyle(color: color)),
+                  ],
+                ),
+              );
+              return [
+                item(_ViewerMenu.gallery, Icons.download_rounded, 'save_gallery'),
+                if (a?.onShowAll != null) item(_ViewerMenu.all, Icons.photo_library_rounded, 'show_all_media'),
+                if (ready && a?.onShowInChat != null) item(_ViewerMenu.inChat, Icons.chat_rounded, 'show_in_chat'),
+                if (ready && a?.onAction != null) item(_ViewerMenu.reply, Icons.reply_rounded, 'reply'),
+                item(_ViewerMenu.share, Icons.share_rounded, 'share'),
+                if (ready && mine && a?.onAction != null) item(_ViewerMenu.delete, Icons.delete_rounded, 'delete', color: Brand.pomegranate),
+              ];
+            },
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -146,131 +469,325 @@ class _GalleryViewerState extends State<GalleryViewer> {
     final route = ModalRoute.of(context)!.animation!;
     final pad = MediaQuery.paddingOf(context);
     final dragFade = (1 - _drag.abs() / 400).clamp(0.0, 1.0);
-    return AnimatedBuilder(
-      animation: route,
-      builder: (context, _) {
-        final t = Curves.easeOut.transform(route.value);
-        final barsT = _bars ? t * dragFade : 0.0;
-        return Stack(
-          children: [
-            // black backdrop
-            Positioned.fill(
-              child: ColoredBox(color: Colors.black.withValues(alpha: t * dragFade)),
-            ),
-            // photos
-            Positioned.fill(
-              child: GestureDetector(
-                onTap: () => setState(() => _bars = !_bars),
-                onVerticalDragUpdate: _zoomed ? null : (d) => setState(() => _drag += d.delta.dy),
-                onVerticalDragEnd: _zoomed
-                    ? null
-                    : (d) {
-                        if (_drag.abs() > 110 || (d.primaryVelocity ?? 0).abs() > 900) {
-                          Navigator.of(context).pop();
-                        } else {
-                          setState(() => _drag = 0);
-                        }
-                      },
-                child: Transform.translate(
-                  offset: Offset(0, _drag),
-                  child: PageView.builder(
-                    controller: _ctl,
-                    physics: _zoomed ? const NeverScrollableScrollPhysics() : null,
-                    itemCount: widget.items.length,
-                    onPageChanged: (i) => setState(() {
-                      _i = i;
-                      _zoom.value = Matrix4.identity();
-                    }),
-                    itemBuilder: (_, i) => InteractiveViewer(
-                      transformationController: i == _i ? _zoom : null,
-                      maxScale: 5,
-                      panEnabled: _zoomed,
-                      child: Center(
-                        child: Hero(
-                          tag: photoHeroTag(widget.items[i]),
-                          child: AttachmentImage(path: widget.items[i].path, bytes: widget.items[i].bytes, fit: BoxFit.contain, full: true),
+    final caption = _msg?.body.trim() ?? '';
+    // Material gives the texts their style (no yellow debug underline)
+    return Material(
+      type: MaterialType.transparency,
+      child: AnimatedBuilder(
+        animation: route,
+        builder: (context, _) {
+          final t = Curves.easeOut.transform(route.value);
+          final barsT = _bars ? t * dragFade : 0.0;
+          return Stack(
+            children: [
+              // black backdrop
+              Positioned.fill(
+                child: ColoredBox(color: Colors.black.withValues(alpha: t * dragFade)),
+              ),
+              // photos
+              Positioned.fill(
+                child: GestureDetector(
+                  onTap: () => setState(() => _bars = !_bars),
+                  onVerticalDragUpdate: _zoomed ? null : (d) => setState(() => _drag += d.delta.dy),
+                  onVerticalDragEnd: _zoomed
+                      ? null
+                      : (d) {
+                          if (_drag.abs() > 110 || (d.primaryVelocity ?? 0).abs() > 900) {
+                            Navigator.of(context).pop();
+                          } else {
+                            setState(() => _drag = 0);
+                          }
+                        },
+                  child: Transform.translate(
+                    offset: Offset(0, _drag),
+                    child: PageView.builder(
+                      controller: _ctl,
+                      physics: _zoomed ? const NeverScrollableScrollPhysics() : null,
+                      itemCount: widget.items.length,
+                      onPageChanged: (i) => setState(() {
+                        _i = i;
+                        _zoom.value = Matrix4.identity();
+                      }),
+                      itemBuilder: (_, i) => InteractiveViewer(
+                        transformationController: i == _i ? _zoom : null,
+                        maxScale: 5,
+                        panEnabled: _zoomed,
+                        child: Center(
+                          child: Hero(
+                            tag: photoHeroTag(widget.items[i]),
+                            child: AttachmentImage(path: widget.items[i].path, bytes: widget.items[i].bytes, fit: BoxFit.contain, full: true),
+                          ),
                         ),
                       ),
                     ),
                   ),
                 ),
               ),
-            ),
-            // top bar slides down from the edge
-            Positioned(
-              left: 0,
-              right: 0,
-              top: -80 * (1 - barsT),
-              child: Opacity(
-                opacity: barsT,
-                child: Container(
-                  padding: EdgeInsets.only(top: pad.top),
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0x99000000), Color(0x00000000)]),
-                  ),
-                  child: SizedBox(
-                    height: 56,
-                    child: Row(
-                      children: [
-                        const BackButton(color: Colors.white),
-                        Expanded(
-                          child: Text(
-                            context.digits('${_i + 1} / ${widget.items.length}'),
-                            style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w700),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: context.tr('download'),
-                          onPressed: _download,
-                          icon: const Icon(Icons.download_rounded, color: Colors.white),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            // bottom strip slides up from the edge
-            if (widget.items.length > 1)
+              // top bar slides down from the edge
               Positioned(
                 left: 0,
                 right: 0,
-                bottom: -80 * (1 - barsT),
-                child: Opacity(
-                  opacity: barsT,
-                  child: Container(
-                    padding: EdgeInsets.fromLTRB(12, 16, 12, 12 + pad.bottom),
-                    decoration: const BoxDecoration(
-                      gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Color(0x99000000), Color(0x00000000)]),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        for (var k = 0; k < widget.items.length; k++)
-                          AnimatedContainer(
-                            duration: const Duration(milliseconds: 200),
-                            margin: const EdgeInsets.symmetric(horizontal: 3),
-                            width: k == _i ? 18 : 7,
-                            height: 7,
-                            decoration: BoxDecoration(color: k == _i ? Colors.white : Colors.white54, borderRadius: BorderRadius.circular(4)),
-                          ),
-                      ],
+                top: -80 * (1 - barsT),
+                child: IgnorePointer(
+                  ignoring: barsT < 0.5,
+                  child: Opacity(
+                    opacity: barsT,
+                    child: Container(
+                      padding: EdgeInsets.only(top: pad.top),
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(begin: Alignment.topCenter, end: Alignment.bottomCenter, colors: [Color(0xAA000000), Color(0x00000000)]),
+                      ),
+                      child: _topBar(context),
                     ),
                   ),
                 ),
               ),
-          ],
-        );
-      },
+              // bottom: caption and page dots
+              if (widget.items.length > 1 || caption.isNotEmpty)
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  bottom: -80 * (1 - barsT),
+                  child: IgnorePointer(
+                    child: Opacity(
+                      opacity: barsT,
+                      child: Container(
+                        padding: EdgeInsets.fromLTRB(16, 24, 16, 14 + pad.bottom),
+                        decoration: const BoxDecoration(
+                          gradient: LinearGradient(begin: Alignment.bottomCenter, end: Alignment.topCenter, colors: [Color(0xAA000000), Color(0x00000000)]),
+                        ),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            if (caption.isNotEmpty)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 10),
+                                child: Text(
+                                  caption,
+                                  maxLines: 4,
+                                  overflow: TextOverflow.ellipsis,
+                                  textAlign: TextAlign.center,
+                                  style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.35),
+                                ),
+                              ),
+                            if (widget.items.length > 1)
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  for (var k = 0; k < widget.items.length; k++)
+                                    AnimatedContainer(
+                                      duration: const Duration(milliseconds: 200),
+                                      margin: const EdgeInsets.symmetric(horizontal: 3),
+                                      width: k == _i ? 18 : 7,
+                                      height: 7,
+                                      decoration: BoxDecoration(color: k == _i ? Colors.white : Colors.white54, borderRadius: BorderRadius.circular(4)),
+                                    ),
+                                ],
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              // short notice ("Saved to Gallery")
+              Positioned(
+                left: 0,
+                right: 0,
+                bottom: 90 + pad.bottom,
+                child: IgnorePointer(
+                  child: AnimatedOpacity(
+                    opacity: _note == null ? 0 : 1,
+                    duration: const Duration(milliseconds: 200),
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                        decoration: BoxDecoration(color: const Color(0xE6303030), borderRadius: BorderRadius.circular(12)),
+                        child: Text(_note ?? '', style: const TextStyle(color: Colors.white, fontSize: 14)),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
     );
   }
 }
 
+/// Draw on a photo with a finger, then send the result (the brush in the viewer).
+class PhotoDrawScreen extends StatefulWidget {
+  const PhotoDrawScreen({super.key, required this.bytes});
+  final Uint8List bytes;
+
+  @override
+  State<PhotoDrawScreen> createState() => _PhotoDrawScreenState();
+}
+
+class _Stroke {
+  _Stroke(this.color, this.width);
+  final Color color;
+  final double width;
+  final List<Offset> points = [];
+}
+
+class _PhotoDrawScreenState extends State<PhotoDrawScreen> {
+  static const _colors = [Colors.white, Colors.black, Color(0xFFE53935), Color(0xFFFFB300), Color(0xFF43A047), Color(0xFF1E88E5), Color(0xFF8E24AA)];
+  final _strokes = <_Stroke>[];
+  final _boundary = GlobalKey();
+  final _repaint = ValueNotifier<int>(0);
+  Color _color = const Color(0xFFE53935);
+  double _width = 6;
+  ({int w, int h})? _size;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    AppController.imageSize(widget.bytes).then((s) {
+      if (mounted) setState(() => _size = (w: math.max(1, s.w), h: math.max(1, s.h)));
+    });
+  }
+
+  @override
+  void dispose() {
+    _repaint.dispose();
+    super.dispose();
+  }
+
+  Future<void> _done() async {
+    final ro = _boundary.currentContext?.findRenderObject();
+    if (ro is! RenderRepaintBoundary || _size == null) return;
+    setState(() => _busy = true);
+    final ratio = (_size!.w / ro.size.width).clamp(1.0, 4.0);
+    final img = await ro.toImage(pixelRatio: ratio);
+    final data = await img.toByteData(format: ui.ImageByteFormat.png);
+    if (!mounted) return;
+    Navigator.of(context).pop(data?.buffer.asUint8List());
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final size = _size;
+    return Scaffold(
+      backgroundColor: Colors.black,
+      appBar: AppBar(
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
+        leading: const CloseButton(),
+        title: Text(context.tr('draw')),
+        actions: [
+          IconButton(
+            tooltip: context.tr('undo'),
+            onPressed: _strokes.isEmpty ? null : () => setState(() => _strokes.removeLast()),
+            icon: const Icon(Icons.undo_rounded),
+          ),
+          IconButton(tooltip: context.tr('send'), onPressed: _busy ? null : _done, icon: const Icon(Icons.send_rounded)),
+        ],
+      ),
+      body: Column(
+        children: [
+          Expanded(
+            child: size == null
+                ? const Center(child: CircularProgressIndicator())
+                : Center(
+                    child: AspectRatio(
+                      aspectRatio: size.w / size.h,
+                      child: RepaintBoundary(
+                        key: _boundary,
+                        child: GestureDetector(
+                          onPanStart: (d) => setState(() => _strokes.add(_Stroke(_color, _width)..points.add(d.localPosition))),
+                          onPanUpdate: (d) {
+                            _strokes.last.points.add(d.localPosition);
+                            _repaint.value++;
+                          },
+                          child: Stack(
+                            fit: StackFit.expand,
+                            children: [
+                              Image.memory(widget.bytes, fit: BoxFit.fill),
+                              CustomPaint(painter: _StrokesPainter(_strokes, _repaint)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 8),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      for (final c in _colors)
+                        GestureDetector(
+                          onTap: () => setState(() => _color = c),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 150),
+                            margin: const EdgeInsets.symmetric(horizontal: 6),
+                            width: c == _color ? 32 : 26,
+                            height: c == _color ? 32 : 26,
+                            decoration: BoxDecoration(
+                              color: c,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: c == _color ? 3 : 1.5),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  Slider(value: _width, min: 2, max: 24, activeColor: _color, onChanged: (v) => setState(() => _width = v)),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StrokesPainter extends CustomPainter {
+  _StrokesPainter(this.strokes, Listenable repaint) : super(repaint: repaint);
+  final List<_Stroke> strokes;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final s in strokes) {
+      final p = Paint()
+        ..color = s.color
+        ..strokeWidth = s.width
+        ..strokeCap = StrokeCap.round
+        ..strokeJoin = StrokeJoin.round
+        ..style = PaintingStyle.stroke;
+      if (s.points.length == 1) {
+        canvas.drawCircle(s.points.first, s.width / 2, p..style = PaintingStyle.fill);
+        continue;
+      }
+      final path = Path()..moveTo(s.points.first.dx, s.points.first.dy);
+      for (final o in s.points.skip(1)) {
+        path.lineTo(o.dx, o.dy);
+      }
+      canvas.drawPath(path, p);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_StrokesPainter old) => true;
+}
+
 /// Telegram-style album grid (2–10 photos).
 class AlbumGrid extends StatelessWidget {
-  const AlbumGrid({super.key, required this.message, this.width = 270});
+  const AlbumGrid({super.key, required this.message, this.width = 270, this.actions});
   final Message message;
   final double width;
+  final ViewerActions? actions;
 
   @override
   Widget build(BuildContext context) {
@@ -281,7 +798,7 @@ class AlbumGrid extends StatelessWidget {
       for (var i = 0; i < n; i++) (path: i < items.length ? items[i]['path'] as String? : null, bytes: local != null && i < local.length ? local[i] : null),
     ];
     Widget tile(int i, double w, double h) => GestureDetector(
-      onTap: () => GalleryViewer.open(context, all, i),
+      onTap: () => GalleryViewer.open(context, all, i, messages: List.filled(n, message), actions: actions),
       child: SizedBox(
         width: w,
         height: h,

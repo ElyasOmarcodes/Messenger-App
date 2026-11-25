@@ -84,6 +84,18 @@ class CacheStore {
 
   Uint8List? memory(String key) => null;
 
+  // files known to be on disk, so building a bubble needs no disk check
+  final Set<String> _known = {};
+
+  /// Cheap "is it on the phone?" (no touch of the file's date).
+  bool exists(String key) {
+    if (_known.contains(key)) return true;
+    final f = _file(key);
+    if (f == null || !f.existsSync()) return false;
+    _known.add(key);
+    return true;
+  }
+
   Future<Uint8List?> read(String key) async {
     final p = filePath(key);
     if (p == null) return null;
@@ -102,6 +114,7 @@ class CacheStore {
       final tmp = File('${f.path}.part');
       await tmp.writeAsBytes(bytes, flush: true);
       await tmp.rename(f.path);
+      _known.add(key);
     } catch (_) {}
   }
 
@@ -136,6 +149,7 @@ class CacheStore {
   }
 
   Future<void> clear({String? folder}) async {
+    _known.clear();
     try {
       final targets = <Directory>[];
       if (folder == null) {
@@ -157,6 +171,7 @@ class CacheStore {
   /// then the least recently used ones until everything fits [maxBytes].
   /// 0 means "forever" / "no limit".
   Future<void> cleanup({required int keepDays, required int maxBytes}) async {
+    _known.clear();
     final files = <(File, DateTime, int)>[];
     final roots = [..._chatRoots, ?_cache];
     for (final root in roots) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'dart:typed_data';
 import 'dart:ui' as ui;
 
@@ -255,7 +256,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> _onSignedIn() async {
-    // Show what we saw last time right away (also works offline), then refresh.
+    // Everything saved on the phone first, before any network call, so the
+    // app opens fully (chats, stories, unsent messages) without internet.
     final cachedMe = await MediaCache.instance.store.readJson('${_cachePrefix}_me');
     if (cachedMe is Map<String, dynamic> && me == null) me = Profile.fromJson(cachedMe);
     final cached = await MediaCache.instance.store.readJson('${_cachePrefix}_chats');
@@ -264,13 +266,31 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         chats = cached.map((e) => Chat.fromJson(e as Map<String, dynamic>)).toList();
         _sortChats();
         chatsLoaded = true;
-        notifyListeners();
       } catch (_) {}
     }
-    await _loadProfile();
-    await reloadChats();
-    unawaited(loadStories());
+    await _loadCachedStories();
+    await _loadOutbox();
+    _showOutboxInChats();
+    notifyListeners();
     _subscribe();
+    unawaited(_loadProfile());
+    unawaited(loadStories());
+    await reloadChats();
+    unawaited(_drain());
+  }
+
+  /// A chat whose newest message is still waiting to be sent shows it (with a clock).
+  void _showOutboxInChats() {
+    for (final it in _outbox) {
+      final chat = chatById(it['chat'] as String);
+      final m = messageById(it['chat'] as String, it['id'] as String);
+      if (chat == null || m == null) continue;
+      if (!m.createdAt.isBefore(chat.lastMessageAt)) {
+        chat.lastMessage = m;
+        chat.lastMessageAt = m.createdAt;
+      }
+    }
+    _sortChats();
   }
 
   void _onSignedOut() {
@@ -281,13 +301,17 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     chatsLoaded = false;
     _messages.clear();
     _signedUrls.clear();
+    _outbox.clear();
+    _failedItems.clear();
+    _diskLoaded.clear();
+    _retryTimer?.cancel();
     openChatId = null;
     realtimeOnline = false;
   }
 
   Future<void> _loadProfile() async {
     try {
-      final row = await _sb.from('profiles').select().eq('id', myId!).single();
+      final row = await _sb.from('profiles').select().eq('id', myId!).single().timeout(_net);
       me = Profile.fromJson(row);
       unawaited(MediaCache.instance.store.writeJson('${_cachePrefix}_me', row));
       notifyListeners();
@@ -333,9 +357,14 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   void _onMessage(Message m) {
     _persistSoon(m.chatId);
     final list = _messages[m.chatId];
-    if (list != null && !list.any((x) => x.id == m.id)) {
-      // Our own message may still be shown as a pending local copy; _replace handles it.
-      if (m.senderId != myId) list.add(m);
+    if (list != null) {
+      // ids are made on the phone, so our own pending copy has the same id
+      final i = list.indexWhere((x) => x.id == m.id);
+      if (i < 0) {
+        list.add(m); // also our messages sent from another device
+      } else if (list[i].pending) {
+        list[i] = m;
+      }
     }
     final chat = chatById(m.chatId);
     if (chat == null) {
@@ -432,16 +461,23 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   void _scheduleReload() {
     _reloadTimer?.cancel();
-    _reloadTimer = Timer(const Duration(milliseconds: 300), reloadChats);
+    _reloadTimer = Timer(const Duration(milliseconds: 300), () {
+      reloadChats();
+      unawaited(_drain()); // back online / back in the app: send what waits
+    });
   }
+
+  /// Network calls give up after this, so a dead connection never blocks the screen.
+  static const _net = Duration(seconds: 20);
 
   // ── Chats ────────────────────────────────────────────────────────────────
   Future<void> reloadChats() async {
     if (myId == null) return;
     try {
-      final data = await _sb.rpc('my_chats') as List<dynamic>;
+      final data = await _sb.rpc('my_chats').timeout(_net) as List<dynamic>;
       chats = data.map((e) => Chat.fromJson(e as Map<String, dynamic>)).toList();
       unawaited(MediaCache.instance.store.writeJson('${_cachePrefix}_chats', data));
+      _showOutboxInChats();
       final open = openChatId == null ? null : chatById(openChatId!);
       if (open != null) open.unread = 0;
       _sortChats();
@@ -607,16 +643,21 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   // ── Messages ─────────────────────────────────────────────────────────────
   List<Message>? messagesOf(String chatId) => _messages[chatId];
+  final Set<String> _diskLoaded = {};
 
   Future<void> loadMessages(String chatId) async {
     unawaited(_loadReactions(chatId));
     final cacheName = '${_cachePrefix}_m_$chatId';
-    if (_messages[chatId] == null) {
+    if (_diskLoaded.add(chatId)) {
       // last seen messages first, from the phone — instant, and works offline
       final cached = await MediaCache.instance.store.readJson(cacheName);
-      if (cached is List && _messages[chatId] == null) {
+      if (cached is List) {
         try {
-          _messages[chatId] = cached.map((e) => Message.fromJson(e as Map<String, dynamic>)).toList()..sort((a, b) => a.createdAt.compareTo(b.createdAt));
+          final list = _messages.putIfAbsent(chatId, () => []);
+          for (final m in cached.map((e) => Message.fromJson(e as Map<String, dynamic>))) {
+            if (!list.any((x) => x.id == m.id)) list.add(m);
+          }
+          list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
           notifyListeners();
         } catch (_) {}
       }
@@ -625,7 +666,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       final cleared = chatById(chatId)?.clearedAt;
       var q = _sb.from('messages').select().eq('chat_id', chatId);
       if (cleared != null) q = q.gt('created_at', cleared.toUtc().toIso8601String());
-      final rows = await q.order('created_at', ascending: false).limit(300);
+      final rows = await q.order('created_at', ascending: false).limit(300).timeout(_net);
       final list = rows.map(Message.fromJson).toList().reversed.toList();
       for (final m in _messages[chatId] ?? const <Message>[]) {
         if (!list.any((x) => x.id == m.id)) list.add(m); // keep pending/realtime ones
@@ -641,7 +682,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   void openChat(String id) {
     openChatId = id;
-    if (_messages[id] == null) loadMessages(id);
+    if (_messages[id] == null || !_diskLoaded.contains(id)) loadMessages(id);
     final c = chatById(id);
     if (c != null) markRead(c);
   }
@@ -680,6 +721,25 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     return MsgStatus.sent;
   }
 
+  // ── Sending: a queue kept on the phone (works offline) ──────────────────
+  // Every outgoing message goes into the outbox first and shows at once with
+  // a clock. The outbox is saved to disk and sent in order; with no internet
+  // it waits and retries by itself (also after the app restarts). Each
+  // message has its final id from the start, so a retry never duplicates it.
+  final List<Map<String, dynamic>> _outbox = [];
+  final Map<String, Map<String, dynamic>> _failedItems = {};
+  bool _draining = false;
+  Timer? _retryTimer;
+
+  static String _uuid() {
+    final r = math.Random.secure();
+    final b = List<int>.generate(16, (_) => r.nextInt(256));
+    b[6] = (b[6] & 0x0f) | 0x40;
+    b[8] = (b[8] & 0x3f) | 0x80;
+    final h = b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+    return '${h.substring(0, 8)}-${h.substring(8, 12)}-${h.substring(12, 16)}-${h.substring(16, 20)}-${h.substring(20)}';
+  }
+
   Message _local(
     Chat chat,
     MsgKind kind,
@@ -691,24 +751,32 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     String? replyTo,
     int? durationMs,
     Map<String, dynamic>? meta,
+    String? filePath,
+    List<Uint8List>? album,
+    String? id,
   }) {
     final m = Message(
-      id: 'local-${DateTime.now().microsecondsSinceEpoch}',
+      id: id ?? _uuid(),
       chatId: chat.id,
       senderId: myId!,
       kind: kind,
       body: body,
       createdAt: DateTime.now(),
+      filePath: filePath,
       fileName: name,
       fileSize: size,
       mimeType: mime,
       replyTo: replyTo,
       durationMs: durationMs,
       localBytes: bytes,
+      localAlbum: album,
       meta: meta,
       pending: true,
     );
     _messages.putIfAbsent(chat.id, () => []).add(m);
+    chat.lastMessage = m;
+    chat.lastMessageAt = m.createdAt;
+    _sortChats();
     notifyListeners();
     return m;
   }
@@ -716,96 +784,258 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   void _replace(Chat chat, Message local, Message saved) {
     _persistSoon(chat.id);
     final list = _messages.putIfAbsent(chat.id, () => []);
-    list.removeWhere((x) => x.id == saved.id);
-    final i = list.indexOf(local);
-    if (i >= 0) {
-      list[i] = saved;
-    } else {
+    final i = list.indexWhere((x) => x.id == local.id || identical(x, local));
+    list.removeWhere((x) => x.id == saved.id && !identical(x, local));
+    final j = list.indexWhere((x) => identical(x, local));
+    if (j >= 0) {
+      list[j] = saved;
+    } else if (i < 0) {
       list.add(saved);
     }
-    chat.lastMessage = saved;
-    chat.lastMessageAt = saved.createdAt;
+    if (chat.lastMessage == null || chat.lastMessage!.id == saved.id || !saved.createdAt.isBefore(chat.lastMessageAt)) {
+      chat.lastMessage = saved;
+      chat.lastMessageAt = saved.createdAt;
+    }
     _sortChats();
     notifyListeners();
   }
+
+  /// Puts a message in the outbox (with its files saved on the phone first).
+  Future<void> _enqueue(
+    Chat chat,
+    Message local,
+    Map<String, dynamic> fields, {
+    List<({String path, Uint8List bytes, String mime})> uploads = const [],
+    List<({String from, String to})> copies = const [],
+  }) async {
+    for (final u in uploads) {
+      // kept under its server path: shows offline now, and is already cached after sending
+      await MediaCache.instance.store.save(u.path, u.bytes);
+    }
+    for (final c in copies) {
+      final b = await MediaCache.instance.store.read(c.from);
+      if (b != null) await MediaCache.instance.store.save(c.to, b);
+    }
+    final item = <String, dynamic>{
+      'id': local.id,
+      'chat': chat.id,
+      'kind': local.kind.name,
+      'fields': fields,
+      'uploads': [
+        for (final u in uploads) {'path': u.path, 'mime': u.mime, 'done': false},
+      ],
+      'copies': [
+        for (final c in copies) {'from': c.from, 'to': c.to, 'done': false},
+      ],
+      'local': local.toJson(),
+    };
+    _outbox.add(item);
+    await _saveOutbox();
+    unawaited(_drain());
+  }
+
+  Future<void> _saveOutbox() => MediaCache.instance.store.writeJson('${_cachePrefix}_outbox', _outbox);
+
+  /// Brings back unsent messages after a restart (they keep their clock).
+  Future<void> _loadOutbox() async {
+    final saved = await MediaCache.instance.store.readJson('${_cachePrefix}_outbox');
+    if (saved is! List) return;
+    _outbox
+      ..clear()
+      ..addAll(saved.cast<Map>().map((e) => Map<String, dynamic>.from(e)));
+    for (final it in _outbox) {
+      final m = Message.fromJson(Map<String, dynamic>.from(it['local'] as Map))..pending = true;
+      final list = _messages.putIfAbsent(m.chatId, () => []);
+      if (!list.any((x) => x.id == m.id)) list.add(m);
+    }
+    if (_outbox.isNotEmpty) notifyListeners();
+  }
+
+  void _scheduleRetry() {
+    _retryTimer?.cancel();
+    _retryTimer = Timer(const Duration(seconds: 6), () => unawaited(_drain()));
+  }
+
+  /// Sends the outbox in order. Stops at the first network problem and
+  /// tries again a little later.
+  Future<void> _drain() async {
+    if (_draining || myId == null || _outbox.isEmpty) return;
+    _draining = true;
+    try {
+      while (_outbox.isNotEmpty) {
+        final it = _outbox.first;
+        final r = await _sendItem(it);
+        if (r == null) {
+          _scheduleRetry();
+          break;
+        }
+        _outbox.removeAt(0);
+        await _saveOutbox();
+        if (!r) {
+          // a real refusal from the server: show the red mark, tap to retry
+          _failedItems[it['id'] as String] = it;
+          final m = messageById(it['chat'] as String, it['id'] as String);
+          if (m != null) {
+            m
+              ..pending = false
+              ..failed = true;
+            notifyListeners();
+          }
+        }
+      }
+    } finally {
+      _draining = false;
+    }
+  }
+
+  /// true = sent, false = refused (won't work by retrying), null = no network.
+  Future<bool?> _sendItem(Map<String, dynamic> it) async {
+    const wait = Duration(seconds: 25);
+    try {
+      for (final c in (it['copies'] as List).cast<Map>()) {
+        if (c['done'] == true) continue;
+        try {
+          await _sb.storage.from(AppConfig.attachmentsBucket).copy(c['from'] as String, c['to'] as String).timeout(wait);
+        } on StorageException catch (e) {
+          if (e.statusCode != '409' && !e.message.toLowerCase().contains('exist')) rethrow;
+        }
+        c['done'] = true;
+        await _saveOutbox();
+      }
+      for (final u in (it['uploads'] as List).cast<Map>()) {
+        if (u['done'] == true) continue;
+        final bytes = await MediaCache.instance.store.read(u['path'] as String);
+        if (bytes == null) return false;
+        try {
+          await _sb.storage
+              .from(AppConfig.attachmentsBucket)
+              .uploadBinary(u['path'] as String, bytes, fileOptions: FileOptions(contentType: u['mime'] as String))
+              .timeout(wait);
+        } on StorageException catch (e) {
+          // already there from an earlier try that lost its answer
+          if (e.statusCode != '409' && !e.message.toLowerCase().contains('exist')) rethrow;
+        }
+        u['done'] = true;
+        await _saveOutbox();
+      }
+      final chatId = it['chat'] as String;
+      Map<String, dynamic> row;
+      try {
+        row = await _sb
+            .from('messages')
+            .insert({'id': it['id'], 'chat_id': chatId, 'sender_id': myId, 'kind': it['kind'], ...Map<String, dynamic>.from(it['fields'] as Map)})
+            .select()
+            .single()
+            .timeout(wait);
+      } on PostgrestException catch (e) {
+        if (e.code != '23505') rethrow; // 23505 = it was saved already
+        row = await _sb.from('messages').select().eq('id', it['id'] as String).single().timeout(wait);
+      }
+      final saved = Message.fromJson(row);
+      final chat = chatById(chatId);
+      final local = messageById(chatId, saved.id);
+      if (chat != null && local != null) {
+        _replace(chat, local, saved);
+      } else {
+        _persistSoon(chatId);
+      }
+      return true;
+    } on PostgrestException catch (e) {
+      final code = e.code ?? '';
+      // permission / validation problems are final; anything else: try again later
+      return code.startsWith('42') || code.startsWith('23') || code.startsWith('22') ? false : null;
+    } on StorageException catch (e) {
+      final st = int.tryParse(e.statusCode ?? '') ?? 0;
+      return st >= 400 && st < 500 && st != 408 && st != 429 ? false : null;
+    } catch (_) {
+      return null; // no internet, timeout, …
+    }
+  }
+
+  /// The X on a message still waiting to be sent: drop it (like Telegram).
+  bool cancelSend(Chat chat, Message m) {
+    final i = _outbox.indexWhere((it) => it['id'] == m.id);
+    final wasFailed = _failedItems.remove(m.id) != null;
+    if (i < 0 && !wasFailed) return false;
+    if (i == 0 && _draining) return false; // already on its way
+    if (i >= 0) {
+      _outbox.removeAt(i);
+      unawaited(_saveOutbox());
+    }
+    final list = _messages[chat.id];
+    list?.removeWhere((x) => x.id == m.id);
+    if (chat.lastMessage?.id == m.id) {
+      chat.lastMessage = list == null || list.isEmpty ? null : list.last;
+      if (chat.lastMessage != null) chat.lastMessageAt = chat.lastMessage!.createdAt;
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// Unsent and refused counts, for the header.
+  int get unsentCount => _outbox.length;
 
   Future<void> sendText(Chat chat, String text, {String? replyTo, Map<String, dynamic>? meta}) async {
     final body = text.trim();
     if (body.isEmpty) return;
     final local = _local(chat, MsgKind.text, body.length > 4000 ? body.substring(0, 4000) : body, replyTo: replyTo, meta: meta);
-    await _insert(chat, local, {'body': local.body, 'reply_to': ?replyTo, 'meta': ?meta});
+    await _enqueue(chat, local, {'body': local.body, 'reply_to': ?replyTo, 'meta': ?meta});
   }
 
-  /// Uploads a recorded voice note and posts it.
+  /// A recorded voice note.
   Future<void> sendVoice(Chat chat, {required Uint8List bytes, required int durationMs, required String ext, String? replyTo}) async {
     if (bytes.isEmpty) return;
     final mime = ext == 'm4a' ? 'audio/mp4' : (ext == 'wav' ? 'audio/wav' : 'audio/webm');
     final name = 'voice-${DateTime.now().millisecondsSinceEpoch}.$ext';
-    final local = _local(chat, MsgKind.voice, '', name: name, size: bytes.length, mime: mime, bytes: bytes, replyTo: replyTo, durationMs: durationMs);
     final path = '${chat.id}/$name';
-    try {
-      await _sb.storage.from(AppConfig.attachmentsBucket).uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mime));
-    } catch (_) {
-      local
-        ..pending = false
-        ..failed = true;
-      notifyListeners();
-      return;
-    }
-    await _insert(chat, local, {
-      'file_path': path,
-      'file_name': name,
-      'file_size': bytes.length,
-      'mime_type': mime,
-      'duration_ms': durationMs,
-      'reply_to': ?replyTo,
-    });
+    final local = _local(
+      chat,
+      MsgKind.voice,
+      '',
+      name: name,
+      size: bytes.length,
+      mime: mime,
+      bytes: bytes,
+      replyTo: replyTo,
+      durationMs: durationMs,
+      filePath: path,
+    );
+    await _enqueue(
+      chat,
+      local,
+      {'file_path': path, 'file_name': name, 'file_size': bytes.length, 'mime_type': mime, 'duration_ms': durationMs, 'reply_to': ?replyTo},
+      uploads: [(path: path, bytes: bytes, mime: mime)],
+    );
   }
 
-  Future<void> _insert(Chat chat, Message local, Map<String, dynamic> fields) async {
-    try {
-      final row = await _sb.from('messages').insert({'chat_id': chat.id, 'sender_id': myId, 'kind': local.kind.name, ...fields}).select().single();
-      _replace(chat, local, Message.fromJson(row));
-    } catch (_) {
-      local
-        ..pending = false
-        ..failed = true;
-      notifyListeners();
-    }
-  }
-
-  /// Uploads a photo or file to private storage, then posts the message.
-  /// Returns a translation key for client-side errors.
+  /// A photo or file. Returns a translation key for client-side errors.
   Future<String?> sendFile(Chat chat, {required String name, required Uint8List bytes, String caption = '', String? replyTo}) async {
     if (bytes.length > AppConfig.maxFileBytes) return 'too_big';
     final mime = mimeFor(name);
     final kind = mime.startsWith('image/') ? MsgKind.image : MsgKind.file;
-    final local = _local(chat, kind, caption, name: name, size: bytes.length, mime: mime, bytes: bytes, replyTo: replyTo);
-    final safe = name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
-    final path = '${chat.id}/${DateTime.now().millisecondsSinceEpoch}-$safe';
-    try {
-      await _sb.storage.from(AppConfig.attachmentsBucket).uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mime));
-    } catch (_) {
-      local
-        ..pending = false
-        ..failed = true;
-      notifyListeners();
-      return null;
-    }
-    await _insert(chat, local, {'body': caption, 'file_path': path, 'file_name': name, 'file_size': bytes.length, 'mime_type': mime, 'reply_to': ?replyTo});
+    final path = '${chat.id}/${DateTime.now().millisecondsSinceEpoch}-${_safe(name)}';
+    final local = _local(chat, kind, caption, name: name, size: bytes.length, mime: mime, bytes: bytes, replyTo: replyTo, filePath: path);
+    await _enqueue(
+      chat,
+      local,
+      {'body': caption, 'file_path': path, 'file_name': name, 'file_size': bytes.length, 'mime_type': mime, 'reply_to': ?replyTo},
+      uploads: [(path: path, bytes: bytes, mime: mime)],
+    );
     return null;
   }
 
+  /// Tap on a red (refused) message: put it back in the queue.
   Future<void> retry(Chat chat, Message m) async {
     if (!m.failed) return;
-    _messages[chat.id]?.remove(m);
-    if (m.kind == MsgKind.text) {
-      await sendText(chat, m.body, replyTo: m.replyTo);
-    } else if (m.kind == MsgKind.voice && m.localBytes != null) {
-      await sendVoice(chat, bytes: m.localBytes!, durationMs: m.durationMs ?? 0, ext: (m.fileName ?? 'x.webm').split('.').last, replyTo: m.replyTo);
-    } else if (m.localBytes != null) {
-      await sendFile(chat, name: m.fileName ?? 'file', bytes: m.localBytes!, caption: m.body);
-    }
+    final it = _failedItems.remove(m.id);
+    if (it == null) return;
+    m
+      ..failed = false
+      ..pending = true;
+    notifyListeners();
+    _outbox.add(it);
+    await _saveOutbox();
+    unawaited(_drain());
   }
 
   /// Short-lived link to a private attachment (cached for the session).
@@ -918,47 +1148,46 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// Copies a message (and its files) into another chat.
+  /// Forwards a message (queued too, so it also works offline).
   Future<bool> forward(Message m, Chat target) async {
-    try {
-      Future<String> copy(String path) async {
-        final name = path.split('/').last;
-        final dst = '${target.id}/${DateTime.now().microsecondsSinceEpoch}-$name';
-        await _sb.storage.from(AppConfig.attachmentsBucket).copy(path, dst);
-        return dst;
-      }
-
-      Map<String, dynamic>? meta = m.meta == null ? null : Map<String, dynamic>.from(m.meta!);
-      if (m.kind == MsgKind.album) {
-        meta!['items'] = [
-          for (final it in m.albumItems) {...it, 'path': await copy(it['path'] as String)},
-        ];
-      }
-      final row = await _sb
-          .from('messages')
-          .insert({
-            'chat_id': target.id,
-            'sender_id': myId,
-            'kind': m.kind.name,
-            'body': m.body,
-            'file_path': m.filePath == null ? null : await copy(m.filePath!),
-            'file_name': m.fileName,
-            'file_size': m.fileSize,
-            'mime_type': m.mimeType,
-            'duration_ms': m.durationMs,
-            'meta': meta,
-          })
-          .select()
-          .single();
-      final saved = Message.fromJson(row);
-      _messages[target.id]?.add(saved);
-      target.lastMessage = saved;
-      target.lastMessageAt = saved.createdAt;
-      _sortChats();
-      notifyListeners();
-      return true;
-    } catch (_) {
-      return false;
+    if (myId == null) return false;
+    final stamp = DateTime.now().microsecondsSinceEpoch;
+    final copies = <({String from, String to})>[];
+    String copyOf(String path) {
+      final to = '${target.id}/$stamp-${copies.length}-${path.split('/').last}';
+      copies.add((from: path, to: to));
+      return to;
     }
+
+    Map<String, dynamic>? meta = m.meta == null ? null : Map<String, dynamic>.from(m.meta!);
+    if (m.kind == MsgKind.album && meta != null) {
+      meta['items'] = [
+        for (final it in m.albumItems) {...it, 'path': copyOf(it['path'] as String)},
+      ];
+    }
+    final newPath = m.filePath == null ? null : copyOf(m.filePath!);
+    final local = _local(
+      target,
+      m.kind,
+      m.body,
+      name: m.fileName,
+      size: m.fileSize,
+      mime: m.mimeType,
+      durationMs: m.durationMs,
+      meta: meta,
+      filePath: newPath,
+      bytes: m.localBytes,
+    );
+    await _enqueue(target, local, {
+      'body': m.body,
+      'file_path': newPath,
+      'file_name': m.fileName,
+      'file_size': m.fileSize,
+      'mime_type': m.mimeType,
+      'duration_ms': m.durationMs,
+      'meta': meta,
+    }, copies: copies);
+    return true;
   }
 
   // ── Photos, albums, location, contacts ───────────────────────────────────
@@ -979,105 +1208,58 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     if (photos.isEmpty) return null;
     if (photos.any((p) => p.bytes.length > AppConfig.maxFileBytes)) return 'too_big';
     final sizes = [for (final p in photos) await imageSize(p.bytes)];
+    final stamp = DateTime.now().millisecondsSinceEpoch;
     if (photos.length == 1) {
       final p = photos.first;
       final mime = mimeFor(p.name);
-      final local = _local(chat, MsgKind.image, caption, name: p.name, size: p.bytes.length, mime: mime, bytes: p.bytes, replyTo: replyTo);
-      final path = '${chat.id}/${DateTime.now().millisecondsSinceEpoch}-${_safe(p.name)}';
-      if (!await _upload(local, path, p.bytes, mime)) return null;
-      await _insert(chat, local, {
-        'body': caption,
-        'file_path': path,
-        'file_name': p.name,
-        'file_size': p.bytes.length,
-        'mime_type': mime,
-        'meta': {'w': sizes.first.w, 'h': sizes.first.h},
-        'reply_to': ?replyTo,
-      });
+      final path = '${chat.id}/$stamp-${_safe(p.name)}';
+      final meta = {'w': sizes.first.w, 'h': sizes.first.h};
+      final local = _local(
+        chat,
+        MsgKind.image,
+        caption,
+        name: p.name,
+        size: p.bytes.length,
+        mime: mime,
+        bytes: p.bytes,
+        replyTo: replyTo,
+        filePath: path,
+        meta: meta,
+      );
+      await _enqueue(
+        chat,
+        local,
+        {'body': caption, 'file_path': path, 'file_name': p.name, 'file_size': p.bytes.length, 'mime_type': mime, 'meta': meta, 'reply_to': ?replyTo},
+        uploads: [(path: path, bytes: p.bytes, mime: mime)],
+      );
       return null;
     }
-    final local = Message(
-      id: 'local-${DateTime.now().microsecondsSinceEpoch}',
-      chatId: chat.id,
-      senderId: myId!,
-      kind: MsgKind.album,
-      body: caption,
-      createdAt: DateTime.now(),
-      replyTo: replyTo,
-      meta: {
-        'items': [
-          for (final z in sizes) {'w': z.w, 'h': z.h},
-        ],
-      },
-      localAlbum: [for (final p in photos) p.bytes],
-      pending: true,
-    );
-    _messages.putIfAbsent(chat.id, () => []).add(local);
-    notifyListeners();
+    final uploads = <({String path, Uint8List bytes, String mime})>[];
     final items = <Map<String, dynamic>>[];
     for (var i = 0; i < photos.length; i++) {
       final p = photos[i];
-      final path = '${chat.id}/${DateTime.now().millisecondsSinceEpoch}-$i-${_safe(p.name)}';
-      if (!await _upload(local, path, p.bytes, mimeFor(p.name))) return null;
+      final path = '${chat.id}/$stamp-$i-${_safe(p.name)}';
+      uploads.add((path: path, bytes: p.bytes, mime: mimeFor(p.name)));
       items.add({'path': path, 'w': sizes[i].w, 'h': sizes[i].h});
     }
-    await _insert(chat, local, {
-      'body': caption,
-      'meta': {'items': items},
-      'reply_to': ?replyTo,
-    });
+    final meta = {'items': items};
+    final local = _local(chat, MsgKind.album, caption, replyTo: replyTo, meta: meta, album: [for (final p in photos) p.bytes]);
+    await _enqueue(chat, local, {'body': caption, 'meta': meta, 'reply_to': ?replyTo}, uploads: uploads);
     return null;
   }
 
   String _safe(String name) => name.replaceAll(RegExp(r'[^A-Za-z0-9._-]'), '_');
 
-  Future<bool> _upload(Message local, String path, Uint8List bytes, String mime) async {
-    try {
-      await _sb.storage.from(AppConfig.attachmentsBucket).uploadBinary(path, bytes, fileOptions: FileOptions(contentType: mime));
-      return true;
-    } catch (_) {
-      local
-        ..pending = false
-        ..failed = true;
-      notifyListeners();
-      return false;
-    }
-  }
-
   Future<void> sendLocation(Chat chat, double lat, double lng, {String? replyTo}) async {
     final meta = {'lat': lat, 'lng': lng};
-    final local = Message(
-      id: 'local-${DateTime.now().microsecondsSinceEpoch}',
-      chatId: chat.id,
-      senderId: myId!,
-      kind: MsgKind.location,
-      body: '',
-      createdAt: DateTime.now(),
-      meta: meta,
-      replyTo: replyTo,
-      pending: true,
-    );
-    _messages.putIfAbsent(chat.id, () => []).add(local);
-    notifyListeners();
-    await _insert(chat, local, {'meta': meta, 'reply_to': ?replyTo});
+    final local = _local(chat, MsgKind.location, '', meta: meta, replyTo: replyTo);
+    await _enqueue(chat, local, {'meta': meta, 'reply_to': ?replyTo});
   }
 
   Future<void> sendContact(Chat chat, {required String name, String? phone, String? email, String? userId, String? replyTo}) async {
     final meta = {'name': name, 'phone': ?phone, 'email': ?email, 'user_id': ?userId};
-    final local = Message(
-      id: 'local-${DateTime.now().microsecondsSinceEpoch}',
-      chatId: chat.id,
-      senderId: myId!,
-      kind: MsgKind.contact,
-      body: '',
-      createdAt: DateTime.now(),
-      meta: meta,
-      replyTo: replyTo,
-      pending: true,
-    );
-    _messages.putIfAbsent(chat.id, () => []).add(local);
-    notifyListeners();
-    await _insert(chat, local, {'meta': meta, 'reply_to': ?replyTo});
+    final local = _local(chat, MsgKind.contact, '', meta: meta, replyTo: replyTo);
+    await _enqueue(chat, local, {'meta': meta, 'reply_to': ?replyTo});
   }
 
   Future<bool> setGroupPhoto(Chat chat, String name, Uint8List bytes) async {
@@ -1103,24 +1285,26 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     return null;
   }
 
+  Future<void> _loadCachedStories() async {
+    if (stories.isNotEmpty) return;
+    // the stories seen last time, so they still open without internet
+    final cached = await MediaCache.instance.store.readJson('${_cachePrefix}_stories');
+    if (cached is! List || stories.isNotEmpty) return;
+    try {
+      final now = DateTime.now();
+      stories = [
+        for (final u in cached.map((e) => StoryUser.fromJson(e as Map<String, dynamic>)))
+          if (u.stories.any((st) => now.difference(st.createdAt).inHours < 24)) u,
+      ];
+      notifyListeners();
+    } catch (_) {}
+  }
+
   Future<void> loadStories() async {
     if (myId == null) return;
-    if (stories.isEmpty) {
-      // the stories seen last time, so they still open without internet
-      final cached = await MediaCache.instance.store.readJson('${_cachePrefix}_stories');
-      if (cached is List && stories.isEmpty) {
-        try {
-          final now = DateTime.now();
-          stories = [
-            for (final u in cached.map((e) => StoryUser.fromJson(e as Map<String, dynamic>)))
-              if (u.stories.any((st) => now.difference(st.createdAt).inHours < 24)) u,
-          ];
-          notifyListeners();
-        } catch (_) {}
-      }
-    }
+    await _loadCachedStories();
     try {
-      final data = await _sb.rpc('story_feed') as List<dynamic>;
+      final data = await _sb.rpc('story_feed').timeout(_net) as List<dynamic>;
       stories = data.map((e) => StoryUser.fromJson(e as Map<String, dynamic>)).toList();
       unawaited(MediaCache.instance.store.writeJson('${_cachePrefix}_stories', data));
       notifyListeners();

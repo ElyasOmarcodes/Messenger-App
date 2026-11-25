@@ -76,6 +76,8 @@ class MessageBubble extends StatefulWidget {
     this.onReply,
     this.onAction,
     this.onOpenUser,
+    this.onJump,
+    this.onShowAll,
   });
 
   final Chat chat;
@@ -87,6 +89,15 @@ class MessageBubble extends StatefulWidget {
   final void Function(Message)? onReply;
   final void Function(Message, MsgAction)? onAction;
   final void Function(String userId)? onOpenUser;
+
+  /// Scrolls the chat to a message (reply quote tap, "Show in chat").
+  final void Function(String messageId)? onJump;
+
+  /// Opens the chat's shared media.
+  final VoidCallback? onShowAll;
+
+  ViewerActions get viewerActions =>
+      ViewerActions(chat: chat, onAction: onAction, onShowInChat: onJump == null ? null : (m) => onJump!(m.id), onShowAll: onShowAll);
 
   @override
   State<MessageBubble> createState() => _MessageBubbleState();
@@ -237,28 +248,32 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
     switch (m.kind) {
       case MsgKind.image:
         final box = photoBox(m.width, m.height, maxW: (width * 0.72).clamp(150, 300));
-        content = GestureDetector(
-          onTap: () => GalleryViewer.open(context, [(path: m.filePath, bytes: m.localBytes)], 0),
-          child: ClipRRect(
-            borderRadius: BorderRadius.circular(14),
-            child: SizedBox(
-              width: box.width,
-              height: box.height,
-              child: Stack(
-                fit: StackFit.expand,
-                children: [
-                  Hero(
-                    tag: photoHeroTag((path: m.filePath, bytes: m.localBytes)),
-                    child: AttachmentImage(path: m.filePath, bytes: m.localBytes),
-                  ),
-                  if (m.pending) const Center(child: CircularProgressIndicator(color: Colors.white)),
-                ],
+        content = Semantics(
+          button: true,
+          label: context.tr('photo'),
+          child: GestureDetector(
+            onTap: () => GalleryViewer.open(context, [(path: m.filePath, bytes: m.localBytes)], 0, messages: [m], actions: widget.viewerActions),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(14),
+              child: SizedBox(
+                width: box.width,
+                height: box.height,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    Hero(
+                      tag: photoHeroTag((path: m.filePath, bytes: m.localBytes)),
+                      child: AttachmentImage(path: m.filePath, bytes: m.localBytes, size: m.fileSize),
+                    ),
+                    if (m.pending) Center(child: _SendingRing(onCancel: () => app.cancelSend(widget.chat, m))),
+                  ],
+                ),
               ),
             ),
           ),
         );
       case MsgKind.album:
-        content = AlbumGrid(message: m, width: (width * 0.72).clamp(200, 300));
+        content = AlbumGrid(message: m, width: (width * 0.72).clamp(200, 300), actions: widget.viewerActions);
       case MsgKind.location:
         content = LocationCard(lat: (m.meta?['lat'] as num?)?.toDouble() ?? 0, lng: (m.meta?['lng'] as num?)?.toDouble() ?? 0);
       case MsgKind.contact:
@@ -266,7 +281,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
       case MsgKind.voice:
         content = VoicePlayer(message: m, color: fg, meta: metaColor);
       case MsgKind.file:
-        content = _FileContent(message: m, color: fg, meta: metaColor);
+        content = _FileContent(chat: widget.chat, message: m, color: fg, meta: metaColor);
       case MsgKind.text:
         content = const SizedBox.shrink();
     }
@@ -288,8 +303,10 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
           );
 
     final shrink = textPart == null && !mediaOnly;
+    // A reply quote spans the whole bubble, like Telegram.
+    final quoted = m.replyTo != null || m.meta?['story'] is Map;
     Widget body = Column(
-      crossAxisAlignment: shrink ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
+      crossAxisAlignment: shrink || quoted ? CrossAxisAlignment.stretch : CrossAxisAlignment.start,
       mainAxisSize: MainAxisSize.min,
       children: [
         if (widget.senderName != null && !out)
@@ -300,7 +317,11 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
               style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.w700, color: Brand.avatarColor(m.senderId)),
             ),
           ),
-        if (m.replyTo != null) _ReplyQuote(chat: widget.chat, id: m.replyTo!),
+        if (m.replyTo != null)
+          GestureDetector(
+            onTap: widget.onJump == null ? null : () => widget.onJump!(m.replyTo!),
+            child: _ReplyQuote(chat: widget.chat, id: m.replyTo!),
+          ),
         if (m.meta?['story'] is Map) _StoryQuote(chat: widget.chat, story: Map<String, dynamic>.from(m.meta!['story'] as Map)),
         if (m.kind != MsgKind.text)
           Stack(
@@ -335,7 +356,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
     );
 
     // Voice, file, contact and location cards: the bubble hugs the card.
-    if (shrink) body = IntrinsicWidth(child: body);
+    if (shrink || quoted) body = IntrinsicWidth(child: body);
 
     // A few emoji alone: shown big, without a bubble (like Telegram).
     final emojiCount = m.kind == MsgKind.text && m.replyTo == null && !m.deleted ? bigEmojiCount(m.body) : 0;
@@ -910,7 +931,8 @@ class _VoicePlayerState extends State<VoicePlayer> {
 }
 
 class _FileContent extends StatelessWidget {
-  const _FileContent({required this.message, required this.color, required this.meta});
+  const _FileContent({required this.chat, required this.message, required this.color, required this.meta});
+  final Chat chat;
   final Message message;
   final Color color;
   final Color meta;
@@ -926,6 +948,19 @@ class _FileContent extends StatelessWidget {
     return Icons.insert_drive_file_rounded;
   }
 
+  Widget _fileIcon() => Container(
+    decoration: const BoxDecoration(color: Brand.lapis, shape: BoxShape.circle),
+    child: Icon(_icon, color: Colors.white),
+  );
+
+  /// Downloads into "Paigham Documents" without opening it.
+  Future<void> _download(BuildContext context) async {
+    final key = message.filePath;
+    if (key == null) return;
+    final app = AppScope.read(context);
+    await MediaCache.instance.bytes(key, () => app.fileUrl(key));
+  }
+
   Future<void> _open(BuildContext context) async {
     if (message.filePath == null) return;
     final app = AppScope.read(context);
@@ -934,11 +969,11 @@ class _FileContent extends StatelessWidget {
     if (cache.persistent) {
       // like Telegram: downloaded once into "Paigham Documents", then opened
       // from the phone (also without internet)
-      final messenger = ScaffoldMessenger.of(context);
-      final downloading = context.tr('downloading');
       if (cache.filePath(key) == null) {
-        messenger.showSnackBar(SnackBar(content: Text(downloading), duration: const Duration(seconds: 1)));
+        // first tap: download (the ring shows it); open once it is here
+        if (cache.isDownloading(key)) return;
         await cache.bytes(key, () => app.fileUrl(key));
+        return;
       }
       final local = cache.filePath(key);
       if (local != null) {
@@ -960,16 +995,15 @@ class _FileContent extends StatelessWidget {
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Container(
+            // Telegram: arrow → ring with X while it downloads → the file's icon
+            SizedBox(
               width: 46,
               height: 46,
-              decoration: BoxDecoration(color: Brand.lapis, borderRadius: BorderRadius.circular(12)),
               child: message.pending
-                  ? const Padding(
-                      padding: EdgeInsets.all(12),
-                      child: CircularProgressIndicator(strokeWidth: 2.4, color: Colors.white),
-                    )
-                  : Icon(_icon, color: Colors.white),
+                  ? _SendingRing(size: 46, background: Brand.lapis, onCancel: () => AppScope.read(context).cancelSend(chat, message))
+                  : message.filePath == null
+                  ? _fileIcon()
+                  : DownloadRing(cacheKey: message.filePath!, size: 46, background: Brand.lapis, onStart: () => _download(context), done: _fileIcon()),
             ),
             const SizedBox(width: 10),
             Flexible(
@@ -983,10 +1017,7 @@ class _FileContent extends StatelessWidget {
                     textDirection: TextDirection.ltr,
                     style: TextStyle(fontWeight: FontWeight.w700, color: color),
                   ),
-                  Text(
-                    message.pending ? context.tr('uploading') : '\u2066${localDigits(formatBytes(message.fileSize), context.lang)}\u2069',
-                    style: TextStyle(fontSize: 12.5, color: meta),
-                  ),
+                  _FileSizeLine(message: message, meta: meta),
                 ],
               ),
             ),
@@ -995,6 +1026,64 @@ class _FileContent extends StatelessWidget {
       ),
     );
   }
+}
+
+/// "1.2 MB", or "0.4 / 1.2 MB" while it downloads, or "uploading".
+class _FileSizeLine extends StatelessWidget {
+  const _FileSizeLine({required this.message, required this.meta});
+  final Message message;
+  final Color meta;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = TextStyle(fontSize: 12.5, color: meta);
+    if (message.pending) return Text(context.tr('uploading'), style: style);
+    final key = message.filePath;
+    final total = message.fileSize;
+    String sz(int? b) => '\u2066${localDigits(formatBytes(b), context.lang)}\u2069';
+    if (key == null) return Text(sz(total), style: style);
+    final cache = MediaCache.instance;
+    return ListenableBuilder(
+      listenable: cache,
+      builder: (context, _) {
+        final p = cache.progressOf(key);
+        if (p == null || total == null) return Text(sz(total), style: style);
+        return ValueListenableBuilder<double>(
+          valueListenable: p,
+          builder: (_, v, _) => Text('${sz((v * total).round())} / ${sz(total)}', style: style),
+        );
+      },
+    );
+  }
+}
+
+/// Spinning ring with an X on a message that is still being sent; X cancels it.
+class _SendingRing extends StatelessWidget {
+  const _SendingRing({required this.onCancel, this.size = 48, this.background = Colors.black45});
+  final VoidCallback onCancel;
+  final double size;
+  final Color background;
+
+  @override
+  Widget build(BuildContext context) => GestureDetector(
+    behavior: HitTestBehavior.opaque,
+    onTap: onCancel,
+    child: Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(color: background, shape: BoxShape.circle),
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          const Padding(
+            padding: EdgeInsets.all(3),
+            child: CircularProgressIndicator(strokeWidth: 2.6, strokeCap: StrokeCap.round, color: Colors.white),
+          ),
+          Icon(Icons.close_rounded, color: Colors.white, size: size * 0.5),
+        ],
+      ),
+    ),
+  );
 }
 
 class _StatusIcon extends StatelessWidget {

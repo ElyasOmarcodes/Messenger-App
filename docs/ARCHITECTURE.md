@@ -52,6 +52,18 @@ Run each file in `backend/supabase/migrations/` once, in order, in the Supabase 
 4. `20261127000000_paigham_v6.sql`: Saved Messages (`saved_chat`) and per-person chat options on `chat_members` (pinned, muted, archived, marked unread, cleared history)
 5. `20261128000000_paigham_v7.sql`: hearts on stories (`story_views.liked`, `like_story`, likes in `story_feed` / `story_viewers`)
 
+## Offline sending (outbox)
+
+Every outgoing message (text, photo, album, voice, file, location, contact,
+forward) first goes into an outbox saved on the phone, and shows at once with
+a clock. The outbox is sent in order; with no internet it waits and retries
+every few seconds, when the app comes back to the front and when the realtime
+connection returns, and it survives an app restart. The message id is made on
+the phone, so a retry whose first answer was lost never creates a copy
+(duplicate insert = already sent; an existing file in storage = already
+uploaded). Only a real refusal from the server turns the message red (tap to
+try again).
+
 ## Calls behind mobile networks
 
 Calls connect directly between phones using free STUN servers. On some mobile networks (carrier-grade NAT) a direct path is impossible and a TURN relay is needed. When we have our own server, install `coturn` on it and build with

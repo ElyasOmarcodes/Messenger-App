@@ -10,6 +10,8 @@
 	<string>Paigham sends your location only when you share it in a chat.</string>
 	<key>NSLocationUsageDescription</key>
 	<string>Paigham sends your location only when you share it in a chat.</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Paigham saves photos to your library when you ask it to.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Paigham lets you send photos from your library.</string>
 	<key>UIFileSharingEnabled</key>
