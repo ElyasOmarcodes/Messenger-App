@@ -1,6 +1,7 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 
 /// iOS / Telegram style "glass": a strong blur of what is behind plus a
 /// saturation boost (colours glow through, like Apple's materials), a light
@@ -40,29 +41,30 @@ class LiquidGlass extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final glass = GlassScope.of(context);
-    final fill = fillOf(dark, glass, tint);
+    final inner = padding == null ? child : Padding(padding: padding!, child: child);
+    if (glass) {
+      // Apple's Liquid Glass (liquid_glass_widgets, iOS 27 presets): the
+      // background bends at the edges like a lens, frosted body, rim light.
+      // Impeller: full refraction shader; Skia/web: its lighter shader.
+      // A rounded superellipse also for circles (ovals mis-clip on the web).
+      return lg.GlassContainer(
+        useOwnLayer: true,
+        shape: lg.LiquidRoundedSuperellipse(borderRadius: circle ? 999 : radius),
+        settings: dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light,
+        color: tint,
+        child: inner,
+      );
+    }
+    // glass off: the same shape, solid, with the rim and a soft shadow
+    final fill = fillOf(dark, false, tint);
     final r = circle ? null : BorderRadius.circular(radius);
     Widget body = DecoratedBox(
-      decoration: BoxDecoration(
-        shape: circle ? BoxShape.circle : BoxShape.rectangle,
-        borderRadius: r,
-        // light from above
-        gradient: LinearGradient(
-          begin: Alignment.topCenter,
-          end: Alignment.bottomCenter,
-          stops: const [0, 0.45],
-          colors: [
-            Color.alphaBlend(Colors.white.withValues(alpha: dark ? 0.06 : 0.28), fill),
-            fill,
-          ],
-        ),
-      ),
+      decoration: BoxDecoration(shape: circle ? BoxShape.circle : BoxShape.rectangle, borderRadius: r, color: fill),
       child: CustomPaint(
         foregroundPainter: _RimPainter(circle: circle, radius: radius, dark: dark),
-        child: padding == null ? child : Padding(padding: padding!, child: child),
+        child: inner,
       ),
     );
-    if (glass) body = BackdropFilter(filter: Glass.filter, child: body);
     body = circle ? ClipOval(child: body) : ClipRRect(borderRadius: r!, child: body);
     if (!shadow) return body;
     return DecoratedBox(
