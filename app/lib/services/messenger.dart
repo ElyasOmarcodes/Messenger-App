@@ -5,6 +5,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:cryptography/cryptography.dart' show SecretKey;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -1711,7 +1712,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       : m.locked
       ? Icons.lock_rounded
       : switch (m.kind) {
-          MsgKind.voice => Icons.mic_rounded,
+          MsgKind.voice => CupertinoIcons.mic_fill,
           MsgKind.image => Icons.photo_rounded,
           MsgKind.album => Icons.photo_library_rounded,
           MsgKind.file => Icons.insert_drive_file_rounded,

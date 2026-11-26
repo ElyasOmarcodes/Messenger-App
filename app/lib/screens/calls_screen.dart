@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../brand/brand.dart';
@@ -56,7 +57,7 @@ class _CallsScreenState extends State<CallsScreen> {
             return ListView(
               children: [
                 const SizedBox(height: 90),
-                Icon(Icons.call_rounded, size: 64, color: cs.primary.withValues(alpha: 0.5)),
+                Icon(CupertinoIcons.phone_fill, size: 64, color: cs.primary.withValues(alpha: 0.5)),
                 const SizedBox(height: 12),
                 Text(
                   context.tr('no_calls'),
@@ -104,7 +105,7 @@ class _CallsScreenState extends State<CallsScreen> {
                   ],
                 ),
                 trailing: IconButton(
-                  icon: Icon(r.video ? Icons.videocam_rounded : Icons.call_rounded, color: cs.primary),
+                  icon: Icon(r.video ? CupertinoIcons.video_camera_solid : CupertinoIcons.phone_fill, color: cs.primary),
                   onPressed: () => _callBack(r, r.video),
                 ),
               );

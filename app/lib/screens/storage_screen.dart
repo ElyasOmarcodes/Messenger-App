@@ -1,6 +1,6 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
-import '../brand/brand.dart';
 import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/media_cache.dart';
@@ -34,16 +34,13 @@ class _StorageScreenState extends State<StorageScreen> {
   String _fmt(int b) => localDigits(formatBytes(b), context.lang);
 
   Future<void> _clear({String? folder}) async {
-    final ok = await showDialog<bool>(
+    final ok = await showCupertinoDialog<bool>(
       context: context,
-      builder: (d) => AlertDialog(
+      builder: (d) => CupertinoAlertDialog(
         content: Text(d.tr('clear_cache_q')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-          TextButton(
-            onPressed: () => Navigator.pop(d, true),
-            child: Text(d.tr('clear'), style: const TextStyle(color: Brand.pomegranate)),
-          ),
+          CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr('clear'))),
         ],
       ),
     );
@@ -149,7 +146,7 @@ class _StorageScreenState extends State<StorageScreen> {
               ),
               onTap: () => _pick(context.tr('max_cache'), limits, app.maxCacheMb, app.setMaxCache),
             ),
-            SwitchListTile(
+            SwitchListTile.adaptive(
               secondary: const Icon(Icons.photo_outlined),
               title: Text(context.tr('auto_photos')),
               subtitle: Text(context.tr('auto_photos_sub')),
@@ -177,7 +174,7 @@ class _StorageScreenState extends State<StorageScreen> {
                     return ListTile(
                       leading: chat != null
                           ? ChatAvatar(chat: chat, size: 40)
-                          : CircleAvatar(child: Icon(isAvatars ? Icons.account_circle_rounded : Icons.folder_rounded)),
+                          : CircleAvatar(child: Icon(isAvatars ? CupertinoIcons.person_crop_circle_fill : Icons.folder_rounded)),
                       title: Text(
                         chat != null ? app.chatTitle(chat) : context.tr(isAvatars ? 'profile_photos' : (e.key == 'stories' ? 'stories_cache' : 'other_media')),
                       ),

@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 /// Everything that makes Paigham look like Paigham lives here.
@@ -7,7 +8,7 @@ class Brand {
 
   static const String nameLatin = 'Paigham';
   static const String nameNative = 'پیغام';
-  static const String version = '0.13.0';
+  static const String version = '0.14.0';
 
   /// The app's own font. Turned off for a test: null = the phone's system
   /// font (plain text). To bring Vazirmatn back, set this to [vazirmatn].
@@ -102,7 +103,14 @@ class Brand {
       brightness: brightness,
       fontFamily: fontFamily,
       scaffoldBackgroundColor: bg,
-      splashFactory: InkSparkle.splashFactory,
+      // iPhone behaviour everywhere: bouncing scroll, edge swipe to go back,
+      // iOS page transitions, chevron back buttons, iOS switches and
+      // text-selection handles; no Android ripple splash (iOS highlights).
+      platform: TargetPlatform.iOS,
+      splashFactory: NoSplash.splashFactory,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      pageTransitionsTheme: PageTransitionsTheme(builders: {for (final p in TargetPlatform.values) p: const CupertinoPageTransitionsBuilder()}),
+      cupertinoOverrideTheme: CupertinoThemeData(primaryColor: primary, brightness: brightness),
     );
 
     return base.copyWith(
@@ -161,20 +169,38 @@ class Brand {
         contentTextStyle: const TextStyle(fontFamily: fontFamily, color: Colors.white),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
+      // iOS sheets: big rounded top, grabber, grouped background
       bottomSheetTheme: BottomSheetThemeData(
-        backgroundColor: surface,
+        backgroundColor: dark ? const Color(0xFF1C2530) : const Color(0xFFF2F2F7),
         surfaceTintColor: Colors.transparent,
-        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(22))),
+        showDragHandle: true,
+        dragHandleColor: dark ? const Color(0x66FFFFFF) : const Color(0x33000000),
+        dragHandleSize: const Size(36, 5),
+        shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(28))),
       ),
       dialogTheme: DialogThemeData(
-        backgroundColor: surface,
+        backgroundColor: dark ? const Color(0xFF252D38) : const Color(0xFFF2F2F7),
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+        titleTextStyle: TextStyle(fontFamily: fontFamily, fontSize: 17, fontWeight: FontWeight.w600, color: onSurface),
       ),
+      // iOS pull-down menus: rounded 14, a light shadow, roomy rows
       popupMenuTheme: PopupMenuThemeData(
-        color: dark ? nightRaised : Colors.white,
+        color: dark ? const Color(0xF2252D38) : const Color(0xF7FFFFFF),
         surfaceTintColor: Colors.transparent,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        elevation: 8,
+        shadowColor: Colors.black38,
+        menuPadding: const EdgeInsets.symmetric(vertical: 4),
+        textStyle: TextStyle(fontFamily: fontFamily, fontSize: 16, color: onSurface),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      ),
+      switchTheme: SwitchThemeData(
+        // the iOS switch: green track when on
+        thumbColor: const WidgetStatePropertyAll(Colors.white),
+        trackColor: WidgetStateProperty.resolveWith(
+          (st) => st.contains(WidgetState.selected) ? const Color(0xFF34C759) : (dark ? const Color(0xFF39393D) : const Color(0xFFE9E9EA)),
+        ),
+        trackOutlineColor: const WidgetStatePropertyAll(Colors.transparent),
       ),
       chipTheme: ChipThemeData(
         shape: const StadiumBorder(),

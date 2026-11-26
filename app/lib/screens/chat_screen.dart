@@ -4,7 +4,9 @@ import 'dart:math' as math;
 import 'package:emoji_picker_flutter/emoji_picker_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' hide Category;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -487,17 +489,14 @@ class _ChatScreenState extends State<ChatScreen> {
           _toast(ok ? 'forwarded' : 'err_generic');
         }
       case MsgAction.delete:
-        final ok = await showDialog<bool>(
+        final ok = await showCupertinoDialog<bool>(
           context: context,
-          builder: (d) => AlertDialog(
+          builder: (d) => CupertinoAlertDialog(
             title: Text(d.tr('delete_message')),
             content: Text(d.tr('delete_q')),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-              TextButton(
-                onPressed: () => Navigator.pop(d, true),
-                child: Text(d.tr('delete'), style: const TextStyle(color: Brand.pomegranate)),
-              ),
+              CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+              CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr('delete'))),
             ],
           ),
         );
@@ -625,6 +624,17 @@ class _ChatScreenState extends State<ChatScreen> {
     ],
   );
 
+  /// The top bar's glass pieces (back, title, call capsule) share one glass
+  /// layer: the screen behind is captured once instead of once per piece.
+  PreferredSizeWidget _glassBar(AppBar bar) => PreferredSize(
+    preferredSize: bar.preferredSize,
+    child: lg.AdaptiveLiquidGlassLayer(
+      quality: lg.GlassQuality.premium,
+      settings: Theme.of(context).brightness == Brightness.dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light,
+      child: bar,
+    ),
+  );
+
   void _openInfo(AppController app, Chat chat) {
     if (chat.isSaved) return;
     final peer = chat.isGroup ? null : chat.peer(app.myId ?? '');
@@ -692,79 +702,81 @@ class _ChatScreenState extends State<ChatScreen> {
       },
       child: Scaffold(
         extendBodyBehindAppBar: true,
-        appBar: AppBar(
-          automaticallyImplyLeading: false,
-          // round see-through buttons, like the ones on the profile photo
-          leadingWidth: widget.embedded ? 0 : 58,
-          leading: widget.embedded
-              ? null
-              : Padding(
-                  padding: const EdgeInsetsDirectional.only(start: 8, end: 8),
-                  child: Center(
-                    child: RoundBarButton(icon: Icons.arrow_back_rounded, tooltip: context.tr('back'), onTap: () => Navigator.of(context).maybePop()),
+        appBar: _glassBar(
+          AppBar(
+            automaticallyImplyLeading: false,
+            // round see-through buttons, like the ones on the profile photo
+            leadingWidth: widget.embedded ? 0 : 58,
+            leading: widget.embedded
+                ? null
+                : Padding(
+                    padding: const EdgeInsetsDirectional.only(start: 8, end: 8),
+                    child: Center(
+                      child: RoundBarButton(icon: Icons.arrow_back_ios_new_rounded, tooltip: context.tr('back'), onTap: () => Navigator.of(context).maybePop()),
+                    ),
                   ),
-                ),
-          // No colour of its own: the bar sits on the page's soft top edge.
-          backgroundColor: Colors.transparent,
-          surfaceTintColor: Colors.transparent,
-          shadowColor: Colors.transparent,
-          elevation: 0,
-          scrolledUnderElevation: 0,
-          titleSpacing: widget.embedded ? 16 : 0,
-          title: LiquidGlass(
-            radius: 23,
-            child: InkWell(
-              borderRadius: BorderRadius.circular(23),
-              onTap: () => _openInfo(app, chat),
-              child: Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(3, 3, 14, 3),
-                child: Row(
-                  children: [
-                    ChatAvatar(chat: chat, size: 40),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-                          ),
-                          if (!chat.isSaved)
+            // No colour of its own: the bar sits on the page's soft top edge.
+            backgroundColor: Colors.transparent,
+            surfaceTintColor: Colors.transparent,
+            shadowColor: Colors.transparent,
+            elevation: 0,
+            scrolledUnderElevation: 0,
+            titleSpacing: widget.embedded ? 16 : 0,
+            title: LiquidGlass(
+              radius: 23,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(23),
+                onTap: () => _openInfo(app, chat),
+                child: Padding(
+                  padding: const EdgeInsetsDirectional.fromSTEB(3, 3, 14, 3),
+                  child: Row(
+                    children: [
+                      ChatAvatar(chat: chat, size: 40),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
                             Text(
-                              _subtitle(app, chat),
+                              title,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: cs.onSurfaceVariant),
+                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                             ),
-                        ],
+                            if (!chat.isSaved)
+                              Text(
+                                _subtitle(app, chat),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: cs.onSurfaceVariant),
+                              ),
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
+            actions: [
+              // Telegram: call, video and more share one glass capsule
+              if (!chat.isGroup && !chat.isSaved)
+                LiquidGlass(
+                  radius: 21,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(tooltip: context.tr('voice_call'), onPressed: () => _call(chat, false), icon: const Icon(CupertinoIcons.phone_fill)),
+                      IconButton(tooltip: context.tr('video_call'), onPressed: () => _call(chat, true), icon: const Icon(CupertinoIcons.video_camera_solid)),
+                      _chatMenu(app, chat, const SizedBox(width: 40, height: 42, child: Icon(CupertinoIcons.ellipsis))),
+                    ],
+                  ),
+                )
+              else
+                _chatMenu(app, chat, const IgnorePointer(child: RoundBarButton(icon: CupertinoIcons.ellipsis))),
+              const SizedBox(width: 10),
+            ],
           ),
-          actions: [
-            // Telegram: call, video and more share one glass capsule
-            if (!chat.isGroup && !chat.isSaved)
-              LiquidGlass(
-                radius: 21,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    IconButton(tooltip: context.tr('voice_call'), onPressed: () => _call(chat, false), icon: const Icon(Icons.call_rounded)),
-                    IconButton(tooltip: context.tr('video_call'), onPressed: () => _call(chat, true), icon: const Icon(Icons.videocam_rounded)),
-                    _chatMenu(app, chat, const SizedBox(width: 40, height: 42, child: Icon(Icons.more_vert_rounded))),
-                  ],
-                ),
-              )
-            else
-              _chatMenu(app, chat, const IgnorePointer(child: RoundBarButton(icon: Icons.more_vert_rounded))),
-            const SizedBox(width: 10),
-          ],
         ),
         body: GirihWallpaper(
           child: Stack(
@@ -1127,33 +1139,37 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       );
     }
-    return SafeArea(
-      top: false,
-      bottom: !_emoji,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedSize(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              child: (_replyTo != null || _editing != null) ? _contextBar(app, chat) : const SizedBox(width: double.infinity),
-            ),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: LiquidGlass(
-                    radius: 24,
-                    child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 48), child: _recording ? _recordingStrip(chat) : _textRow(chat, cs)),
+    return lg.AdaptiveLiquidGlassLayer(
+      quality: lg.GlassQuality.premium,
+      settings: Theme.of(context).brightness == Brightness.dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light,
+      child: SafeArea(
+        top: false,
+        bottom: !_emoji,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedSize(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                child: (_replyTo != null || _editing != null) ? _contextBar(app, chat) : const SizedBox(width: double.infinity),
+              ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: LiquidGlass(
+                      radius: 24,
+                      child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 48), child: _recording ? _recordingStrip(chat) : _textRow(chat, cs)),
+                    ),
                   ),
-                ),
-                const SizedBox(width: 6),
-                _actionButton(chat, cs),
-              ],
-            ),
-          ],
+                  const SizedBox(width: 6),
+                  _actionButton(chat, cs),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1179,7 +1195,7 @@ class _ChatScreenState extends State<ChatScreen> {
             turns: Tween(begin: 0.75, end: 1.0).animate(a),
             child: FadeTransition(opacity: a, child: c),
           ),
-          child: Icon(_emoji ? Icons.keyboard_rounded : Icons.emoji_emotions_rounded, key: ValueKey(_emoji), color: cs.onSurfaceVariant),
+          child: Icon(_emoji ? Icons.keyboard_rounded : CupertinoIcons.smiley, key: ValueKey(_emoji), color: cs.onSurfaceVariant),
         ),
       ),
       Expanded(
@@ -1248,7 +1264,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 key: const ValueKey('attach'),
                 tooltip: context.tr('attach'),
                 onPressed: () => _attachMenu(chat),
-                icon: Transform.rotate(angle: 0.6, child: Icon(Icons.attach_file_rounded, color: cs.onSurfaceVariant)),
+                icon: Icon(CupertinoIcons.paperclip, color: cs.onSurfaceVariant),
               ),
       ),
     ],
@@ -1313,7 +1329,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _actionButton(Chat chat, ColorScheme cs) {
     // no media allowed in this group: no voice notes either
     final sendMode = _canSend || _locked || _editing != null || !chat.can(AppScope.read(context).myId ?? '', 'media');
-    final icon = _locked ? Icons.send_rounded : (_editing != null ? Icons.check_rounded : (sendMode ? Icons.send_rounded : Icons.mic_rounded));
+    final icon = _locked ? CupertinoIcons.arrow_up : (_editing != null ? Icons.check_rounded : (sendMode ? CupertinoIcons.arrow_up : CupertinoIcons.mic_fill));
     final button = AnimatedScale(
       // pressed: a quick dip; recording: the big Telegram circle
       scale: _recording && !_locked ? 1.5 : (_pressing ? 0.86 : 1),

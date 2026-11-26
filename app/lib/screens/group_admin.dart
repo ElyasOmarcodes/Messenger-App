@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:share_plus/share_plus.dart';
@@ -105,17 +106,14 @@ class _GroupEditScreenState extends State<GroupEditScreen> {
   Future<void> _deleteGroup() async {
     final c = _chat;
     if (c == null) return;
-    final ok = await showDialog<bool>(
+    final ok = await showCupertinoDialog<bool>(
       context: context,
-      builder: (d) => AlertDialog(
+      builder: (d) => CupertinoAlertDialog(
         title: Text(d.tr('delete_group')),
         content: Text(d.tr('delete_group_q')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-          TextButton(
-            onPressed: () => Navigator.pop(d, true),
-            child: Text(d.tr('delete'), style: const TextStyle(color: Brand.pomegranate)),
-          ),
+          CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr('delete'))),
         ],
       ),
     );
@@ -198,7 +196,7 @@ class _GroupEditScreenState extends State<GroupEditScreen> {
                 ('pin', Icons.push_pin_rounded),
                 ('info', Icons.edit_rounded),
               ])
-                SwitchListTile(
+                SwitchListTile.adaptive(
                   secondary: Icon(icon),
                   title: Text(context.tr('perm_$k')),
                   value: _perms[k] ?? false,
@@ -370,7 +368,7 @@ Future<Map<String, bool>?> _askRights(BuildContext context, Profile m) {
             Text(ctx.tr('admin_rights'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
             for (final k in keys)
-              SwitchListTile(
+              SwitchListTile.adaptive(
                 title: Text(
                   ctx.tr(switch (k) {
                     'info' => 'perm_info',

@@ -1,4 +1,5 @@
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -162,7 +163,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     if (widget._kind == _Kind.user) {
       actions.addAll([
         _Action(
-          icon: Icons.chat_bubble_rounded,
+          icon: CupertinoIcons.chat_bubble_2_fill,
           label: context.tr('message'),
           onBig: big,
           onTap: () async {
@@ -183,7 +184,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
             onTap: () => app.toggleMute(chat),
           ),
         _Action(
-          icon: Icons.call_rounded,
+          icon: CupertinoIcons.phone_fill,
           label: context.tr('voice_call'),
           onBig: big,
           onTap: () async {
@@ -192,7 +193,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           },
         ),
         _Action(
-          icon: Icons.videocam_rounded,
+          icon: CupertinoIcons.video_camera_solid,
           label: context.tr('video_call'),
           onBig: big,
           onTap: () async {
@@ -390,7 +391,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
             PositionedDirectional(
               top: pad.top + 8,
               start: 10,
-              child: _RoundButton(icon: Icons.arrow_back_rounded, onBig: big, tooltip: context.tr('back'), onTap: () => Navigator.of(context).maybePop()),
+              child: _RoundButton(
+                icon: Icons.arrow_back_ios_new_rounded,
+                onBig: big,
+                tooltip: context.tr('back'),
+                onTap: () => Navigator.of(context).maybePop(),
+              ),
             ),
           if (big)
             PositionedDirectional(
@@ -624,7 +630,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           return ListTile(
             leading: CircleAvatar(
               backgroundColor: cs.primary,
-              child: Icon(isLink ? Icons.link_rounded : (m.kind == MsgKind.voice ? Icons.mic_rounded : Icons.insert_drive_file_rounded), color: Colors.white),
+              child: Icon(
+                isLink ? Icons.link_rounded : (m.kind == MsgKind.voice ? CupertinoIcons.mic_fill : Icons.insert_drive_file_rounded),
+                color: Colors.white,
+              ),
             ),
             title: Text(
               isLink ? m.body : (m.kind == MsgKind.voice ? context.tr('voice_message') : (m.fileName ?? '')),

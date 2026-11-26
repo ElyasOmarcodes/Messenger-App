@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:gal/gal.dart';
@@ -436,7 +437,7 @@ class _GalleryViewerState extends State<GalleryViewer> {
             ),
           PopupMenuButton<_ViewerMenu>(
             tooltip: context.tr('more'),
-            icon: const Icon(Icons.more_vert_rounded, color: Colors.white),
+            icon: const Icon(CupertinoIcons.ellipsis, color: Colors.white),
             onSelected: _menu,
             itemBuilder: (c) {
               PopupMenuItem<_ViewerMenu> item(_ViewerMenu v, IconData icon, String key, {Color? color}) => PopupMenuItem(
@@ -684,7 +685,7 @@ class _PhotoDrawScreenState extends State<PhotoDrawScreen> {
             onPressed: _strokes.isEmpty ? null : () => setState(() => _strokes.removeLast()),
             icon: const Icon(Icons.undo_rounded),
           ),
-          IconButton(tooltip: context.tr('send'), onPressed: _busy ? null : _done, icon: const Icon(Icons.send_rounded)),
+          IconButton(tooltip: context.tr('send'), onPressed: _busy ? null : _done, icon: const Icon(CupertinoIcons.arrow_up)),
         ],
       ),
       body: Column(

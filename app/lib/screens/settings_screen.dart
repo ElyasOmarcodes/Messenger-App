@@ -1,5 +1,6 @@
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../brand/brand.dart';
@@ -140,7 +141,7 @@ class SettingsScreen extends StatelessWidget {
         _Group(
           children: [
             _Tile(
-              icon: Icons.account_circle_rounded,
+              icon: CupertinoIcons.person_crop_circle_fill,
               color: const Color(0xFF3390EC),
               title: context.tr('account'),
               subtitle: context.tr('account_sub'),
@@ -233,16 +234,13 @@ class SettingsScreen extends StatelessWidget {
               title: context.tr('logout'),
               danger: true,
               onTap: () async {
-                final ok = await showDialog<bool>(
+                final ok = await showCupertinoDialog<bool>(
                   context: context,
-                  builder: (d) => AlertDialog(
+                  builder: (d) => CupertinoAlertDialog(
                     content: Text(d.tr('logout_q')),
                     actions: [
-                      TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-                      TextButton(
-                        onPressed: () => Navigator.pop(d, true),
-                        child: Text(d.tr('logout'), style: const TextStyle(color: Brand.pomegranate)),
-                      ),
+                      CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+                      CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr('logout'))),
                     ],
                   ),
                 );
@@ -288,12 +286,12 @@ class SettingsScreen extends StatelessWidget {
     if (v != null) onPick(v);
   }
 
-  void _info(BuildContext context, String title, String body) => showDialog<void>(
+  void _info(BuildContext context, String title, String body) => showCupertinoDialog<void>(
     context: context,
-    builder: (ctx) => AlertDialog(
+    builder: (ctx) => CupertinoAlertDialog(
       title: Text(title),
       content: Text(body, style: const TextStyle(height: 1.6)),
-      actions: [TextButton(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('ok')))],
+      actions: [CupertinoDialogAction(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('ok')))],
     ),
   );
 }
@@ -313,13 +311,13 @@ class _ChatSettingsPage extends StatelessWidget {
         children: [
           _Group(
             children: [
-              SwitchListTile(
+              SwitchListTile.adaptive(
                 secondary: const _Ico(Icons.dark_mode_rounded, Color(0xFF5B6BF5)),
                 title: Text(context.tr('night_mode'), style: const TextStyle(fontWeight: FontWeight.w600)),
                 value: dark,
                 onChanged: (v) => app.setTheme(v ? ThemeMode.dark : ThemeMode.light),
               ),
-              SwitchListTile(
+              SwitchListTile.adaptive(
                 secondary: const _Ico(Icons.blur_on_rounded, Color(0xFF2AA3C8)),
                 title: Text(context.tr('glass_effect'), style: const TextStyle(fontWeight: FontWeight.w600)),
                 subtitle: Text(context.tr('glass_effect_sub')),

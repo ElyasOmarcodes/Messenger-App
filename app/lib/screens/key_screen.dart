@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../brand/brand.dart';
@@ -55,17 +56,14 @@ class _KeyScreenState extends State<KeyScreen> {
   }
 
   Future<void> _forgot() async {
-    final ok = await showDialog<bool>(
+    final ok = await showCupertinoDialog<bool>(
       context: context,
-      builder: (d) => AlertDialog(
+      builder: (d) => CupertinoAlertDialog(
         title: Text(d.tr('pin_forgot')),
         content: Text(d.tr('pin_forgot_q')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-          TextButton(
-            onPressed: () => Navigator.pop(d, true),
-            child: Text(d.tr('continue'), style: const TextStyle(color: Brand.pomegranate)),
-          ),
+          CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr('continue'))),
         ],
       ),
     );

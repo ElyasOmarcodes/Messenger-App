@@ -48,7 +48,11 @@ class LiquidGlass extends StatelessWidget {
       // Impeller: full refraction shader; Skia/web: its lighter shader.
       // A rounded superellipse also for circles (ovals mis-clip on the web).
       return lg.GlassContainer(
-        useOwnLayer: true,
+        // joins a shared glass layer when there is one (one capture of the
+        // screen for the whole bar), else gets its own; premium = the real
+        // refraction shader where the phone supports it
+        useOwnLayer: false,
+        quality: lg.GlassQuality.premium,
         shape: lg.LiquidRoundedSuperellipse(borderRadius: circle ? 999 : radius),
         settings: dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light,
         color: tint,

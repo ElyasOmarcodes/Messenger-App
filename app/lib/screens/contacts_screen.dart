@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../l10n/strings.dart';
@@ -57,8 +58,8 @@ class _ContactsScreenState extends State<ContactsScreen> {
           padding: const EdgeInsets.fromLTRB(14, 4, 14, 8),
           child: SegmentedButton<bool>(
             segments: [
-              ButtonSegment(value: false, icon: const Icon(Icons.people_alt_rounded), label: Text(context.tr('contacts'))),
-              ButtonSegment(value: true, icon: const Icon(Icons.call_rounded), label: Text(context.tr('calls'))),
+              ButtonSegment(value: false, icon: const Icon(CupertinoIcons.person_2_fill), label: Text(context.tr('contacts'))),
+              ButtonSegment(value: true, icon: const Icon(CupertinoIcons.phone_fill), label: Text(context.tr('calls'))),
             ],
             selected: {_calls},
             showSelectedIcon: false,

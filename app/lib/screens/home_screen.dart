@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 import 'package:flutter/services.dart';
@@ -97,12 +98,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
   List<NavItem> _items(BuildContext context) => [
     // round, filled icons (like Telegram's tab bar); the colour shows the chosen tab
-    NavItem(Icons.chat_bubble_rounded, Icons.chat_bubble_rounded, context.tr('chats')),
-    NavItem(Icons.people_alt_rounded, Icons.people_alt_rounded, context.tr('contacts')),
-    NavItem(Icons.settings_rounded, Icons.settings_rounded, context.tr('settings')),
+    NavItem(CupertinoIcons.chat_bubble_2_fill, CupertinoIcons.chat_bubble_2_fill, context.tr('chats')),
+    NavItem(CupertinoIcons.person_2_fill, CupertinoIcons.person_2_fill, context.tr('contacts')),
+    NavItem(CupertinoIcons.gear_solid, CupertinoIcons.gear_solid, context.tr('settings')),
     NavItem(
-      Icons.account_circle_rounded,
-      Icons.account_circle_rounded,
+      CupertinoIcons.person_crop_circle_fill,
+      CupertinoIcons.person_crop_circle_fill,
       context.tr('profile_tab'),
       custom: AppScope.read(context).me == null
           ? null

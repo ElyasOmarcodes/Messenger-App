@@ -3,6 +3,7 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
@@ -406,7 +407,7 @@ class _StoryComposerState extends State<StoryComposer> {
                           onPressed: _posting ? null : _post,
                           child: _posting
                               ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
-                              : const Icon(Icons.send_rounded),
+                              : const Icon(CupertinoIcons.arrow_up),
                         ),
                       ),
                     ],
@@ -774,16 +775,13 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
   Future<void> _delete() async {
     setState(() => _sheet = true);
     _sync();
-    final ok = await showDialog<bool>(
+    final ok = await showCupertinoDialog<bool>(
       context: context,
-      builder: (d) => AlertDialog(
+      builder: (d) => CupertinoAlertDialog(
         content: Text(d.tr('delete_story_q')),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-          TextButton(
-            onPressed: () => Navigator.pop(d, true),
-            child: Text(d.tr('delete'), style: const TextStyle(color: Brand.pomegranate)),
-          ),
+          CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr('delete'))),
         ],
       ),
     );

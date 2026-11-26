@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
@@ -137,7 +138,7 @@ class _CallOverlayState extends State<CallOverlay> {
         children: [
           _RoundButton(icon: Icons.call_end_rounded, color: Brand.pomegranate, label: context.tr('decline'), onTap: c.decline),
           _RoundButton(
-            icon: c.video ? Icons.videocam_rounded : Icons.call_rounded,
+            icon: c.video ? CupertinoIcons.video_camera_solid : CupertinoIcons.phone_fill,
             color: const Color(0xFF1E8C6E),
             label: context.tr('accept'),
             onTap: c.accept,
@@ -149,7 +150,7 @@ class _CallOverlayState extends State<CallOverlay> {
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
         _RoundButton(
-          icon: c.muted ? Icons.mic_off_rounded : Icons.mic_rounded,
+          icon: c.muted ? Icons.mic_off_rounded : CupertinoIcons.mic_fill,
           color: c.muted ? Colors.white : Colors.white24,
           iconColor: c.muted ? Brand.lapisDeep : Colors.white,
           label: context.tr('mute'),
@@ -157,7 +158,7 @@ class _CallOverlayState extends State<CallOverlay> {
         ),
         if (c.video)
           _RoundButton(
-            icon: c.cameraOff ? Icons.videocam_off_rounded : Icons.videocam_rounded,
+            icon: c.cameraOff ? Icons.videocam_off_rounded : CupertinoIcons.video_camera_solid,
             color: c.cameraOff ? Colors.white : Colors.white24,
             iconColor: c.cameraOff ? Brand.lapisDeep : Colors.white,
             label: context.tr('camera'),

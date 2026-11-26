@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import '../brand/brand.dart';
@@ -283,7 +284,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                       padding: EdgeInsets.only(
                         bottom: math.max(
                           120.0,
-                          MediaQuery.sizeOf(context).height - topInset - _toolbarH - (list.length + (archived.isNotEmpty ? 1 : 0)) * 74.0,
+                          MediaQuery.sizeOf(context).height - topInset - _toolbarH - (list.length + (archived.isNotEmpty ? 1 : 0)) * 70.0,
                         ),
                       ),
                       sliver: SliverList.builder(
@@ -493,7 +494,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
               ? Semantics(
                   button: true,
                   label: context.tr('search'),
-                  child: Center(child: Icon(Icons.search_rounded, color: cs.onSurfaceVariant, size: 22)),
+                  child: Center(child: Icon(CupertinoIcons.search, color: cs.onSurfaceVariant, size: 22)),
                 )
               : Opacity(
                   opacity: (1 - e * 1.8).clamp(0.0, 1.0),
@@ -509,7 +510,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                       style: const TextStyle(fontSize: 15),
                       decoration: InputDecoration(
                         hintText: context.tr('search'),
-                        prefixIcon: Icon(Icons.search_rounded, color: cs.onSurfaceVariant, size: 21),
+                        prefixIcon: Icon(CupertinoIcons.search, color: cs.onSurfaceVariant, size: 21),
                         filled: false,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
@@ -653,7 +654,7 @@ class _Toolbar extends StatelessWidget {
           const Spacer(),
           if (wide && onNewChat != null) IconButton(onPressed: onNewChat, icon: const Icon(Icons.edit_outlined), tooltip: context.tr('new_chat')),
           PopupMenuButton<String>(
-            icon: const Icon(Icons.more_vert_rounded),
+            icon: const Icon(CupertinoIcons.ellipsis),
             onSelected: (v) {
               switch (v) {
                 case 'new':
@@ -733,7 +734,7 @@ class ChatTile extends StatelessWidget {
           padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 14, 8),
           child: Row(
             children: [
-              ChatAvatar(chat: chat, size: 58),
+              ChatAvatar(chat: chat, size: 54),
               const SizedBox(width: 12),
               Expanded(
                 child: Column(
@@ -913,7 +914,7 @@ class ArchivedRow extends StatelessWidget {
         padding: const EdgeInsetsDirectional.fromSTEB(12, 8, 14, 8),
         child: Row(
           children: [
-            const ArchiveAvatar(size: 58),
+            const ArchiveAvatar(size: 54),
             const SizedBox(width: 12),
             Expanded(
               child: Column(
