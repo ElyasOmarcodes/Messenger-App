@@ -1,3 +1,5 @@
+import 'notify_screen.dart';
+
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
@@ -173,7 +175,7 @@ class SettingsScreen extends StatelessWidget {
               color: const Color(0xFFF0544C),
               title: context.tr('notifications'),
               subtitle: context.tr('notifications_sub'),
-              onTap: () => _info(context, context.tr('notifications'), context.tr('notifications_body')),
+              onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const NotifyScreen(page: true))),
             ),
             _Tile(
               icon: Icons.translate_rounded,
@@ -285,15 +287,6 @@ class SettingsScreen extends StatelessWidget {
     );
     if (v != null) onPick(v);
   }
-
-  void _info(BuildContext context, String title, String body) => showCupertinoDialog<void>(
-    context: context,
-    builder: (ctx) => CupertinoAlertDialog(
-      title: Text(title),
-      content: Text(body, style: const TextStyle(height: 1.6)),
-      actions: [CupertinoDialogAction(onPressed: () => Navigator.pop(ctx), child: Text(ctx.tr('ok')))],
-    ),
-  );
 }
 
 /// Night mode, theme and glass in one page.

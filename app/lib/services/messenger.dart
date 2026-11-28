@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math' as math;
@@ -36,6 +38,13 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Glass (blur) effects; can be turned off on slow phones, like Telegram.
   bool glass = false;
+
+  /// The notifications page was shown once (Android); web / iPhone skip it.
+  bool get notifyAsked => kIsWeb || defaultTargetPlatform != TargetPlatform.android || (_prefs.getBool('notify_asked') ?? false);
+  void setNotifyAsked() {
+    _prefs.setBool('notify_asked', true);
+    notifyListeners();
+  }
 
   // ── Storage (like Telegram's "Data and storage") ──────────────────────────
   /// Delete media not opened for this many days (0 = keep forever).

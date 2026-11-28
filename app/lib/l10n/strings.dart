@@ -231,6 +231,30 @@ class Strings {
     'flip': {'ps': 'کمره اړول', 'fa': 'چرخاندن دوربین', 'en': 'Flip'},
     'end_call': {'ps': 'بندول', 'fa': 'قطع', 'en': 'End'},
     'continue': {'ps': 'دوام', 'fa': 'ادامه', 'en': 'Continue'},
+    // ── v0.17: notifications page ─────────────────────────────────────────
+    'nf_title': {'ps': 'هېڅ پیغام له لاسه مه ورکوئ', 'fa': 'هیچ پیامی را از دست ندهید', 'en': 'Never miss a message'},
+    'nf_body': {
+      'ps': 'د نویو پیغامونو او زنګونو خبرتیا، حتی کله چې اپ بند وي. دوه اجازې ته اړتیا ده.',
+      'fa': 'اعلان پیام‌ها و تماس‌های تازه، حتی وقتی برنامه بسته است. دو اجازه لازم است.',
+      'en': 'Get new messages and calls even when the app is closed. Two permissions are needed.',
+    },
+    'nf_allow': {'ps': 'خبرتیاوې', 'fa': 'اعلان‌ها', 'en': 'Notifications'},
+    'nf_allow_sub': {'ps': 'پیغامونه او زنګونه وښیي', 'fa': 'نمایش پیام‌ها و تماس‌ها', 'en': 'Show messages and calls'},
+    'nf_battery': {'ps': 'په شاته کې کار', 'fa': 'کار در پس‌زمینه', 'en': 'Run in background'},
+    'nf_battery_sub': {
+      'ps': 'تلیفون دې اپ نه بندوي، نو خبرتیا ژر رسېږي',
+      'fa': 'گوشی برنامه را نمی‌بندد تا اعلان زود برسد',
+      'en': 'The phone will not stop the app, so alerts arrive on time',
+    },
+    'nf_go': {'ps': 'اجازه ورکړئ', 'fa': 'اجازه دهید', 'en': 'Allow'},
+    'nf_done': {'ps': 'بشپړ شو', 'fa': 'تمام شد', 'en': 'Done'},
+    'nf_later': {'ps': 'وروسته', 'fa': 'بعداً', 'en': 'Later'},
+    'nf_open_settings': {'ps': 'ترتیبات خلاص کړئ', 'fa': 'باز کردن تنظیمات', 'en': 'Open settings'},
+    'nf_xiaomi': {
+      'ps': 'په شیاومي، اوپو او ویوو کې: د اپ ترتیبات ← Autostart روښانه کړئ.',
+      'fa': 'در شیائومی، اوپو و ویوو: تنظیمات برنامه ← Autostart را روشن کنید.',
+      'en': 'On Xiaomi, Oppo and Vivo: app settings → turn on Autostart.',
+    },
     'notifications': {'ps': 'خبرتیاوې', 'fa': 'اعلان‌ها', 'en': 'Notifications'},
     'notifications_body': {
       'ps': 'کله چې اپ خلاص یا شاته وي، د نویو پیغامونو او زنګونو خبرتیا درځي. د بشپړ تړل شوي اپ لپاره خبرتیاوې (Push) د Firebase حساب سره فعالېږي.',

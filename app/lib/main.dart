@@ -13,6 +13,7 @@ import 'config.dart';
 import 'l10n/strings.dart';
 import 'screens/home_screen.dart';
 import 'screens/key_screen.dart';
+import 'screens/notify_screen.dart';
 import 'screens/onboarding_screen.dart';
 import 'screens/call_screen.dart';
 import 'services/calls.dart';
@@ -39,7 +40,7 @@ Future<void> main() async {
   final calls = CallController(controller);
   runApp(PaighamApp(controller: controller, calls: calls));
   controller.init();
-  Notifier.instance.init();
+  Notifier.instance.init(askPermission: false); // asked on its own page
 }
 
 class PaighamApp extends StatelessWidget {
@@ -95,7 +96,7 @@ class PaighamApp extends StatelessWidget {
                     // end-to-end key first: create a PIN, or restore with it
                     : switch (controller.keyState) {
                         KeyState.needCreate || KeyState.needRestore || KeyState.needStrengthen || KeyState.offline => const KeyScreen(),
-                        _ => const HomeScreen(),
+                        _ => controller.notifyAsked ? const HomeScreen() : const NotifyScreen(),
                       },
               ),
             );
