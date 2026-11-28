@@ -1,7 +1,6 @@
 import 'dart:ui' as ui;
 
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 
 /// iOS / Telegram style "glass": a strong blur of what is behind plus a
 /// saturation boost (colours glow through, like Apple's materials), a light
@@ -42,27 +41,10 @@ class LiquidGlass extends StatelessWidget {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final glass = GlassScope.of(context);
     final inner = padding == null ? child : Padding(padding: padding!, child: child);
-    if (glass) {
-      // Apple's Liquid Glass (liquid_glass_widgets, iOS 27 presets): the
-      // background bends at the edges like a lens, frosted body, rim light.
-      // Impeller: full refraction shader; Skia/web: its lighter shader.
-      // A rounded superellipse also for circles (ovals mis-clip on the web).
-      return lg.GlassContainer(
-        // joins a shared glass layer when there is one (one capture of the
-        // screen for the whole bar), else gets its own; premium = the real
-        // refraction shader where the phone supports it
-        useOwnLayer: false,
-        quality: lg.GlassQuality.premium,
-        shape: lg.LiquidRoundedSuperellipse(borderRadius: circle ? 999 : radius),
-        // a tint makes it "prominent" glass (e.g. the blue new-chat button)
-        settings: tint == null
-            ? (dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light)
-            : (dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light).copyWith(glassColor: tint!.withValues(alpha: 0.82)),
-        child: inner,
-      );
-    }
-    // glass off: the same shape, solid, with the rim and a soft shadow
-    final fill = fillOf(dark, false, tint);
+    // Light by design: no refraction shaders (they made the app heavy).
+    // Glass off (the default): a solid surface. Glass on: one cheap, low
+    // blur of what is behind under a 70% tint.
+    final fill = fillOf(dark, glass, tint);
     final r = circle ? null : BorderRadius.circular(radius);
     Widget body = DecoratedBox(
       decoration: BoxDecoration(shape: circle ? BoxShape.circle : BoxShape.rectangle, borderRadius: r, color: fill),
@@ -71,6 +53,7 @@ class LiquidGlass extends StatelessWidget {
         child: inner,
       ),
     );
+    if (glass) body = Glass.backdrop(enabled: true, child: body);
     body = circle ? ClipOval(child: body) : ClipRRect(borderRadius: r!, child: body);
     if (!shadow) return body;
     return DecoratedBox(

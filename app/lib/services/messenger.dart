@@ -35,7 +35,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   ThemeMode themeMode = ThemeMode.system;
 
   /// Glass (blur) effects; can be turned off on slow phones, like Telegram.
-  bool glass = true;
+  bool glass = false;
 
   // ── Storage (like Telegram's "Data and storage") ──────────────────────────
   /// Delete media not opened for this many days (0 = keep forever).
@@ -197,7 +197,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     _prefs = await SharedPreferences.getInstance();
     lang = AppLang.fromCode(_prefs.getString('lang'));
     themeMode = ThemeMode.values.byName(_prefs.getString('theme') ?? 'system');
-    glass = _prefs.getBool('glass') ?? true;
+    // light by default (no live blur); v0.16 resets the old default
+    glass = _prefs.getBool('glass2') ?? false;
     keepDays = _prefs.getInt('keep_days') ?? 30;
     maxCacheMb = _prefs.getInt('max_cache_mb') ?? 3072;
     autoPhotos = _prefs.getBool('auto_photos') ?? true;
@@ -2270,7 +2271,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   void setGlass(bool v) {
     glass = v;
-    _prefs.setBool('glass', v);
+    _prefs.setBool('glass2', v);
     notifyListeners();
   }
 

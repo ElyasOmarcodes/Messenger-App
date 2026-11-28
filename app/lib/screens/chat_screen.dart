@@ -6,7 +6,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' hide Category;
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 import 'package:flutter/services.dart';
 import 'package:geolocator/geolocator.dart';
@@ -640,14 +639,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   /// The top bar's glass pieces (back, title, call capsule) share one glass
   /// layer: the screen behind is captured once instead of once per piece.
-  PreferredSizeWidget _glassBar(AppBar bar) => PreferredSize(
-    preferredSize: bar.preferredSize,
-    child: lg.AdaptiveLiquidGlassLayer(
-      quality: lg.GlassQuality.premium,
-      settings: Theme.of(context).brightness == Brightness.dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light,
-      child: bar,
-    ),
-  );
+  PreferredSizeWidget _glassBar(AppBar bar) => PreferredSize(preferredSize: bar.preferredSize, child: bar);
 
   void _openInfo(AppController app, Chat chat) {
     if (chat.isSaved) return;
@@ -1176,37 +1168,33 @@ class _ChatScreenState extends State<ChatScreen> {
         ),
       );
     }
-    return lg.AdaptiveLiquidGlassLayer(
-      quality: lg.GlassQuality.premium,
-      settings: Theme.of(context).brightness == Brightness.dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light,
-      child: SafeArea(
-        top: false,
-        bottom: !_emoji,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              AnimatedSize(
-                duration: const Duration(milliseconds: 180),
-                curve: Curves.easeOut,
-                child: (_replyTo != null || _editing != null) ? _contextBar(app, chat) : const SizedBox(width: double.infinity),
-              ),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Expanded(
-                    child: LiquidGlass(
-                      radius: 24,
-                      child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 48), child: _recording ? _recordingStrip(chat) : _textRow(chat, cs)),
-                    ),
+    return SafeArea(
+      top: false,
+      bottom: !_emoji,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            AnimatedSize(
+              duration: const Duration(milliseconds: 180),
+              curve: Curves.easeOut,
+              child: (_replyTo != null || _editing != null) ? _contextBar(app, chat) : const SizedBox(width: double.infinity),
+            ),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Expanded(
+                  child: LiquidGlass(
+                    radius: 24,
+                    child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 48), child: _recording ? _recordingStrip(chat) : _textRow(chat, cs)),
                   ),
-                  const SizedBox(width: 6),
-                  _actionButton(chat, cs),
-                ],
-              ),
-            ],
-          ),
+                ),
+                const SizedBox(width: 6),
+                _actionButton(chat, cs),
+              ],
+            ),
+          ],
         ),
       ),
     );

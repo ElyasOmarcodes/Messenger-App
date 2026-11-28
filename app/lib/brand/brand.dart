@@ -8,7 +8,7 @@ class Brand {
 
   static const String nameLatin = 'Paigham';
   static const String nameNative = 'پیغام';
-  static const String version = '0.15.0';
+  static const String version = '0.16.0';
 
   /// The app's own font. Turned off for a test: null = the phone's system
   /// font (plain text). To bring Vazirmatn back, set this to [vazirmatn].
@@ -103,13 +103,20 @@ class Brand {
       brightness: brightness,
       fontFamily: fontFamily,
       scaffoldBackgroundColor: bg,
-      // iPhone behaviour everywhere: bouncing scroll, edge swipe to go back,
-      // iOS page transitions, chevron back buttons, iOS switches and
-      // text-selection handles; no Android ripple splash (iOS highlights).
-      platform: TargetPlatform.iOS,
-      splashFactory: NoSplash.splashFactory,
+      // Native behaviour for each phone, like WhatsApp: on Android the
+      // Android scroll (stops at the edge with a stretch, no rubber-band
+      // bounce), Android page transitions and the system back gesture; on
+      // iPhone the iPhone ones. (Forcing iPhone physics on Android felt like
+      // a web page.) A plain, cheap ripple on touch.
+      splashFactory: InkRipple.splashFactory,
       materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-      pageTransitionsTheme: PageTransitionsTheme(builders: {for (final p in TargetPlatform.values) p: const CupertinoPageTransitionsBuilder()}),
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+        },
+      ),
       cupertinoOverrideTheme: CupertinoThemeData(primaryColor: primary, brightness: brightness),
     );
 

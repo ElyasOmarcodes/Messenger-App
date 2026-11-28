@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 import 'package:flutter/services.dart';
 
 import '../brand/brand.dart';
@@ -280,7 +279,6 @@ class PillNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final page = Theme.of(context).scaffoldBackgroundColor;
-    if (GlassScope.of(context)) return _liquid(context, dark);
     final barW = items.length * itemWidth + 8;
     Widget capsule = Container(
       width: barW,
@@ -360,37 +358,6 @@ class PillNavBar extends StatelessWidget {
           ),
         ),
       ],
-    );
-  }
-}
-
-extension on PillNavBar {
-  /// Apple's Liquid Glass tab bar: a glass capsule with a clear liquid lens
-  /// that slides (with a little jelly) to the chosen tab.
-  Widget _liquid(BuildContext context, bool dark) {
-    final cs = Theme.of(context).colorScheme;
-    Widget icon(int i, bool sel) {
-      final it = items[i];
-      final color = sel ? cs.primary : cs.onSurface;
-      final w = it.custom?.call(sel, color) ?? Icon(sel ? it.active : it.icon, color: color, size: 26);
-      final n = badges[i] ?? 0;
-      return n <= 0 ? w : Badge(label: Text(context.digits(n)), backgroundColor: cs.primary, textColor: Colors.white, child: w);
-    }
-
-    return lg.GlassTabBar.bottom(
-      tabs: [for (var i = 0; i < items.length; i++) lg.GlassTab(icon: icon(i, false), activeIcon: icon(i, true), label: items[i].label)],
-      selectedIndex: index,
-      onTabSelected: onTap,
-      barHeight: 62,
-      horizontalPadding: 18,
-      verticalPadding: 10,
-      labelFontSize: 11,
-      selectedIconColor: cs.primary,
-      unselectedIconColor: cs.onSurface,
-      selectedLabelColor: cs.primary,
-      unselectedLabelColor: cs.onSurface,
-      settings: dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light,
-      indicatorSettings: lg.LiquidGlassSettings.ios27Indicator,
     );
   }
 }

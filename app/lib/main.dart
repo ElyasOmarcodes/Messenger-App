@@ -2,7 +2,6 @@ import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_displaymode/flutter_displaymode.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 import 'package:flutter_localizations/flutter_localizations.dart';
 
 import 'brand/brand.dart';
@@ -38,14 +37,7 @@ Future<void> main() async {
   await Push.init(); // FCM (when configured): pushes for a closed app
   final controller = AppController();
   final calls = CallController(controller);
-  // Liquid Glass shaders (real refraction on Impeller; lighter shader on Skia/web)
-  await lg.LiquidGlassWidgets.initialize(enablePerformanceMonitor: false);
-  runApp(
-    lg.LiquidGlassWidgets.wrap(
-      brightnessResolver: Theme.maybeBrightnessOf,
-      child: PaighamApp(controller: controller, calls: calls),
-    ),
-  );
+  runApp(PaighamApp(controller: controller, calls: calls));
   controller.init();
   Notifier.instance.init();
 }

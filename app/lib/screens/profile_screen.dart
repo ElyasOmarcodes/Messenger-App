@@ -1,7 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
-import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -388,17 +387,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           ),
           // action cards at the bottom of the header
           // the cards share one glass layer (one capture of the screen)
-          Positioned(
-            left: 12,
-            right: 12,
-            bottom: 12,
-            height: 74,
-            child: lg.AdaptiveLiquidGlassLayer(
-              quality: lg.GlassQuality.premium,
-              settings: dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light,
-              child: Row(children: actions),
-            ),
-          ),
+          Positioned(left: 12, right: 12, bottom: 12, height: 74, child: Row(children: actions)),
           // round buttons
           if (canPop)
             PositionedDirectional(
