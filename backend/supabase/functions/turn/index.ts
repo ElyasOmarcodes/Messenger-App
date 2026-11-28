@@ -49,6 +49,14 @@ async function metered(): Promise<Ice[] | null> {
   return Array.isArray(j) ? j : (j.iceServers ?? []);
 }
 
+// A fixed relay login (e.g. a Metered credential): TURN_URLS, TURN_USERNAME, TURN_CREDENTIAL
+function fixed(): Ice[] | null {
+  const user = Deno.env.get("TURN_USERNAME"), pass = Deno.env.get("TURN_CREDENTIAL");
+  const urls = (Deno.env.get("TURN_URLS") ?? "").split(",").map((u) => u.trim()).filter(Boolean);
+  if (!user || !pass || urls.length === 0) return null;
+  return [{ urls, username: user, credential: pass }];
+}
+
 async function coturn(userId: string, ttl: number): Promise<Ice[] | null> {
   const secret = Deno.env.get("TURN_SECRET");
   const urls = (Deno.env.get("TURN_URLS") ?? "").split(",").map((u) => u.trim()).filter(Boolean);
@@ -69,7 +77,7 @@ Deno.serve(async (req) => {
 
   const ttl = 6 * 3600;
   try {
-    const ice = (await cloudflare(ttl)) ?? (await metered()) ?? (await coturn(user.id, ttl)) ?? [];
+    const ice = (await cloudflare(ttl)) ?? (await metered()) ?? fixed() ?? (await coturn(user.id, ttl)) ?? [];
     const relay = ice.find((s) => s.username);
     return Response.json({
       ice_servers: ice,
