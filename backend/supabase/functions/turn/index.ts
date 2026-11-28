@@ -8,7 +8,10 @@
 //       CF_TURN_KEY_ID      the "Turn Token ID"
 //       CF_TURN_API_TOKEN   its "API Token"
 //
-//  B) Your own coturn server (use-auth-secret mode, see backend/turn/):
+//  B) Metered (free plan, no bank card): METERED_DOMAIN (e.g. paigham.metered.live)
+//       and METERED_API_KEY
+//
+//  C) Your own coturn server (use-auth-secret mode, see backend/turn/):
 //       TURN_SECRET  = static-auth-secret in turnserver.conf
 //       TURN_URLS    e.g. "turn:turn.example.af:3478?transport=udp,turn:turn.example.af:3478?transport=tcp"
 //
@@ -35,6 +38,17 @@ async function cloudflare(ttl: number): Promise<Ice[] | null> {
   return list.filter(Boolean);
 }
 
+// Metered (metered.ca): a free plan without a bank card
+async function metered(): Promise<Ice[] | null> {
+  const domain = Deno.env.get("METERED_DOMAIN"), key = Deno.env.get("METERED_API_KEY");
+  if (!domain || !key) return null;
+  const host = domain.replace(/^https?:\/\//, "").replace(/\/.*$/, "");
+  const res = await fetch(`https://${host}/api/v1/turn/credentials?apiKey=${encodeURIComponent(key)}`);
+  if (!res.ok) throw new Error(`metered ${res.status}: ${(await res.text()).slice(0, 200)}`);
+  const j = await res.json();
+  return Array.isArray(j) ? j : (j.iceServers ?? []);
+}
+
 async function coturn(userId: string, ttl: number): Promise<Ice[] | null> {
   const secret = Deno.env.get("TURN_SECRET");
   const urls = (Deno.env.get("TURN_URLS") ?? "").split(",").map((u) => u.trim()).filter(Boolean);
@@ -55,7 +69,7 @@ Deno.serve(async (req) => {
 
   const ttl = 6 * 3600;
   try {
-    const ice = (await cloudflare(ttl)) ?? (await coturn(user.id, ttl)) ?? [];
+    const ice = (await cloudflare(ttl)) ?? (await metered()) ?? (await coturn(user.id, ttl)) ?? [];
     const relay = ice.find((s) => s.username);
     return Response.json({
       ice_servers: ice,
