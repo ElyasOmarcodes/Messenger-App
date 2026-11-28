@@ -151,8 +151,15 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    final was = foreground;
     foreground = state == AppLifecycleState.resumed;
-    if (foreground && myId != null) _scheduleReload();
+    if (foreground && !was && myId != null) {
+      // back in the app: fetch at once and clear the notifications it read
+      _reloadTimer?.cancel();
+      unawaited(reloadChats());
+      unawaited(_drain());
+      unawaited(Notifier.instance.cancelAll());
+    }
     _presence(); // online now / last seen when leaving
   }
 
@@ -1041,10 +1048,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       final data = await _sb.rpc('my_chats').timeout(_net) as List<dynamic>;
       if (E2E.instance.ready && data.any((e) => (e as Map)['last_message'] is Map && e['last_message']['cipher'] != null)) {
         await _loadMyChatKeys(); // one query for all chats
-        for (final e in data.cast<Map<String, dynamic>>()) {
-          final lm = e['last_message'];
-          if (lm is Map && lm['cipher'] != null) e['last_message'] = await _open(Map<String, dynamic>.from(lm));
-        }
+        // all chats at once, not one after another (faster on opening)
+        await Future.wait([
+          for (final e in data.cast<Map<String, dynamic>>())
+            if (e['last_message'] is Map && e['last_message']['cipher'] != null)
+              _open(Map<String, dynamic>.from(e['last_message'] as Map)).then((v) => e['last_message'] = v),
+        ]);
       }
       final before = {for (final c in chats) c.id: c.lastMessage?.id};
       final hadChats = chats.isNotEmpty;
@@ -1057,7 +1066,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         if (last == null || before[c.id] == last.id) continue;
         final list = _messages[c.id];
         if (list != null && !list.any((x) => x.id == last.id)) unawaited(loadMessages(c.id));
-        if (hadChats && last.senderId != myId && !c.muted && before.containsKey(c.id)) _notify(c, last);
+        // only while the app is away: in front the list itself shows it, and
+        // a push already announced it (no second notification on opening)
+        if (!foreground && hadChats && last.senderId != myId && !c.muted && before.containsKey(c.id)) _notify(c, last);
       }
       _showOutboxInChats();
       final open = openChatId == null ? null : chatById(openChatId!);

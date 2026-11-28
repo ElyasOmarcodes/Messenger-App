@@ -67,6 +67,12 @@ class Notifier {
     } catch (_) {}
   }
 
+  Future<void> cancelAll() async {
+    try {
+      await _plugin.cancelAll();
+    } catch (_) {}
+  }
+
   Future<void> cancel(int id) async {
     if (!_ready) return;
     try {
