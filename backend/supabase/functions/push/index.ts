@@ -47,6 +47,7 @@ async function accessToken(): Promise<string> {
     body: `grant_type=urn%3Aietf%3Aparams%3Aoauth%3Agrant-type%3Ajwt-bearer&assertion=${head}.${claim}.${b64url(sig)}`,
   });
   const j = await res.json();
+  if (!j.access_token) throw new Error(`Google sign-in failed: ${JSON.stringify(j).slice(0, 200)}`);
   cached = { token: j.access_token, until: Date.now() + (j.expires_in ?? 3600) * 1000 };
   return cached.token;
 }
@@ -58,8 +59,11 @@ const T: Record<string, { msg: string; call: string; video: string }> = {
   en: { msg: "New message", call: "Incoming voice call", video: "Incoming video call" },
 };
 
-async function send(token: string, lang: string, title: string, body: string, data: Record<string, string>, call: boolean) {
-  const res = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
+async function send(token: string, lang: string, title: string, body: string, data: Record<string, string>, call: boolean): Promise<string> {
+  if (!sa.project_id || !sa.private_key) return "FCM_SERVICE_ACCOUNT missing or not valid JSON";
+  let res: Response;
+  try {
+  res = await fetch(`https://fcm.googleapis.com/v1/projects/${sa.project_id}/messages:send`, {
     method: "POST",
     headers: { Authorization: `Bearer ${await accessToken()}`, "Content-Type": "application/json" },
     body: JSON.stringify({
@@ -77,12 +81,15 @@ async function send(token: string, lang: string, title: string, body: string, da
       },
     }),
   });
-  if (res.status === 404 || res.status === 400) {
-    const e = await res.text();
-    if (e.includes("UNREGISTERED") || e.includes("INVALID_ARGUMENT")) {
-      await db.from("push_tokens").delete().eq("token", token); // app removed / token stale
-    }
+  } catch (e) {
+    return `error: ${e}`;
   }
+  if (res.ok) return "sent";
+  const e = await res.text();
+  if ((res.status === 404 || res.status === 400) && (e.includes("UNREGISTERED") || e.includes("INVALID_ARGUMENT"))) {
+    await db.from("push_tokens").delete().eq("token", token); // app removed / token stale
+  }
+  return `fcm ${res.status}: ${e.slice(0, 300)}`;
 }
 
 Deno.serve(async (req) => {
@@ -98,14 +105,17 @@ Deno.serve(async (req) => {
       db.from("profiles").select("display_name,email").eq("id", sender).single(),
     ]);
     const to = (members ?? []).filter((m) => m.user_id !== sender && !m.muted).map((m) => m.user_id);
-    if (to.length === 0) return new Response("ok");
+    if (to.length === 0) return new Response("no recipients");
     const name = who?.display_name || (who?.email ?? "").split("@")[0];
     const { data: tokens } = await db.from("push_tokens").select("token,lang").in("user_id", to);
-    await Promise.all((tokens ?? []).map((t) => {
+    if (!tokens?.length) return new Response(`no phones registered for ${to.length} recipient(s)`);
+    const results = await Promise.all((tokens ?? []).map((t) => {
       const l = T[t.lang ?? "ps"] ?? T.ps;
       const title = chat?.is_group ? `${chat.title ?? ""} · ${name}` : name;
       return send(t.token, t.lang ?? "ps", title, l.msg, { type: "message", chat_id: chatId, message_id: record.id }, false);
     }));
+    console.log("push message", results);
+    return new Response(results.join("\n"));
   } else if (table === "calls") {
     const { data: who } = await db.from("profiles").select("display_name,email").eq("id", record.caller_id).single();
     const name = who?.display_name || (who?.email ?? "").split("@")[0];
