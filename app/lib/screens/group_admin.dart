@@ -106,14 +106,18 @@ class _GroupEditScreenState extends State<GroupEditScreen> {
   Future<void> _deleteGroup() async {
     final c = _chat;
     if (c == null) return;
-    final ok = await showCupertinoDialog<bool>(
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (d) => CupertinoAlertDialog(
+      builder: (d) => AlertDialog(
         title: Text(d.tr('delete_group')),
         content: Text(d.tr('delete_group_q')),
         actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr('delete'))),
+          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFE53935)),
+            onPressed: () => Navigator.pop(d, true),
+            child: Text(d.tr('delete')),
+          ),
         ],
       ),
     );
@@ -196,7 +200,7 @@ class _GroupEditScreenState extends State<GroupEditScreen> {
                 ('pin', Icons.push_pin_rounded),
                 ('info', Icons.edit_rounded),
               ])
-                SwitchListTile.adaptive(
+                SwitchListTile(
                   secondary: Icon(icon),
                   title: Text(context.tr('perm_$k')),
                   value: _perms[k] ?? false,
@@ -368,7 +372,7 @@ Future<Map<String, bool>?> _askRights(BuildContext context, Profile m) {
             Text(ctx.tr('admin_rights'), style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w800)),
             const SizedBox(height: 6),
             for (final k in keys)
-              SwitchListTile.adaptive(
+              SwitchListTile(
                 title: Text(
                   ctx.tr(switch (k) {
                     'info' => 'perm_info',

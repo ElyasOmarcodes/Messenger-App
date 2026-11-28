@@ -80,6 +80,7 @@ class MessageBubble extends StatefulWidget {
     this.onOpenUser,
     this.onJump,
     this.onShowAll,
+    this.onSelect,
   });
 
   final Chat chat;
@@ -97,6 +98,9 @@ class MessageBubble extends StatefulWidget {
 
   /// Opens the chat's shared media.
   final VoidCallback? onShowAll;
+
+  /// Long press: start selecting messages (Telegram); tap still opens the menu.
+  final VoidCallback? onSelect;
 
   ViewerActions get viewerActions =>
       ViewerActions(chat: chat, onAction: onAction, onShowInChat: onJump == null ? null : (m) => onJump!(m.id), onShowAll: onShowAll);
@@ -380,7 +384,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
     if (emojiCount > 0) {
       return GestureDetector(
         onTap: !interactive ? null : (m.failed ? () => app.retry(widget.chat, m) : (m.pending ? null : _openMenu)),
-        onLongPress: !interactive || m.pending ? null : _openMenu,
+        onLongPress: !interactive || m.pending ? null : (widget.onSelect ?? _openMenu),
         onSecondaryTap: !interactive || m.pending ? null : _openMenu,
         child: Padding(
           padding: EdgeInsets.only(top: gap + 2, left: 6, right: 6),
@@ -410,7 +414,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
     return GestureDetector(
       // Like Telegram on phones: one tap opens the message menu.
       onTap: !interactive ? null : (m.failed ? () => app.retry(widget.chat, m) : (m.pending ? null : _openMenu)),
-      onLongPress: !interactive || m.pending ? null : _openMenu,
+      onLongPress: !interactive || m.pending ? null : (widget.onSelect ?? _openMenu),
       onSecondaryTap: !interactive || m.pending ? null : _openMenu,
       child: Container(
         margin: EdgeInsets.only(top: gap),

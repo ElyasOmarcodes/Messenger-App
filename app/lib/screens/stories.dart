@@ -780,13 +780,17 @@ class _UserStoriesState extends State<_UserStories> with SingleTickerProviderSta
   Future<void> _delete() async {
     setState(() => _sheet = true);
     _sync();
-    final ok = await showCupertinoDialog<bool>(
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (d) => CupertinoAlertDialog(
+      builder: (d) => AlertDialog(
         content: Text(d.tr('delete_story_q')),
         actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr('delete'))),
+          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFE53935)),
+            onPressed: () => Navigator.pop(d, true),
+            child: Text(d.tr('delete')),
+          ),
         ],
       ),
     );

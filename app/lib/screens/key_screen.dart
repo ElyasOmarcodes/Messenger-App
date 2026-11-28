@@ -56,14 +56,18 @@ class _KeyScreenState extends State<KeyScreen> {
   }
 
   Future<void> _forgot() async {
-    final ok = await showCupertinoDialog<bool>(
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (d) => CupertinoAlertDialog(
+      builder: (d) => AlertDialog(
         title: Text(d.tr('pin_forgot')),
         content: Text(d.tr('pin_forgot_q')),
         actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr('continue'))),
+          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFE53935)),
+            onPressed: () => Navigator.pop(d, true),
+            child: Text(d.tr('continue')),
+          ),
         ],
       ),
     );

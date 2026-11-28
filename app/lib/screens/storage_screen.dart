@@ -34,13 +34,17 @@ class _StorageScreenState extends State<StorageScreen> {
   String _fmt(int b) => localDigits(formatBytes(b), context.lang);
 
   Future<void> _clear({String? folder}) async {
-    final ok = await showCupertinoDialog<bool>(
+    final ok = await showDialog<bool>(
       context: context,
-      builder: (d) => CupertinoAlertDialog(
+      builder: (d) => AlertDialog(
         content: Text(d.tr('clear_cache_q')),
         actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr('clear'))),
+          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFE53935)),
+            onPressed: () => Navigator.pop(d, true),
+            child: Text(d.tr('clear')),
+          ),
         ],
       ),
     );
@@ -146,14 +150,14 @@ class _StorageScreenState extends State<StorageScreen> {
               ),
               onTap: () => _pick(context.tr('max_cache'), limits, app.maxCacheMb, app.setMaxCache),
             ),
-            SwitchListTile.adaptive(
+            SwitchListTile(
               secondary: const Icon(Icons.network_check_rounded),
               title: Text(context.tr('data_saver')),
               subtitle: Text(context.tr('data_saver_sub')),
               value: app.dataSaver,
               onChanged: app.setDataSaver,
             ),
-            SwitchListTile.adaptive(
+            SwitchListTile(
               secondary: const Icon(Icons.photo_outlined),
               title: Text(context.tr('auto_photos')),
               subtitle: Text(context.tr('auto_photos_sub')),

@@ -14,7 +14,11 @@ class Profile {
     this.role,
     this.rights,
     this.lastSeen,
+    this.verified = false,
   });
+
+  /// Official / verified account (blue tick); set only on the server.
+  final bool verified;
 
   final String id;
   final String email;
@@ -53,6 +57,7 @@ class Profile {
     role: j['role'] as String?,
     rights: j['rights'] == null ? null : Map<String, dynamic>.from(j['rights'] as Map),
     lastSeen: j['last_seen'] == null ? null : DateTime.parse(j['last_seen'] as String).toLocal(),
+    verified: (j['verified'] as bool?) ?? false,
   );
 
   /// Same shape as [Profile.fromJson], for the offline copy on the phone.
@@ -66,6 +71,7 @@ class Profile {
     'role': role,
     'rights': rights,
     'last_seen': lastSeen?.toUtc().toIso8601String(),
+    'verified': verified,
   };
 }
 

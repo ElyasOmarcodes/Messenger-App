@@ -79,10 +79,6 @@ class _NotifyScreenState extends State<NotifyScreen> with WidgetsBindingObserver
       await _check();
       if (!_notif) return;
     }
-    if (!_battery) {
-      await _sys.invokeMethod('askBattery').catchError((_) => null);
-      return; // checked again on return (resumed)
-    }
     _finish();
   }
 
@@ -97,7 +93,10 @@ class _NotifyScreenState extends State<NotifyScreen> with WidgetsBindingObserver
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    final all = _notif && _battery;
+    // Only the notification permission is needed: pushes come through
+    // Google Play services (like WhatsApp and Telegram), also after a restart.
+    // Background freedom is an optional extra for phones that kill apps.
+    final all = _notif;
     return Scaffold(
       appBar: widget.page ? AppBar(title: Text(context.tr('notifications'))) : null,
       body: SafeArea(
@@ -127,7 +126,13 @@ class _NotifyScreenState extends State<NotifyScreen> with WidgetsBindingObserver
               const SizedBox(height: 28),
               _Step(icon: Icons.notifications_rounded, title: context.tr('nf_allow'), sub: context.tr('nf_allow_sub'), done: _notif),
               const SizedBox(height: 10),
-              _Step(icon: Icons.battery_charging_full_rounded, title: context.tr('nf_battery'), sub: context.tr('nf_battery_sub'), done: _battery),
+              _Step(
+                icon: Icons.battery_charging_full_rounded,
+                title: context.tr('nf_battery'),
+                sub: context.tr('nf_battery_sub'),
+                done: _battery,
+                onTap: _battery ? null : () => _sys.invokeMethod('askBattery').catchError((_) => null),
+              ),
               const SizedBox(height: 10),
               // this phone known to the server (gets pushes when closed)
               ValueListenableBuilder<String>(
@@ -166,33 +171,41 @@ class _NotifyScreenState extends State<NotifyScreen> with WidgetsBindingObserver
 }
 
 class _Step extends StatelessWidget {
-  const _Step({required this.icon, required this.title, required this.sub, required this.done});
+  const _Step({required this.icon, required this.title, required this.sub, required this.done, this.onTap});
   final IconData icon;
   final String title, sub;
   final bool done;
+  final VoidCallback? onTap;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(color: cs.surfaceContainer, borderRadius: BorderRadius.circular(14)),
-      child: Row(
-        children: [
-          Icon(icon, color: cs.primary),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
-                Text(sub, style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
-              ],
-            ),
+    return Material(
+      color: cs.surfaceContainer,
+      borderRadius: BorderRadius.circular(14),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(14),
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+          child: Row(
+            children: [
+              Icon(icon, color: cs.primary),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(title, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15)),
+                    Text(sub, style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant)),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              Icon(done ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded, color: done ? const Color(0xFF2DB55D) : cs.outline),
+            ],
           ),
-          const SizedBox(width: 8),
-          Icon(done ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded, color: done ? const Color(0xFF2DB55D) : cs.outline),
-        ],
+        ),
       ),
     );
   }

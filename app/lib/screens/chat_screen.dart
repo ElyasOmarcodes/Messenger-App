@@ -23,12 +23,12 @@ import '../services/voice_io.dart';
 import '../widgets/avatar.dart';
 import '../widgets/chat_options.dart';
 import '../widgets/effects.dart';
-import '../widgets/glass.dart';
 import '../widgets/message_bubble.dart';
 import '../widgets/rich_message.dart';
 import 'call_screen.dart';
 import 'new_chat_sheet.dart';
 import 'profile_screen.dart';
+import 'search_screen.dart';
 
 /// Opens "Saved Messages" (creating it the first time).
 Future<void> openSavedMessages(BuildContext context) async {
@@ -37,8 +37,11 @@ Future<void> openSavedMessages(BuildContext context) async {
 }
 
 class ChatScreen extends StatefulWidget {
-  const ChatScreen({super.key, required this.chatId, this.embedded = false});
+  const ChatScreen({super.key, required this.chatId, this.embedded = false, this.jumpTo});
   final String chatId;
+
+  /// A message to scroll to once open (from search).
+  final String? jumpTo;
 
   /// True when shown as the right-hand pane on wide screens.
   final bool embedded;
@@ -68,6 +71,115 @@ class _ChatScreenState extends State<ChatScreen> {
   final Set<String> _dissolving = {};
   final Set<String> _shown = {};
 
+  /// Selected messages (long press), Telegram-style; empty = not selecting.
+  final Set<String> _selected = {};
+
+  void _toggleSelect(Message m) {
+    HapticFeedback.selectionClick();
+    setState(() => _selected.contains(m.id) ? _selected.remove(m.id) : _selected.add(m.id));
+  }
+
+  /// Telegram's delete question: N messages, and (when allowed) a box to
+  /// delete them for everyone too; otherwise only from this phone.
+  Future<void> _confirmDelete(Chat chat, List<Message> msgs) async {
+    final app = _app!;
+    final forAllOk = msgs.every((m) => app.canDeleteForAll(chat, m) && !m.deleted) && !chat.isSaved;
+    final peer = chat.isGroup ? null : chat.peer(app.myId ?? '');
+    var forAll = true;
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (d) => StatefulBuilder(
+        builder: (d, set) => AlertDialog(
+          title: Text(msgs.length == 1 ? d.tr('delete_message') : d.tr('delete_n', {'n': d.digits(msgs.length)})),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(d.tr('delete_q')),
+              if (forAllOk) ...[
+                const SizedBox(height: 8),
+                CheckboxListTile(
+                  contentPadding: EdgeInsets.zero,
+                  controlAffinity: ListTileControlAffinity.leading,
+                  value: forAll,
+                  onChanged: (v) => set(() => forAll = v ?? false),
+                  title: Text(peer != null ? d.tr('delete_for_x', {'name': peer.name}) : d.tr('delete_for_all')),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: const Color(0xFFE53935)),
+              onPressed: () => Navigator.pop(d, true),
+              child: Text(d.tr('delete')),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true || !mounted) return;
+    setState(() {
+      _selected.clear();
+      if (msgs.any((m) => m.id == _replyTo?.id)) _replyTo = null;
+      if (msgs.any((m) => m.id == _editing?.id)) {
+        _editing = null;
+        _input.clear();
+      }
+    });
+    await Future<void>.delayed(const Duration(milliseconds: 180)); // the dialog fades first
+    if (!mounted) return;
+    for (final m in msgs) {
+      unawaited(_dissolve(m.id, () async => forAllOk && forAll ? app.deleteMessage(chat, m) : app.deleteForMe(chat, [m])));
+    }
+  }
+
+  /// The top bar while selecting: count, copy, forward, delete.
+  PreferredSizeWidget _selectionBar(AppController app, Chat chat) {
+    final msgs = [
+      for (final m in app.messagesOf(chat.id) ?? const <Message>[])
+        if (_selected.contains(m.id)) m,
+    ];
+    final texts = msgs.where((m) => m.body.isNotEmpty).toList();
+    return AppBar(
+      backgroundColor: Theme.of(context).colorScheme.surface,
+      surfaceTintColor: Colors.transparent,
+      elevation: 0.6,
+      leading: IconButton(icon: const Icon(Icons.close_rounded), tooltip: context.tr('cancel'), onPressed: () => setState(_selected.clear)),
+      title: Text(context.digits(_selected.length), style: const TextStyle(fontWeight: FontWeight.w700)),
+      actions: [
+        if (texts.isNotEmpty)
+          IconButton(
+            tooltip: context.tr('copy'),
+            icon: const Icon(Icons.copy_rounded),
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: texts.map((m) => RichMessageText.strip(m.body)).join('\n\n')));
+              setState(_selected.clear);
+              _toast('copied');
+            },
+          ),
+        if (msgs.isNotEmpty && msgs.every((m) => !m.deleted && !m.locked))
+          IconButton(
+            tooltip: context.tr('forward'),
+            icon: const Icon(Icons.forward_rounded),
+            onPressed: () async {
+              final target = await _pickChat();
+              if (target == null) return;
+              var ok = true;
+              for (final m in msgs) {
+                ok &= await app.forward(m, target);
+              }
+              if (!mounted) return;
+              setState(_selected.clear);
+              _toast(ok ? 'forwarded' : 'err_generic');
+            },
+          ),
+        IconButton(tooltip: context.tr('delete'), icon: const Icon(Icons.delete_outline_rounded), onPressed: () => _confirmDelete(chat, msgs)),
+      ],
+    );
+  }
+
   /// Messages that just arrived or were just sent: they slide in once.
   final Set<String> _fresh = {};
   final Set<String> _gone = {};
@@ -89,6 +201,11 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_app == null) {
       _app = AppScope.read(context);
       WidgetsBinding.instance.addPostFrameCallback((_) => _app!.openChat(widget.chatId));
+      if (widget.jumpTo != null) {
+        Future<void>.delayed(const Duration(milliseconds: 450), () {
+          if (mounted) _jumpTo(widget.jumpTo!);
+        });
+      }
       // "online / last seen" in the header stays fresh while the chat is open
       void presence() {
         final c = _app!.chatById(widget.chatId);
@@ -187,13 +304,82 @@ class _ChatScreenState extends State<ChatScreen> {
     }
     if (files.isEmpty) return;
     final photos = <({String name, Uint8List bytes})>[for (final f in files.take(10)) (name: f.name, bytes: await f.readAsBytes())];
-    final caption = _input.text.trim();
-    if (caption.isNotEmpty) {
+    if (!mounted) return;
+    // Telegram: a preview with a caption field before sending
+    final caption = await _captionSheet(photos: [for (final p in photos) p.bytes]);
+    if (caption == null) return;
+    final err = await _app!.sendPhotos(chat, photos, caption: caption, replyTo: _takeReply());
+    if (err != null) _toast(err);
+  }
+
+  /// What is about to be sent (photos or a file) with a caption field, like
+  /// Telegram. The caption, or null when cancelled. Text already typed in the
+  /// message box becomes the caption.
+  Future<String?> _captionSheet({List<Uint8List> photos = const [], String? fileName, int? fileSize}) async {
+    final ctl = TextEditingController(text: _input.text.trim());
+    final cs = Theme.of(context).colorScheme;
+    final res = await showModalBottomSheet<String>(
+      context: context,
+      isScrollControlled: true,
+      showDragHandle: true,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(ctx).bottom),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (photos.isNotEmpty)
+                SizedBox(
+                  height: photos.length == 1 ? 260 : 140,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    padding: const EdgeInsets.symmetric(horizontal: 12),
+                    itemCount: photos.length,
+                    separatorBuilder: (_, _) => const SizedBox(width: 6),
+                    itemBuilder: (_, i) => ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Image.memory(photos[i], fit: BoxFit.cover, cacheHeight: 520),
+                    ),
+                  ),
+                ),
+              if (fileName != null)
+                ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: cs.primary,
+                    child: const Icon(Icons.insert_drive_file_rounded, color: Colors.white),
+                  ),
+                  title: Text(fileName, maxLines: 1, overflow: TextOverflow.ellipsis),
+                  subtitle: fileSize == null ? null : Text(formatBytes(fileSize)),
+                ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(12, 10, 6, 8),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: ctl,
+                        autofocus: false,
+                        minLines: 1,
+                        maxLines: 5,
+                        maxLength: 1024,
+                        decoration: InputDecoration(hintText: ctx.tr('add_caption'), counterText: '', border: InputBorder.none),
+                      ),
+                    ),
+                    IconButton.filled(tooltip: ctx.tr('send'), onPressed: () => Navigator.pop(ctx, ctl.text.trim()), icon: const Icon(Icons.send_rounded)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+    if (res != null && _input.text.isNotEmpty) {
       _input.clear();
       setState(() => _canSend = false);
     }
-    final err = await _app!.sendPhotos(chat, photos, caption: caption, replyTo: _takeReply());
-    if (err != null) _toast(err);
+    return res;
   }
 
   Future<void> _pickFile(Chat chat) async {
@@ -203,7 +389,10 @@ class _ChatScreenState extends State<ChatScreen> {
     final size = await f.length();
     if (size != null && size > AppConfig.maxFileBytes) return _toast('too_big');
     final bytes = await f.readAsBytes();
-    final err = await _app!.sendFile(chat, name: f.name, bytes: bytes, replyTo: _takeReply());
+    if (!mounted) return;
+    final caption = await _captionSheet(fileName: f.name, fileSize: size ?? bytes.length);
+    if (caption == null) return;
+    final err = await _app!.sendFile(chat, name: f.name, bytes: bytes, caption: caption, replyTo: _takeReply());
     if (err != null) _toast(err);
   }
 
@@ -505,29 +694,7 @@ class _ChatScreenState extends State<ChatScreen> {
           _toast(ok ? 'forwarded' : 'err_generic');
         }
       case MsgAction.delete:
-        final ok = await showCupertinoDialog<bool>(
-          context: context,
-          builder: (d) => CupertinoAlertDialog(
-            title: Text(d.tr('delete_message')),
-            content: Text(d.tr('delete_q')),
-            actions: [
-              CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-              CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr('delete'))),
-            ],
-          ),
-        );
-        if (ok != true) return;
-        if (_replyTo?.id == m.id || _editing?.id == m.id) {
-          setState(() {
-            _replyTo = null;
-            if (_editing != null) _input.clear();
-            _editing = null;
-          });
-        }
-        // let the dialog fade out first so the dust is visible
-        await Future<void>.delayed(const Duration(milliseconds: 180));
-        if (!mounted) return;
-        await _dissolve(m.id, () => _app!.deleteMessage(chat, m));
+        await _confirmDelete(chat, [m]);
       case MsgAction.copy:
         break;
     }
@@ -617,6 +784,8 @@ class _ChatScreenState extends State<ChatScreen> {
       switch (v) {
         case 'info':
           _openInfo(app, chat);
+        case 'search':
+          Navigator.of(context).push(MaterialPageRoute(builder: (_) => SearchScreen(chatId: chat.id)));
         case 'add':
           _addMember(chat);
         case 'mute':
@@ -631,6 +800,7 @@ class _ChatScreenState extends State<ChatScreen> {
     },
     itemBuilder: (ctx) => [
       if (!chat.isSaved) _menuItem(ctx, 'info', Icons.info_rounded, 'info'),
+      _menuItem(ctx, 'search', Icons.search_rounded, 'search_in_chat'),
       if (chat.isGroup && !chat.isChannel) _menuItem(ctx, 'add', Icons.person_add_alt_1_rounded, 'add_member'),
       if (!chat.isSaved)
         _menuItem(ctx, 'mute', chat.muted ? Icons.notifications_active_rounded : Icons.notifications_off_rounded, chat.muted ? 'unmute_chat' : 'mute_chat'),
@@ -728,92 +898,79 @@ class _ChatScreenState extends State<ChatScreen> {
     final pageColor = dark(context) ? Brand.nightChatBg : Brand.lightChatBg;
 
     return PopScope(
-      canPop: !_emoji,
+      canPop: !_emoji && _selected.isEmpty,
       onPopInvokedWithResult: (did, _) {
+        if (!did && _selected.isNotEmpty) return setState(_selected.clear);
         if (!did && _emoji) setState(() => _emoji = false);
       },
       child: Scaffold(
         extendBodyBehindAppBar: true,
-        appBar: _glassBar(
-          AppBar(
-            automaticallyImplyLeading: false,
-            // round see-through buttons, like the ones on the profile photo
-            leadingWidth: widget.embedded ? 0 : 58,
-            leading: widget.embedded
-                ? null
-                : Padding(
-                    padding: const EdgeInsetsDirectional.only(start: 8, end: 8),
-                    child: Center(
-                      child: RoundBarButton(icon: Icons.arrow_back_ios_new_rounded, tooltip: context.tr('back'), onTap: () => Navigator.of(context).maybePop()),
-                    ),
-                  ),
-            // No colour of its own: the bar sits on the page's soft top edge.
-            backgroundColor: Colors.transparent,
-            surfaceTintColor: Colors.transparent,
-            shadowColor: Colors.transparent,
-            elevation: 0,
-            scrolledUnderElevation: 0,
-            titleSpacing: widget.embedded ? 16 : 0,
-            // plain (no frame), like Telegram
-            title: InkWell(
-              borderRadius: BorderRadius.circular(23),
-              onTap: () => _openInfo(app, chat),
-              child: Padding(
-                padding: const EdgeInsetsDirectional.fromSTEB(3, 3, 14, 3),
-                child: Row(
-                  children: [
-                    ChatAvatar(chat: chat, size: 40),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+        appBar: _selected.isNotEmpty
+            ? _selectionBar(app, chat)
+            : _glassBar(
+                AppBar(
+                  automaticallyImplyLeading: false,
+                  // Telegram Android: a plain solid bar, back arrow, photo + name
+                  leadingWidth: widget.embedded ? 0 : 52,
+                  leading: widget.embedded
+                      ? null
+                      : IconButton(icon: const Icon(Icons.arrow_back_rounded), tooltip: context.tr('back'), onPressed: () => Navigator.of(context).maybePop()),
+                  backgroundColor: Theme.of(context).colorScheme.surface,
+                  surfaceTintColor: Colors.transparent,
+                  shadowColor: Colors.black26,
+                  elevation: 0.6,
+                  scrolledUnderElevation: 0.6,
+                  titleSpacing: widget.embedded ? 16 : 0,
+                  // plain (no frame), like Telegram
+                  title: InkWell(
+                    borderRadius: BorderRadius.circular(23),
+                    onTap: () => _openInfo(app, chat),
+                    child: Padding(
+                      padding: const EdgeInsetsDirectional.fromSTEB(3, 3, 14, 3),
+                      child: Row(
                         children: [
-                          NameLine(
-                            title,
-                            verified: chat.verified,
-                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-                          ),
-                          if (!chat.isSaved)
-                            Text(
-                              _subtitle(app, chat),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              // "online" in the accent colour, like Telegram
-                              style: TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w400,
-                                color: app.typingText(chat) != null || (!chat.isGroup && (chat.peer(app.myId ?? '')?.online ?? false))
-                                    ? cs.primary
-                                    : cs.onSurfaceVariant,
-                              ),
+                          ChatAvatar(chat: chat, size: 40),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                NameLine(
+                                  title,
+                                  verified: app.isVerified(chat),
+                                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                                ),
+                                if (!chat.isSaved)
+                                  Text(
+                                    _subtitle(app, chat),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    // "online" in the accent colour, like Telegram
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w400,
+                                      color: app.typingText(chat) != null || (!chat.isGroup && (chat.peer(app.myId ?? '')?.online ?? false))
+                                          ? cs.primary
+                                          : cs.onSurfaceVariant,
+                                    ),
+                                  ),
+                              ],
                             ),
+                          ),
                         ],
                       ),
                     ),
+                  ),
+                  actions: [
+                    if (!chat.isGroup && !chat.isSaved) ...[
+                      IconButton(tooltip: context.tr('voice_call'), onPressed: () => _call(chat, false), icon: const Icon(Icons.call_outlined)),
+                      IconButton(tooltip: context.tr('video_call'), onPressed: () => _call(chat, true), icon: const Icon(Icons.videocam_outlined)),
+                    ],
+                    _chatMenu(app, chat, const SizedBox(width: 44, height: 48, child: Icon(Icons.more_vert_rounded))),
+                    const SizedBox(width: 4),
                   ],
                 ),
               ),
-            ),
-            actions: [
-              // Telegram: call, video and more share one glass capsule
-              if (!chat.isGroup && !chat.isSaved)
-                LiquidGlass(
-                  radius: 21,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      IconButton(tooltip: context.tr('voice_call'), onPressed: () => _call(chat, false), icon: const Icon(CupertinoIcons.phone_fill)),
-                      IconButton(tooltip: context.tr('video_call'), onPressed: () => _call(chat, true), icon: const Icon(CupertinoIcons.video_camera_solid)),
-                      _chatMenu(app, chat, const SizedBox(width: 40, height: 42, child: Icon(CupertinoIcons.ellipsis))),
-                    ],
-                  ),
-                )
-              else
-                _chatMenu(app, chat, const IgnorePointer(child: RoundBarButton(icon: CupertinoIcons.ellipsis))),
-              const SizedBox(width: 10),
-            ],
-          ),
-        ),
         body: GirihWallpaper(
           child: Stack(
             children: [
@@ -826,7 +983,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 top: 0,
                 left: 0,
                 right: 0,
-                height: barTop + (pinned != null ? 52 : 0) + 44,
+                height: barTop + (pinned != null ? 52 : 0) + 0.5,
                 child: RepaintBoundary(
                   child: SoftEdge(fromTop: true, color: pageColor, blur: false, solid: barTop + (pinned != null ? 52 : 0)),
                 ),
@@ -848,7 +1005,7 @@ class _ChatScreenState extends State<ChatScreen> {
                           Positioned.fill(
                             child: RepaintBoundary(
                               child: LayoutBuilder(
-                                builder: (_, c) => SoftEdge(fromTop: false, color: pageColor, blur: false, solid: (c.maxHeight - 34).clamp(0.0, 400.0)),
+                                builder: (_, c) => SoftEdge(fromTop: false, color: pageColor, blur: false, solid: (c.maxHeight - 0.5).clamp(0.0, 400.0)),
                               ),
                             ),
                           ),
@@ -886,6 +1043,7 @@ class _ChatScreenState extends State<ChatScreen> {
     // while on screen (by anyone) turn to dust first.
     final visible = <Message>[];
     for (final m in all) {
+      if (app.isHidden(m.id) && !_dissolving.contains(m.id)) continue; // deleted for me
       if (m.deleted && !_dissolving.contains(m.id)) {
         if (_gone.contains(m.id) || !_shown.contains(m.id)) continue;
         WidgetsBinding.instance.addPostFrameCallback((_) => _dissolve(m.id));
@@ -958,9 +1116,34 @@ class _ChatScreenState extends State<ChatScreen> {
           onOpenUser: _openUser,
           onJump: _jumpTo,
           onShowAll: chat.isSaved ? null : () => _openInfo(app, chat),
+          onSelect: m.pending ? null : () => _toggleSelect(m),
         ),
       );
-      final shown = _fresh.contains(m.id) ? AppearIn(onDone: () => _fresh.remove(m.id), child: bubble) : bubble;
+      final selecting = _selected.isNotEmpty;
+      final picked = _selected.contains(m.id);
+      final selectable = !selecting
+          ? bubble
+          : GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () => _toggleSelect(m),
+              child: ColoredBox(
+                color: picked ? Theme.of(context).colorScheme.primary.withValues(alpha: 0.14) : Colors.transparent,
+                child: Row(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsetsDirectional.only(start: 4, end: 2),
+                      child: Icon(
+                        picked ? Icons.check_circle_rounded : Icons.radio_button_unchecked_rounded,
+                        size: 22,
+                        color: picked ? Theme.of(context).colorScheme.primary : Theme.of(context).colorScheme.outline,
+                      ),
+                    ),
+                    Expanded(child: AbsorbPointer(child: bubble)),
+                  ],
+                ),
+              ),
+            );
+      final shown = _fresh.contains(m.id) ? AppearIn(onDone: () => _fresh.remove(m.id), child: selectable) : selectable;
       return ValueListenableBuilder<String?>(
         valueListenable: _flash,
         child: shown,
@@ -1154,84 +1337,78 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _composer(Chat chat) {
     final cs = Theme.of(context).colorScheme;
     final app = AppScope.of(context);
-    // a channel: subscribers get a mute / unmute bar, like Telegram
-    if (chat.isChannel && !chat.can(app.myId ?? '', 'send')) {
-      return SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-          child: LiquidGlass(
-            radius: 24,
-            child: Material(
-              type: MaterialType.transparency,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(24),
-                onTap: () => app.toggleMute(chat),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  child: Center(
-                    child: Text(
-                      context.tr(chat.muted ? 'unmute_chat' : 'mute_chat'),
-                      style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600, fontSize: 15),
-                    ),
-                  ),
-                ),
-              ),
-            ),
+    // Telegram Android: a solid bar across the bottom
+    Widget bar(Widget child, {VoidCallback? onTap}) => Material(
+      color: cs.surface,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.6)),
+        ),
+        child: SafeArea(
+          top: false,
+          child: InkWell(
+            onTap: onTap,
+            child: SizedBox(height: 50, child: Center(child: child)),
           ),
         ),
+      ),
+    );
+    // a channel: subscribers get a mute / unmute bar, like Telegram
+    if (chat.isChannel && !chat.can(app.myId ?? '', 'send')) {
+      return bar(
+        Text(
+          context.tr(chat.muted ? 'unmute_chat' : 'mute_chat'),
+          style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600, fontSize: 15.5),
+        ),
+        onTap: () => app.toggleMute(chat),
       );
     }
     // a group where only admins may write (Telegram shows a note instead)
     if (!chat.can(app.myId ?? '', 'send') && chat.members.isNotEmpty) {
-      return SafeArea(
-        top: false,
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
-          child: LiquidGlass(
-            radius: 24,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(Icons.lock_rounded, size: 18, color: cs.onSurfaceVariant),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(context.tr('only_admins_send'), style: TextStyle(color: cs.onSurfaceVariant)),
-                ),
-              ],
+      return bar(
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.lock_outline_rounded, size: 18, color: cs.onSurfaceVariant),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(context.tr('only_admins_send'), style: TextStyle(color: cs.onSurfaceVariant)),
             ),
-          ),
+          ],
         ),
       );
     }
-    return SafeArea(
-      top: false,
-      bottom: !_emoji,
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(8, 0, 8, 8),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            AnimatedSize(
-              duration: const Duration(milliseconds: 180),
-              curve: Curves.easeOut,
-              child: (_replyTo != null || _editing != null) ? _contextBar(app, chat) : const SizedBox(width: double.infinity),
-            ),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                Expanded(
-                  child: LiquidGlass(
-                    radius: 24,
-                    child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 48), child: _recording ? _recordingStrip(chat) : _textRow(chat, cs)),
+    // Telegram Android: one solid bar across the bottom, icons inside it
+    return Material(
+      color: cs.surface,
+      elevation: 0,
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          border: Border(top: BorderSide(color: cs.outlineVariant, width: 0.6)),
+        ),
+        child: SafeArea(
+          top: false,
+          bottom: !_emoji,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              AnimatedSize(
+                duration: const Duration(milliseconds: 180),
+                curve: Curves.easeOut,
+                child: (_replyTo != null || _editing != null) ? _contextBar(app, chat) : const SizedBox(width: double.infinity),
+              ),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  Expanded(
+                    child: ConstrainedBox(constraints: const BoxConstraints(minHeight: 50), child: _recording ? _recordingStrip(chat) : _textRow(chat, cs)),
                   ),
-                ),
-                const SizedBox(width: 6),
-                _actionButton(chat, cs),
-              ],
-            ),
-          ],
+                  _actionButton(chat, cs),
+                  const SizedBox(width: 2),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1241,7 +1418,7 @@ class _ChatScreenState extends State<ChatScreen> {
     crossAxisAlignment: CrossAxisAlignment.end,
     children: [
       IconButton(
-        constraints: const BoxConstraints.tightFor(width: 46, height: 48),
+        constraints: const BoxConstraints.tightFor(width: 50, height: 50),
         padding: EdgeInsets.zero,
         tooltip: context.tr(_emoji ? 'keyboard' : 'emoji'),
         onPressed: () {
@@ -1259,7 +1436,7 @@ class _ChatScreenState extends State<ChatScreen> {
             turns: Tween(begin: 0.75, end: 1.0).animate(a),
             child: FadeTransition(opacity: a, child: c),
           ),
-          child: Icon(_emoji ? Icons.keyboard_rounded : Icons.emoji_emotions_rounded, key: ValueKey(_emoji), color: cs.onSurfaceVariant, size: 26),
+          child: Icon(_emoji ? Icons.keyboard_outlined : Icons.sentiment_satisfied_alt_outlined, key: ValueKey(_emoji), color: _iconGrey(context), size: 26),
         ),
       ),
       Expanded(
@@ -1331,7 +1508,7 @@ class _ChatScreenState extends State<ChatScreen> {
                 padding: EdgeInsets.zero,
                 tooltip: context.tr('attach'),
                 onPressed: () => _attachMenu(chat),
-                icon: Transform.rotate(angle: 0.6, child: Icon(Icons.attach_file_rounded, color: cs.onSurfaceVariant, size: 26)),
+                icon: Transform.rotate(angle: 0.6, child: Icon(Icons.attach_file, color: _iconGrey(context), size: 26)),
               ),
       ),
     ],
@@ -1393,27 +1570,34 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
+  /// Telegram's grey for the input bar icons.
+  Color _iconGrey(BuildContext context) => dark(context) ? const Color(0xFF8B98A6) : const Color(0xFF858E99);
+
   Widget _actionButton(Chat chat, ColorScheme cs) {
     // no media allowed in this group: no voice notes either
     final sendMode = _canSend || _locked || _editing != null || !chat.can(AppScope.read(context).myId ?? '', 'media');
     final icon = _locked ? Icons.send_rounded : (_editing != null ? Icons.check_rounded : (sendMode ? Icons.send_rounded : Icons.mic_rounded));
+    // Telegram Android: a plain grey mic / blue send icon in the bar; the big
+    // blue circle appears only while recording
+    final circle = _recording;
     final button = AnimatedScale(
-      // pressed: a quick dip; recording: the big Telegram circle
-      scale: _recording && !_locked ? 1.5 : (_pressing ? 0.86 : 1),
+      scale: _recording && !_locked ? 1.6 : (_pressing ? 0.86 : 1),
       duration: Duration(milliseconds: _pressing && !_recording ? 90 : 200),
       curve: _recording ? Curves.easeOutBack : Curves.easeOut,
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 160),
         width: 48,
         height: 48,
-        decoration: BoxDecoration(
-          color: cs.primary,
-          shape: BoxShape.circle,
-          boxShadow: const [BoxShadow(color: Color(0x33000000), blurRadius: 6, offset: Offset(0, 2))],
-        ),
+        decoration: BoxDecoration(color: circle ? cs.primary : Colors.transparent, shape: BoxShape.circle),
         child: AnimatedSwitcher(
           duration: const Duration(milliseconds: 160),
           transitionBuilder: (c, a) => ScaleTransition(scale: a, child: c),
-          child: Icon(icon, key: ValueKey(icon), color: Colors.white),
+          child: Icon(
+            icon == Icons.mic_rounded && !circle ? Icons.mic_none_outlined : icon,
+            key: ValueKey('$icon$circle'),
+            size: 26,
+            color: circle ? Colors.white : (sendMode ? cs.primary : _iconGrey(context)),
+          ),
         ),
       ),
     );
@@ -1476,13 +1660,11 @@ class _ChatScreenState extends State<ChatScreen> {
     final m = _editing ?? _replyTo!;
     final editing = _editing != null;
     final who = editing ? context.tr('edit_message') : (m.senderId == app.myId ? context.tr('you') : (app.memberById(chat, m.senderId)?.name ?? ''));
+    // Telegram Android: a flat strip on top of the input bar
     return Container(
-      margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsetsDirectional.fromSTEB(12, 6, 2, 6),
+      padding: const EdgeInsetsDirectional.fromSTEB(12, 6, 2, 4),
       decoration: BoxDecoration(
-        color: dark(context) ? Brand.nightRaised : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        boxShadow: const [BoxShadow(color: Color(0x1A000000), blurRadius: 6, offset: Offset(0, 1))],
+        border: Border(bottom: BorderSide(color: cs.outlineVariant.withValues(alpha: 0.5), width: 0.5)),
       ),
       child: Row(
         children: [

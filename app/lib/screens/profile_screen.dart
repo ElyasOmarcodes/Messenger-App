@@ -9,7 +9,6 @@ import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
-import '../widgets/glass.dart';
 import '../widgets/media_views.dart';
 import 'group_admin.dart';
 import 'call_screen.dart';
@@ -39,6 +38,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   /// Scrolled past the name: a small bar (back, photo, name) pins at the top.
   final _pinned = ValueNotifier<bool>(false);
+  double _pull = 0; // how far the list was pulled down past the top
 
   @override
   void dispose() {
@@ -146,6 +146,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     String? photo;
     bool group = false;
     final chat = widget.chatId == null ? null : app.chatById(widget.chatId!);
+    var verifiedNow = false;
     switch (widget._kind) {
       case _Kind.me:
         final me = app.me;
@@ -153,18 +154,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
         subtitle = me?.username != null ? '@${me!.username}' : app.myEmail;
         seed = app.myId ?? '';
         photo = me?.avatarUrl;
+        verifiedNow = me?.verified ?? false;
       case _Kind.user:
         final p = (chat == null ? null : app.memberById(chat, widget.profile!.id)) ?? widget.profile!;
         title = p.name;
         subtitle = p.username != null ? '@${p.username}' : p.email;
         seed = p.id;
         photo = p.avatarUrl;
+        verifiedNow = p.verified;
       case _Kind.group:
         title = chat == null ? '' : app.chatTitle(chat);
         subtitle = '${context.digits(chat?.members.length ?? 0)} ${context.tr('members')}';
         seed = widget.chatId!;
         group = true;
         photo = chat?.avatarUrl;
+        verifiedNow = chat?.verified ?? false;
     }
     final big = _expanded && photo != null;
 
@@ -376,7 +380,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 children: [
                   NameLine(
                     title,
-                    verified: chat?.verified ?? false,
+                    verified: verifiedNow,
                     badgeColor: big ? Colors.white : null,
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: big ? Colors.white : cs.onSurface),
                   ),
@@ -422,20 +426,26 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // ── shared media / files ──
     final shared = chat == null ? null : _sharedOf(app, chat);
     return Scaffold(
-      body: NotificationListener<ScrollUpdateNotification>(
+      body: NotificationListener<ScrollNotification>(
         onNotification: (n) {
-          // pull down past the top to open the big photo, scroll up to close it
-          if (n.metrics.axis == Axis.vertical) _pinned.value = n.metrics.pixels > (big ? headerH - pad.top - 120 : 150);
-          if (photo != null && n.metrics.axis == Axis.vertical) {
-            if (n.metrics.pixels < -60) _setExpanded(true);
-            if (n.metrics.pixels > 40 && _expanded) _setExpanded(false);
+          if (n.metrics.axis != Axis.vertical) return false;
+          if (n is ScrollUpdateNotification) {
+            _pinned.value = n.metrics.pixels > (big ? headerH - pad.top - 120 : 150);
+            if (photo != null && n.metrics.pixels > 40 && _expanded) _setExpanded(false);
           }
+          // Android scroll stops at the top (no rubber band): pulling further
+          // down there opens the big photo, like Telegram
+          if (n is OverscrollNotification && n.overscroll < 0 && n.metrics.pixels <= 0) {
+            _pull += -n.overscroll;
+            if (photo != null && _pull > 60) _setExpanded(true);
+          }
+          if (n is ScrollEndNotification) _pull = 0;
           return false;
         },
         child: Stack(
           children: [
             CustomScrollView(
-              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+              physics: const AlwaysScrollableScrollPhysics(),
               slivers: [
                 SliverToBoxAdapter(child: header),
                 const SliverToBoxAdapter(child: SizedBox(height: 12)),
@@ -549,7 +559,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                               children: [
                                 NameLine(
                                   title,
-                                  verified: chat?.verified ?? false,
+                                  verified: verifiedNow,
                                   style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700),
                                 ),
                                 Text(
@@ -745,19 +755,18 @@ class _RoundButton extends StatelessWidget {
   final bool onBig;
   final String tooltip;
 
-  // iOS 27: a round Liquid Glass button (also over the big photo)
+  // Telegram Android: a plain icon button; over the big photo a soft dark
+  // circle keeps the white icon readable
   @override
   Widget build(BuildContext context) => Tooltip(
     message: tooltip,
-    child: LiquidGlass(
-      circle: true,
-      child: Material(
-        type: MaterialType.transparency,
-        child: InkWell(
-          customBorder: const CircleBorder(),
-          onTap: onTap,
-          child: SizedBox(width: 44, height: 44, child: Icon(icon, color: onBig ? Colors.white : Theme.of(context).colorScheme.onSurface)),
-        ),
+    child: Material(
+      color: onBig ? Colors.black.withValues(alpha: 0.28) : Colors.transparent,
+      shape: const CircleBorder(),
+      clipBehavior: Clip.antiAlias,
+      child: InkWell(
+        onTap: onTap,
+        child: SizedBox(width: 44, height: 44, child: Icon(icon, color: onBig ? Colors.white : Theme.of(context).colorScheme.onSurface)),
       ),
     ),
   );
@@ -772,7 +781,6 @@ class _Action extends StatelessWidget {
   final bool danger;
   final bool onBig;
 
-  // iOS 27: Liquid Glass action cards (message, mute, call, video…)
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
@@ -780,13 +788,15 @@ class _Action extends StatelessWidget {
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: LiquidGlass(
-          radius: 18,
-          shadow: false,
+        // over the photo: dark see-through cards (white text stays readable);
+        // on the page: soft tinted cards, like Telegram's profile buttons
+        child: Material(
+          color: onBig ? Colors.black.withValues(alpha: 0.30) : (dark ? const Color(0xFF1C2733) : const Color(0xFFF0F3F7)),
+          borderRadius: BorderRadius.circular(16),
+          clipBehavior: Clip.antiAlias,
           child: Material(
             type: MaterialType.transparency,
             child: InkWell(
-              borderRadius: BorderRadius.circular(18),
               onTap: onTap,
               child: SizedBox.expand(
                 child: Column(

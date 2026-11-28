@@ -216,7 +216,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     lang = AppLang.fromCode(_prefs.getString('lang'));
     themeMode = ThemeMode.values.byName(_prefs.getString('theme') ?? 'system');
     // light by default (no live blur); v0.16 resets the old default
-    glass = _prefs.getBool('glass2') ?? false;
+    glass = false; // Telegram Android look: no glass
     keepDays = _prefs.getInt('keep_days') ?? 30;
     maxCacheMb = _prefs.getInt('max_cache_mb') ?? 3072;
     autoPhotos = _prefs.getBool('auto_photos') ?? true;
@@ -228,6 +228,14 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     unawaited(Future<void>.delayed(const Duration(seconds: 8), cleanCache));
     if (AppConfig.configured) {
       _authSub = _sb.auth.onAuthStateChange.listen((st) {
+        // the current pass for the push handler (it never refreshes it itself:
+        // two places refreshing one session would sign the user out)
+        final ses = st.session;
+        if (ses != null) {
+          unawaited(_prefs.setString(PushInbox.sessionKey, jsonEncode({'t': ses.accessToken, 'exp': ses.expiresAt, 'uid': ses.user.id})));
+        } else if (st.event == AuthChangeEvent.signedOut) {
+          unawaited(_prefs.remove(PushInbox.sessionKey));
+        }
         if (st.event == AuthChangeEvent.signedIn || st.event == AuthChangeEvent.initialSession) {
           if (st.session != null && me == null) _onSignedIn();
         } else if (st.event == AuthChangeEvent.signedOut) {
@@ -955,7 +963,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   void userTyping(Chat chat) {
     if (myId == null || chat.isSaved || chat.isChannel) return;
     final last = _typedAt[chat.id];
-    if (last != null && DateTime.now().difference(last) < const Duration(seconds: 4)) return;
+    if (last != null && DateTime.now().difference(last) < const Duration(seconds: 3)) return;
     _typedAt[chat.id] = DateTime.now();
     final others = chat.members.where((m) => m.id != myId).take(30);
     for (final m in others) {
@@ -1091,6 +1099,22 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   /// "Delete for everyone": the server blanks the message; others see a placeholder.
+  // ── Delete for me (Telegram): hidden on this phone only ─────────────────
+  Set<String>? _hidden;
+  Set<String> get hiddenIds => _hidden ??= {...(_prefs.getStringList('hidden_${myId ?? ''}') ?? const <String>[])};
+  bool isHidden(String id) => hiddenIds.contains(id);
+
+  void deleteForMe(Chat chat, Iterable<Message> msgs) {
+    hiddenIds.addAll(msgs.map((m) => m.id));
+    final list = hiddenIds.toList();
+    unawaited(_prefs.setStringList('hidden_${myId ?? ''}', list.length > 5000 ? list.sublist(list.length - 5000) : list));
+    notifyListeners();
+  }
+
+  /// May I delete [m] for everyone? My own messages; in groups also admins
+  /// with the delete right.
+  bool canDeleteForAll(Chat chat, Message m) => m.senderId == myId || (chat.isGroup && chat.can(myId ?? '', 'delete'));
+
   Future<void> deleteMessage(Chat chat, Message m) async {
     if (m.senderId != myId && !(chat.isGroup && chat.can(myId ?? '', 'delete'))) return;
     try {
@@ -1123,7 +1147,18 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     chat.members = [
       for (final m in chat.members)
         m.id == row['user_id']
-            ? Profile(id: m.id, email: m.email, displayName: m.displayName, username: m.username, avatarPath: m.avatarPath, lastReadAt: at, role: m.role)
+            ? Profile(
+                id: m.id,
+                email: m.email,
+                displayName: m.displayName,
+                username: m.username,
+                avatarPath: m.avatarPath,
+                lastReadAt: at,
+                role: m.role,
+                rights: m.rights,
+                lastSeen: m.lastSeen,
+                verified: m.verified,
+              )
             : m,
     ];
     notifyListeners();
@@ -1198,6 +1233,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Badge on the Chats tab: muted and archived chats don't count.
   int get totalUnread => chats.fold(0, (n, c) => c.muted || c.archived ? n : n + (c.unread > 0 ? c.unread : (c.markedUnread ? 1 : 0)));
+
+  /// Blue tick: an official channel, or a chat with a verified person.
+  bool isVerified(Chat c) => c.verified || (!c.isGroup && !c.isSaved && (c.peer(myId ?? '')?.verified ?? false));
 
   String chatTitle(Chat c) => c.isSaved ? s.get('saved_messages') : c.displayTitle(myId ?? '');
 
@@ -1456,6 +1494,37 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         } catch (_) {}
       }
     }
+  }
+
+  /// Search in the messages kept on this phone (they are end-to-end
+  /// encrypted, so the server cannot search them — like WhatsApp). [kind]
+  /// narrows to photos ('media'), files, voice notes or links.
+  Future<List<({Chat chat, Message m})>> searchMessages(String query, {String? chatId, String? kind}) async {
+    final q = query.trim().toLowerCase();
+    final chatsToSearch = chatId == null ? List.of(chats) : [?chatById(chatId)];
+    for (final c in chatsToSearch) {
+      await _loadDisk(c.id);
+    }
+    final link = RegExp(r'https?://|paigham://|www\.', caseSensitive: false);
+    final out = <({Chat chat, Message m})>[];
+    for (final c in chatsToSearch) {
+      for (final m in _messages[c.id] ?? const <Message>[]) {
+        if (m.deleted || m.locked || isHidden(m.id)) continue;
+        final ok = switch (kind) {
+          'media' => m.kind == MsgKind.image || m.kind == MsgKind.album,
+          'files' => m.kind == MsgKind.file,
+          'voice' => m.kind == MsgKind.voice,
+          'links' => link.hasMatch(m.body),
+          _ => true,
+        };
+        if (!ok) continue;
+        if (q.isNotEmpty && !RichMessageText.strip(m.body).toLowerCase().contains(q) && !(m.fileName ?? '').toLowerCase().contains(q)) continue;
+        if (q.isEmpty && kind == null) continue;
+        out.add((chat: c, m: m));
+      }
+    }
+    out.sort((a, b) => b.m.createdAt.compareTo(a.m.createdAt));
+    return out.length > 300 ? out.sublist(0, 300) : out;
   }
 
   /// Messages pushes brought while the app was away (already opened on the

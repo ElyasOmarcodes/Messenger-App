@@ -59,14 +59,18 @@ void _toast(BuildContext context, String key) => ScaffoldMessenger.of(context)
   ..showSnackBar(SnackBar(content: Text(context.tr(key)), duration: const Duration(seconds: 2)));
 
 Future<bool> _confirm(BuildContext context, String questionKey, String actionKey) async =>
-    await showCupertinoDialog<bool>(
+    await showDialog<bool>(
       context: context,
       barrierDismissible: true,
-      builder: (d) => CupertinoAlertDialog(
+      builder: (d) => AlertDialog(
         content: Text(d.tr(questionKey), style: const TextStyle(fontSize: 15)),
         actions: [
-          CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-          CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr(actionKey))),
+          TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+          TextButton(
+            style: TextButton.styleFrom(foregroundColor: const Color(0xFFE53935)),
+            onPressed: () => Navigator.pop(d, true),
+            child: Text(d.tr(actionKey)),
+          ),
         ],
       ),
     ) ??

@@ -53,7 +53,7 @@ class CallController extends ChangeNotifier {
   // TURN relay: short-lived credentials from the "turn" Edge Function
   // (coturn, REST auth). Needed behind carrier NAT (CGNAT), where most
   // mobile calls cannot connect directly.
-  Map<String, dynamic>? _turn;
+  List<Map<String, dynamic>>? _turn;
   DateTime _turnUntil = DateTime(0);
 
   Future<Map<String, dynamic>> _iceConfig() async {
@@ -61,8 +61,15 @@ class CallController extends ChangeNotifier {
       try {
         final r = await _sb.functions.invoke('turn').timeout(const Duration(seconds: 6));
         final d = Map<String, dynamic>.from(r.data as Map);
-        if ((d['urls'] as List).isNotEmpty) {
-          _turn = {'urls': d['urls'], 'username': d['username'], 'credential': d['credential']};
+        final list = [
+          for (final s in (d['ice_servers'] as List?) ?? const [])
+            if (s is Map) Map<String, dynamic>.from(s),
+        ];
+        if (list.isEmpty && (d['urls'] as List?)?.isNotEmpty == true) {
+          list.add({'urls': d['urls'], 'username': d['username'], 'credential': d['credential']});
+        }
+        if (list.isNotEmpty) {
+          _turn = list;
           _turnUntil = DateTime.now().add(Duration(seconds: ((d['ttl'] as num?) ?? 3600).toInt() - 300));
         }
       } catch (_) {
@@ -74,7 +81,7 @@ class CallController extends ChangeNotifier {
         {
           'urls': ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
         },
-        ?_turn,
+        ...?_turn,
         if (AppConfig.turnUrl.isNotEmpty) {'urls': AppConfig.turnUrl, 'username': AppConfig.turnUser, 'credential': AppConfig.turnPass},
       ],
     };

@@ -249,13 +249,17 @@ class SettingsScreen extends StatelessWidget {
               title: context.tr('logout'),
               danger: true,
               onTap: () async {
-                final ok = await showCupertinoDialog<bool>(
+                final ok = await showDialog<bool>(
                   context: context,
-                  builder: (d) => CupertinoAlertDialog(
+                  builder: (d) => AlertDialog(
                     content: Text(d.tr('logout_q')),
                     actions: [
-                      CupertinoDialogAction(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
-                      CupertinoDialogAction(isDestructiveAction: true, onPressed: () => Navigator.pop(d, true), child: Text(d.tr('logout'))),
+                      TextButton(onPressed: () => Navigator.pop(d, false), child: Text(d.tr('cancel'))),
+                      TextButton(
+                        style: TextButton.styleFrom(foregroundColor: const Color(0xFFE53935)),
+                        onPressed: () => Navigator.pop(d, true),
+                        child: Text(d.tr('logout')),
+                      ),
                     ],
                   ),
                 );
@@ -317,18 +321,11 @@ class _ChatSettingsPage extends StatelessWidget {
         children: [
           _Group(
             children: [
-              SwitchListTile.adaptive(
+              SwitchListTile(
                 secondary: const _Ico(Icons.dark_mode_rounded, Color(0xFF5B6BF5)),
                 title: Text(context.tr('night_mode'), style: const TextStyle(fontWeight: FontWeight.w600)),
                 value: dark,
                 onChanged: (v) => app.setTheme(v ? ThemeMode.dark : ThemeMode.light),
-              ),
-              SwitchListTile.adaptive(
-                secondary: const _Ico(Icons.blur_on_rounded, Color(0xFF2AA3C8)),
-                title: Text(context.tr('glass_effect'), style: const TextStyle(fontWeight: FontWeight.w600)),
-                subtitle: Text(context.tr('glass_effect_sub')),
-                value: app.glass,
-                onChanged: app.setGlass,
               ),
             ],
           ),

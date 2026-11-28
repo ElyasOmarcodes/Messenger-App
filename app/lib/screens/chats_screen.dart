@@ -13,6 +13,7 @@ import '../widgets/avatar.dart';
 import '../widgets/chat_options.dart';
 import '../widgets/glass.dart';
 import 'chat_screen.dart';
+import 'search_screen.dart';
 import 'stories.dart';
 
 enum _Filter { all, personal, groups, unread }
@@ -40,8 +41,9 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
   /// How much of the search + chips block is hidden (0 = fully shown).
   final _hide = ValueNotifier<double>(0);
   double _last = 0;
-  late final AnimationController _snap = AnimationController(vsync: this, duration: const Duration(milliseconds: 200))
-    ..addListener(() => _hide.value = _snapFrom + (_snapTo - _snapFrom) * Curves.easeOut.transform(_snap.value));
+  // Android's standard motion: ~300 ms, fast out / slow in (like Telegram)
+  late final AnimationController _snap = AnimationController(vsync: this, duration: const Duration(milliseconds: 300))
+    ..addListener(() => _hide.value = _snapFrom + (_snapTo - _snapFrom) * Curves.fastOutSlowIn.transform(_snap.value));
   double _snapFrom = 0, _snapTo = 0;
 
   static const _toolbarH = 56.0;
@@ -57,7 +59,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
     _snapFrom = _hide.value;
     _snapTo = 0;
     _snap.forward(from: 0);
-    Future<void>.delayed(const Duration(milliseconds: 230), () {
+    Future<void>.delayed(const Duration(milliseconds: 320), () {
       if (mounted) _searchFocus.requestFocus();
     });
   }
@@ -103,7 +105,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
       final o = _scroll.offset;
       if (o > 0.5 && o < _storiesH - 0.5) {
         final target = o >= _storiesH * 0.5 ? _storiesH : 0.0;
-        _scroll.animateTo(target, duration: const Duration(milliseconds: 300), curve: Curves.easeOutCubic);
+        _scroll.animateTo(target, duration: const Duration(milliseconds: 320), curve: Curves.fastOutSlowIn);
         return;
       }
       final h = _hide.value;
@@ -112,7 +114,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
       if (h >= _searchH * 0.5) {
         // more than half folded: fold the search away completely
         if (o < searchEnd && _scroll.position.maxScrollExtent >= searchEnd) {
-          _scroll.animateTo(searchEnd, duration: const Duration(milliseconds: 240), curve: Curves.easeOutCubic);
+          _scroll.animateTo(searchEnd, duration: const Duration(milliseconds: 300), curve: Curves.fastOutSlowIn);
           return;
         }
         _snapFrom = h;
@@ -120,7 +122,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
       } else {
         // less than half: bring it back
         if (o > _storiesH && o < searchEnd) {
-          _scroll.animateTo(_storiesH, duration: const Duration(milliseconds: 240), curve: Curves.easeOutCubic);
+          _scroll.animateTo(_storiesH, duration: const Duration(milliseconds: 300), curve: Curves.fastOutSlowIn);
           return;
         }
         _snapFrom = h;
@@ -240,6 +242,22 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
                       child: ArchivedRow(
                         chats: archived,
                         onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ArchivedChatsScreen(onOpen: widget.onOpen))),
+                      ),
+                    ),
+                  // Telegram: also look inside the messages
+                  if (q.isNotEmpty)
+                    SliverToBoxAdapter(
+                      child: ListTile(
+                        leading: CircleAvatar(
+                          backgroundColor: cs.primary.withValues(alpha: 0.12),
+                          child: Icon(Icons.search_rounded, color: cs.primary),
+                        ),
+                        title: Text(
+                          context.tr('search_messages'),
+                          style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600),
+                        ),
+                        subtitle: Text('«${_query.trim()}»', maxLines: 1, overflow: TextOverflow.ellipsis),
+                        onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => SearchScreen(initial: _query.trim()))),
                       ),
                     ),
                   if (!app.chatsLoaded)
@@ -494,7 +512,7 @@ class _ChatsScreenState extends State<ChatsScreen> with SingleTickerProviderStat
               ? Semantics(
                   button: true,
                   label: context.tr('search'),
-                  child: Center(child: Icon(CupertinoIcons.search, color: cs.onSurfaceVariant, size: 22)),
+                  child: Center(child: Icon(Icons.search_rounded, color: cs.onSurfaceVariant, size: 24)),
                 )
               : Opacity(
                   opacity: (1 - e * 1.8).clamp(0.0, 1.0),
@@ -760,7 +778,7 @@ class ChatTile extends StatelessWidget {
                                   style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700),
                                 ),
                               ),
-                              if (chat.verified) const VerifiedBadge(size: 17),
+                              if (app.isVerified(chat)) const VerifiedBadge(size: 17),
                               if (chat.muted)
                                 Padding(
                                   padding: const EdgeInsetsDirectional.only(start: 4),
