@@ -88,3 +88,38 @@ class ArchiveAvatar extends StatelessWidget {
     child: Icon(Icons.archive_rounded, color: Colors.white, size: size * 0.48),
   );
 }
+
+/// The blue tick of an official account or channel (set only on the server).
+class VerifiedBadge extends StatelessWidget {
+  const VerifiedBadge({super.key, this.size = 17, this.color});
+  final double size;
+  final Color? color;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsetsDirectional.only(start: 4),
+    child: Icon(Icons.verified_rounded, size: size, color: color ?? const Color(0xFF2D9CF0)),
+  );
+}
+
+/// A one-line name with the verified tick right after it (when [verified]).
+class NameLine extends StatelessWidget {
+  const NameLine(this.text, {super.key, required this.verified, required this.style, this.badgeColor});
+  final String text;
+  final bool verified;
+  final TextStyle style;
+  final Color? badgeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final t = Text(text, maxLines: 1, overflow: TextOverflow.ellipsis, style: style);
+    if (!verified) return t;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Flexible(child: t),
+        VerifiedBadge(size: (style.fontSize ?? 16) * 1.0, color: badgeColor),
+      ],
+    );
+  }
+}

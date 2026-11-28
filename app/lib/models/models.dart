@@ -330,10 +330,23 @@ class Chat {
     this.description,
     this.username,
     this.permissions = const {},
+    this.isChannel = false,
+    this.verified = false,
+    this.memberCount,
   });
 
   final String id;
   final bool isGroup;
+
+  /// A channel: only the owner and admins post; posts are public
+  /// announcements (not end-to-end encrypted, like Telegram channels).
+  final bool isChannel;
+
+  /// Official account / channel (the blue tick); set only on the server.
+  final bool verified;
+
+  /// Subscribers (a channel lists only its admins in [members]).
+  final int? memberCount;
 
   /// Group details (Telegram-like).
   String? description;
@@ -411,6 +424,9 @@ class Chat {
     description: j['description'] as String?,
     username: j['username'] as String?,
     permissions: j['permissions'] == null ? const {} : Map<String, dynamic>.from(j['permissions'] as Map),
+    isChannel: (j['is_channel'] as bool?) ?? false,
+    verified: (j['verified'] as bool?) ?? false,
+    memberCount: (j['member_count'] as num?)?.toInt(),
   );
 
   /// Same shape as a `my_chats` row, for the offline copy on the phone.
@@ -433,6 +449,9 @@ class Chat {
     'description': description,
     'username': username,
     'permissions': permissions,
+    'is_channel': isChannel,
+    'verified': verified,
+    'member_count': memberCount,
   };
 }
 

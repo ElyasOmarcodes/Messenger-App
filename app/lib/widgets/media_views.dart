@@ -809,65 +809,29 @@ class AlbumGrid extends StatelessWidget {
         ),
       ),
     );
-    const g = 2.0;
-    final rows = <Widget>[];
-    if (n == 2) {
-      rows.add(
-        Row(
-          children: [
-            tile(0, (width - g) / 2, 170),
-            const SizedBox(width: g),
-            tile(1, (width - g) / 2, 170),
-          ],
-        ),
-      );
-    } else if (n == 3) {
-      final big = width * 0.62, side = width - big - g;
-      rows.add(
-        Row(
-          children: [
-            tile(0, big, 240),
-            const SizedBox(width: g),
-            Column(
-              children: [
-                tile(1, side, (240 - g) / 2),
-                const SizedBox(height: g),
-                tile(2, side, (240 - g) / 2),
-              ],
-            ),
-          ],
-        ),
-      );
-    } else {
-      // first row: 2 tiles; remaining rows: up to 3 tiles each
-      final half = (width - g) / 2;
-      rows.add(
-        Row(
-          children: [
-            tile(0, half, 150),
-            const SizedBox(width: g),
-            tile(1, half, 150),
-          ],
-        ),
-      );
-      for (var i = 2; i < n; i += 3) {
-        final count = math.min(3, n - i);
-        final w = (width - g * (count - 1)) / count;
-        rows.add(const SizedBox(height: g));
-        rows.add(
-          Row(
-            children: [
-              for (var k = 0; k < count; k++) ...[if (k > 0) const SizedBox(width: g), tile(i + k, w, 110)],
-            ],
-          ),
-        );
-      }
-    }
+    // Telegram-style mosaic: every photo keeps (close to) its own shape and
+    // the group fills the bubble exactly, with thin gaps.
+    final ratios = [
+      for (var i = 0; i < n; i++)
+        (() {
+          final it = i < items.length ? items[i] : null;
+          final w = (it?['w'] as num?)?.toDouble(), h = (it?['h'] as num?)?.toDouble();
+          return w == null || h == null || w <= 0 || h <= 0 ? 1.0 : (w / h).clamp(0.5, 2.5);
+        })(),
+    ];
+    final rects = albumLayout(ratios, width);
+    final height = rects.fold<double>(0, (m, r) => math.max(m, r.bottom));
     return ClipRRect(
       borderRadius: BorderRadius.circular(14),
       child: Stack(
         children: [
-          Column(mainAxisSize: MainAxisSize.min, children: rows),
+          SizedBox(
+            width: width,
+            height: height,
+            child: Stack(
+              children: [for (var i = 0; i < n; i++) Positioned.fromRect(rect: rects[i], child: tile(i, rects[i].width, rects[i].height))],
+            ),
+          ),
           if (message.pending)
             const Positioned.fill(
               child: Center(child: CircularProgressIndicator(color: Colors.white)),
@@ -1042,4 +1006,86 @@ class ContactCard extends StatelessWidget {
       ),
     );
   }
+}
+
+/// Where each photo of an album goes (Telegram's grouped-media idea): two
+/// photos side by side or stacked, three as one big + two, and longer
+/// albums as rows whose heights follow the photos' shapes, chosen so the
+/// whole group is close to a pleasant height. [ratios] are width / height.
+List<Rect> albumLayout(List<double> ratios, double width, {double gap = 2}) {
+  final n = ratios.length;
+  final maxH = width * 1.15;
+  if (n == 0) return const [];
+  if (n == 1) return [Rect.fromLTWH(0, 0, width, math.min(maxH, width / ratios[0]))];
+  String kind(double r) => r > 1.2 ? 'w' : (r < 0.8 ? 'n' : 'q');
+  final r0 = ratios[0];
+  if (n == 2) {
+    final r1 = ratios[1];
+    // two wide photos: one above the other
+    if (kind(r0) == 'w' && kind(r1) == 'w' && (r0 - r1).abs() < 0.3) {
+      final h = math.min(width / math.max(r0, r1), (maxH - gap) / 2);
+      return [Rect.fromLTWH(0, 0, width, h), Rect.fromLTWH(0, h + gap, width, h)];
+    }
+    // side by side, widths by shape, one height
+    final w1 = math.max(0.35 * width, (width - gap) * (r1 / (r0 + r1)));
+    final w0 = width - gap - w1;
+    final h = math.min(maxH, math.min(w0 / r0, w1 / r1).clamp(width * 0.45, maxH));
+    return [Rect.fromLTWH(0, 0, w0, h), Rect.fromLTWH(w0 + gap, 0, w1, h)];
+  }
+  if (n == 3 && kind(r0) == 'n') {
+    // a tall first photo on the left, two stacked on the right
+    final h = math.min(maxH, width * 0.95);
+    final rightW = (width * 0.42).clamp(width * 0.3, width * 0.5);
+    final leftW = width - gap - rightW;
+    final top = (h - gap) * (ratios[2] / (ratios[1] + ratios[2]));
+    return [Rect.fromLTWH(0, 0, leftW, h), Rect.fromLTWH(leftW + gap, 0, rightW, top), Rect.fromLTWH(leftW + gap, top + gap, rightW, h - gap - top)];
+  }
+  // rows: try every way to cut the photos into 1–4 rows of 1–4 photos
+  // (first row may hold the one big photo) and keep the best-looking one
+  List<Rect>? best;
+  var bestScore = double.infinity;
+  void tryRows(List<int> sizes) {
+    final rects = <Rect>[];
+    var y = 0.0, i = 0, score = 0.0;
+    double? prevH;
+    for (final k in sizes) {
+      final rs = ratios.sublist(i, i + k);
+      final sum = rs.fold<double>(0, (a, b) => a + b);
+      final h = (width - gap * (k - 1)) / sum;
+      // rows much taller or flatter than others look bad
+      score += (h < width * 0.22 ? (width * 0.22 - h) * 3 : 0) + (h > maxH * 0.75 ? (h - maxH * 0.75) * 2 : 0);
+      if (prevH != null) score += (h - prevH).abs() * 0.4; // rows of similar height
+      prevH = h;
+      var x = 0.0;
+      for (var j = 0; j < k; j++) {
+        final w = j == k - 1 ? width - x : h * rs[j];
+        if (w < width * 0.24) score += (width * 0.24 - w) * 4; // no sliver photos
+        rects.add(Rect.fromLTWH(x, y, w, h));
+        x += w + gap;
+      }
+      y += h + gap;
+      i += k;
+    }
+    final total = y - gap;
+    score += (total - maxH).abs() + (sizes.first > sizes.last ? 15 : 0);
+    if (score < bestScore) {
+      bestScore = score;
+      best = rects;
+    }
+  }
+
+  void split(int left, List<int> acc) {
+    if (left == 0) {
+      tryRows(acc);
+      return;
+    }
+    if (acc.length == math.max(4, (n + 3) ~/ 4)) return;
+    for (var k = 1; k <= math.min(4, left); k++) {
+      if (k == 1 && n > 3 && acc.isNotEmpty) continue; // a lone photo only on top
+      split(left - k, [...acc, k]);
+    }
+  }
+
+  split(n, []);
+  return best!;
 }

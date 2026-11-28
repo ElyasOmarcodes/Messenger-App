@@ -44,6 +44,14 @@ android {
         }
     }
 
+    // Native libraries compressed inside the APK: a much smaller download
+    // (WebRTC, the Flutter engine and the app's code are most of the size).
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     buildTypes {
         release {
             signingConfig = signingConfigs.getByName(if (keystorePath != null) "release" else "debug")

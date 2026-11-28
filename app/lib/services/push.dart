@@ -7,7 +7,10 @@ import 'package:flutter/widgets.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../config.dart';
+import '../l10n/strings.dart';
+import '../widgets/rich_message.dart';
 import 'notifier.dart';
+import 'push_inbox.dart';
 
 /// Push notifications through Firebase Cloud Messaging (Android) and APNs
 /// via FCM (iPhone): messages and calls reach the phone even when the app is
@@ -140,6 +143,32 @@ Future<void> pushBackgroundHandler(RemoteMessage m) async {
       call: true,
     );
   } else {
-    await Notifier.instance.show(id: chat.hashCode & 0x7fffffff, title: d['title'] as String? ?? '', body: d['body'] as String? ?? '', payload: 'chat:$chat');
+    // open the encrypted message here on the phone (the server cannot) and
+    // keep it, so the app shows it at once when opened
+    var body = d['body'] as String? ?? '';
+    try {
+      final row = await PushInbox.open(Map<String, dynamic>.from(d));
+      if (row != null) {
+        await PushInbox.add(row);
+        body = previewOfRow(row, d['lang'] as String? ?? 'ps');
+      }
+    } catch (_) {}
+    await Notifier.instance.show(id: chat.hashCode & 0x7fffffff, title: d['title'] as String? ?? '', body: body, payload: 'chat:$chat');
   }
+}
+
+/// A notification line for an opened message (text, or "Photo", "Voice message"…).
+String previewOfRow(Map<String, dynamic> row, String langCode) {
+  final s = Strings(AppLang.values.firstWhere((l) => l.code == langCode, orElse: () => AppLang.ps));
+  final body = RichMessageText.strip((row['body'] as String?) ?? '');
+  final meta = row['meta'];
+  return switch (row['kind']) {
+    'voice' => s.get('voice_message'),
+    'image' => body.isEmpty ? s.get('photo') : body,
+    'album' => body.isEmpty ? s.get('album_n', {'n': '${meta is Map && meta['items'] is List ? (meta['items'] as List).length : ''}'}) : body,
+    'file' => (row['file_name'] as String?) ?? s.get('file'),
+    'location' => s.get('location'),
+    'contact' => '${s.get('contact')}: ${meta is Map ? meta['name'] ?? '' : ''}',
+    _ => body,
+  };
 }

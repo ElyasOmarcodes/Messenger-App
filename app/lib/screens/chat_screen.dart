@@ -67,6 +67,9 @@ class _ChatScreenState extends State<ChatScreen> {
   final _flash = ValueNotifier<String?>(null);
   final Set<String> _dissolving = {};
   final Set<String> _shown = {};
+
+  /// Messages that just arrived or were just sent: they slide in once.
+  final Set<String> _fresh = {};
   final Set<String> _gone = {};
 
   // Voice note, Telegram style: hold to record, slide to cancel, slide up to lock.
@@ -628,7 +631,7 @@ class _ChatScreenState extends State<ChatScreen> {
     },
     itemBuilder: (ctx) => [
       if (!chat.isSaved) _menuItem(ctx, 'info', Icons.info_rounded, 'info'),
-      if (chat.isGroup) _menuItem(ctx, 'add', Icons.person_add_alt_1_rounded, 'add_member'),
+      if (chat.isGroup && !chat.isChannel) _menuItem(ctx, 'add', Icons.person_add_alt_1_rounded, 'add_member'),
       if (!chat.isSaved)
         _menuItem(ctx, 'mute', chat.muted ? Icons.notifications_active_rounded : Icons.notifications_off_rounded, chat.muted ? 'unmute_chat' : 'mute_chat'),
       _menuItem(ctx, 'clear', Icons.cleaning_services_rounded, 'clear_history'),
@@ -681,6 +684,9 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   String _subtitle(AppController app, Chat c) {
+    final t = app.typingText(c);
+    if (t != null) return t;
+    if (c.isChannel) return context.tr('n_subscribers', {'n': context.digits(c.memberCount ?? c.members.length)});
     if (c.isGroup) {
       final on = c.members.where((m) => m.id != app.myId && m.online).length;
       final n = '${context.digits(c.members.length)} ${context.tr('members')}';
@@ -762,10 +768,9 @@ class _ChatScreenState extends State<ChatScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
+                          NameLine(
                             title,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            verified: chat.verified,
                             style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
                           ),
                           if (!chat.isSaved)
@@ -777,7 +782,9 @@ class _ChatScreenState extends State<ChatScreen> {
                               style: TextStyle(
                                 fontSize: 13,
                                 fontWeight: FontWeight.w400,
-                                color: !chat.isGroup && (chat.peer(app.myId ?? '')?.online ?? false) ? cs.primary : cs.onSurfaceVariant,
+                                color: app.typingText(chat) != null || (!chat.isGroup && (chat.peer(app.myId ?? '')?.online ?? false))
+                                    ? cs.primary
+                                    : cs.onSurfaceVariant,
                               ),
                             ),
                         ],
@@ -930,6 +937,7 @@ class _ChatScreenState extends State<ChatScreen> {
       final jp = !newDay && joined(prev, m);
       final jn = next != null && joined(m, next);
       final pos = jp && jn ? GroupPos.middle : (jp ? GroupPos.last : (jn ? GroupPos.first : GroupPos.single));
+      if (!_shown.contains(m.id) && _shown.isNotEmpty && DateTime.now().difference(m.createdAt).inSeconds.abs() < 15) _fresh.add(m.id);
       _shown.add(m.id);
       entries.add((m, pos, jp));
     }
@@ -944,7 +952,7 @@ class _ChatScreenState extends State<ChatScreen> {
           chat: chat,
           message: m,
           pos: pos,
-          senderName: chat.isGroup && !jp ? (app.memberById(chat, m.senderId)?.name ?? '') : null,
+          senderName: chat.isGroup && !chat.isChannel && !jp ? (app.memberById(chat, m.senderId)?.name ?? '') : null,
           onReply: m.deleted ? null : (msg) => _onAction(chat, msg, MsgAction.reply),
           onAction: (msg, a) => _onAction(chat, msg, a),
           onOpenUser: _openUser,
@@ -952,9 +960,10 @@ class _ChatScreenState extends State<ChatScreen> {
           onShowAll: chat.isSaved ? null : () => _openInfo(app, chat),
         ),
       );
+      final shown = _fresh.contains(m.id) ? AppearIn(onDone: () => _fresh.remove(m.id), child: bubble) : bubble;
       return ValueListenableBuilder<String?>(
         valueListenable: _flash,
-        child: bubble,
+        child: shown,
         // only the message jumped to gets a glow; the rest stay plain (cheap)
         builder: (_, f, child) => f == m.id ? ColoredBox(color: Theme.of(context).colorScheme.primary.withValues(alpha: 0.18), child: child) : child!,
       );
@@ -1145,6 +1154,34 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _composer(Chat chat) {
     final cs = Theme.of(context).colorScheme;
     final app = AppScope.of(context);
+    // a channel: subscribers get a mute / unmute bar, like Telegram
+    if (chat.isChannel && !chat.can(app.myId ?? '', 'send')) {
+      return SafeArea(
+        top: false,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(12, 0, 12, 10),
+          child: LiquidGlass(
+            radius: 24,
+            child: Material(
+              type: MaterialType.transparency,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(24),
+                onTap: () => app.toggleMute(chat),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  child: Center(
+                    child: Text(
+                      context.tr(chat.muted ? 'unmute_chat' : 'mute_chat'),
+                      style: TextStyle(color: cs.primary, fontWeight: FontWeight.w600, fontSize: 15),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
     // a group where only admins may write (Telegram shows a note instead)
     if (!chat.can(app.myId ?? '', 'send') && chat.members.isNotEmpty) {
       return SafeArea(
@@ -1266,6 +1303,7 @@ class _ChatScreenState extends State<ChatScreen> {
               return AdaptiveTextSelectionToolbar.buttonItems(anchors: state.contextMenuAnchors, buttonItems: items);
             },
             onChanged: (v) {
+              if (v.isNotEmpty) _app?.userTyping(chat);
               final can = v.trim().isNotEmpty;
               if (can != _canSend) setState(() => _canSend = can);
             },
@@ -1483,4 +1521,40 @@ class _ChatScreenState extends State<ChatScreen> {
       ),
     );
   }
+}
+
+/// A new message enters like WhatsApp / Telegram: the list makes room
+/// smoothly while the bubble rises a little and fades in (220 ms, once).
+class AppearIn extends StatefulWidget {
+  const AppearIn({super.key, required this.child, this.onDone});
+  final Widget child;
+  final VoidCallback? onDone;
+
+  @override
+  State<AppearIn> createState() => _AppearInState();
+}
+
+class _AppearInState extends State<AppearIn> with SingleTickerProviderStateMixin {
+  late final AnimationController _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 220))
+    ..forward().whenComplete(() => widget.onDone?.call());
+  late final Animation<double> _t = CurvedAnimation(parent: _c, curve: Curves.easeOutCubic);
+
+  @override
+  void dispose() {
+    _c.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => SizeTransition(
+    sizeFactor: _t,
+    axisAlignment: -1,
+    child: FadeTransition(
+      opacity: _t,
+      child: SlideTransition(
+        position: Tween(begin: const Offset(0, 0.35), end: Offset.zero).animate(_t),
+        child: widget.child,
+      ),
+    ),
+  );
 }

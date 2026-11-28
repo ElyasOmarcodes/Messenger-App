@@ -710,6 +710,7 @@ class ChatTile extends StatelessWidget {
     final cs = Theme.of(context).colorScheme;
     final last = chat.lastMessage;
     final title = app.chatTitle(chat);
+    final typingNow = app.typingText(chat);
     final s = Strings(context.lang);
     final mine = last != null && last.senderId == app.myId;
 
@@ -745,7 +746,7 @@ class ChatTile extends StatelessWidget {
                         if (chat.isGroup)
                           Padding(
                             padding: const EdgeInsetsDirectional.only(end: 4),
-                            child: Icon(Icons.groups_rounded, size: 17, color: cs.onSurface),
+                            child: Icon(chat.isChannel ? Icons.campaign_rounded : Icons.groups_rounded, size: 17, color: cs.onSurface),
                           ),
                         // the name takes all free room, so the time always sits at the edge
                         Expanded(
@@ -759,6 +760,7 @@ class ChatTile extends StatelessWidget {
                                   style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700),
                                 ),
                               ),
+                              if (chat.verified) const VerifiedBadge(size: 17),
                               if (chat.muted)
                                 Padding(
                                   padding: const EdgeInsetsDirectional.only(start: 4),
@@ -792,29 +794,36 @@ class ChatTile extends StatelessWidget {
                     Row(
                       children: [
                         Expanded(
-                          child: Text.rich(
-                            TextSpan(
-                              children: [
-                                if (who.isNotEmpty)
+                          child: typingNow != null
+                              ? Text(
+                                  typingNow,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 14.5, color: cs.primary),
+                                )
+                              : Text.rich(
                                   TextSpan(
-                                    text: who,
-                                    style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600),
+                                    children: [
+                                      if (who.isNotEmpty)
+                                        TextSpan(
+                                          text: who,
+                                          style: TextStyle(color: cs.onSurface, fontWeight: FontWeight.w600),
+                                        ),
+                                      if (last != null && app.previewIcon(last) != null)
+                                        WidgetSpan(
+                                          alignment: PlaceholderAlignment.middle,
+                                          child: Padding(
+                                            padding: const EdgeInsetsDirectional.only(end: 4),
+                                            child: Icon(app.previewIcon(last), size: 16, color: cs.primary),
+                                          ),
+                                        ),
+                                      TextSpan(text: preview),
+                                    ],
                                   ),
-                                if (last != null && app.previewIcon(last) != null)
-                                  WidgetSpan(
-                                    alignment: PlaceholderAlignment.middle,
-                                    child: Padding(
-                                      padding: const EdgeInsetsDirectional.only(end: 4),
-                                      child: Icon(app.previewIcon(last), size: 16, color: cs.primary),
-                                    ),
-                                  ),
-                                TextSpan(text: preview),
-                              ],
-                            ),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(fontSize: 14.5, color: cs.onSurfaceVariant),
-                          ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 14.5, color: cs.onSurfaceVariant),
+                                ),
                         ),
                         if (chat.unread > 0)
                           Container(

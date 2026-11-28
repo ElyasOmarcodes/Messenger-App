@@ -100,7 +100,7 @@ Deno.serve(async (req) => {
     const chatId = record.chat_id as string;
     const sender = record.sender_id as string;
     const [{ data: chat }, { data: members }, { data: who }] = await Promise.all([
-      db.from("chats").select("is_group,title").eq("id", chatId).single(),
+      db.from("chats").select("*").eq("id", chatId).single(),
       db.from("chat_members").select("user_id,muted").eq("chat_id", chatId),
       db.from("profiles").select("display_name,email").eq("id", sender).single(),
     ]);
@@ -109,10 +109,28 @@ Deno.serve(async (req) => {
     const name = who?.display_name || (who?.email ?? "").split("@")[0];
     const { data: tokens } = await db.from("push_tokens").select("token,lang").in("user_id", to);
     if (!tokens?.length) return new Response(`no phones registered for ${to.length} recipient(s)`);
+    // The message itself goes along still ENCRYPTED (the server cannot read
+    // it): the phone opens it with its own chat key, shows sender + text and
+    // keeps it, like WhatsApp/Signal. Plain only for public channel posts.
+    // FCM data is limited to 4 KB, so big ones go without (the app fetches).
+    const msgData: Record<string, string> = {
+      type: "message",
+      chat_id: chatId,
+      message_id: record.id,
+      sender_id: sender,
+      kind: record.kind ?? "text",
+      created_at: record.created_at ?? "",
+    };
+    if (record.cipher && record.cipher.length <= 2800 && record.key_id != null) {
+      msgData.cipher = record.cipher;
+      msgData.key_id = String(record.key_id);
+    } else if (!record.cipher && chat?.is_channel && (record.body ?? "").length <= 2800) {
+      msgData.plain = record.body ?? "";
+    }
     const results = await Promise.all((tokens ?? []).map((t) => {
       const l = T[t.lang ?? "ps"] ?? T.ps;
-      const title = chat?.is_group ? `${chat.title ?? ""} · ${name}` : name;
-      return send(t.token, t.lang ?? "ps", title, l.msg, { type: "message", chat_id: chatId, message_id: record.id }, false);
+      const title = chat?.is_channel ? (chat.title ?? "") : chat?.is_group ? `${chat.title ?? ""} · ${name}` : name;
+      return send(t.token, t.lang ?? "ps", title, l.msg, msgData, false);
     }));
     console.log("push message", results);
     return new Response(results.join("\n"));

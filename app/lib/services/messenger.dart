@@ -20,6 +20,7 @@ import 'e2e.dart';
 import 'media_cache.dart';
 import 'notifier.dart';
 import 'push.dart';
+import 'push_inbox.dart';
 
 /// Result of an auth call: null on success, otherwise a translation key.
 typedef AuthError = String?;
@@ -156,7 +157,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     if (foreground && !was && myId != null) {
       // back in the app: fetch at once and clear the notifications it read
       _reloadTimer?.cancel();
-      unawaited(reloadChats());
+      // first what pushes already brought (instant), then the server
+      unawaited(_drainInbox().whenComplete(reloadChats));
       unawaited(_drain());
       unawaited(Notifier.instance.cancelAll());
     }
@@ -342,6 +344,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     // a signed-out phone keeps no one's chats, and not the key either
     await MediaCache.instance.store.clearJson(_cachePrefix);
     await E2E.instance.forget();
+    await KeyVault.clear();
+    await _prefs.remove(PushInbox.uidKey);
+    await PushInbox.take();
     _chatKeys.clear();
     _sendKeys.clear();
     keyState = KeyState.unknown;
@@ -361,6 +366,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         chatsLoaded = true;
       } catch (_) {}
     }
+    await _prefs.setString(PushInbox.uidKey, myId!);
+    await _drainInbox(); // what pushes brought while the app was closed
     await _loadCachedStories();
     await _loadOutbox();
     _showOutboxInChats();
@@ -609,11 +616,19 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         final pub = _trustedPub(by, _pubs[by]);
         if (pub == null) continue;
         final k = await E2E.instance.unwrap(r['wrapped'] as String, chatId: c, keyId: id, wrapperPub: pub);
-        if (k != null) _chatKeys.putIfAbsent(c, () => {})[id] = k;
+        if (k != null) _rememberKey(c, id, k);
       }
     } catch (_) {
       // offline: the messages stay locked until the next try
     }
+  }
+
+  /// Keeps a chat key in memory and in the phone's key store, so a push can
+  /// be opened (and shown with its text) even when the app is closed.
+  void _rememberKey(String chatId, int keyId, SecretKey k) {
+    _chatKeys.putIfAbsent(chatId, () => {})[keyId] = k;
+    final me = myId;
+    if (me != null) unawaited(KeyVault.put(me, chatId, keyId, k));
   }
 
   Future<SecretKey?> _keyFor(String chatId, int keyId) async {
@@ -659,7 +674,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         if (e.code == '23505' && depth < 3) return await _sendKey(chatId, depth: depth + 1);
         rethrow;
       }
-      _chatKeys.putIfAbsent(chatId, () => {})[id] = k;
+      _rememberKey(chatId, id, k);
       _sendKeys[chatId] = (id: id, key: k, at: DateTime.now());
       return (id: id, key: k);
     }
@@ -710,6 +725,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         for (final r in rows) {
           final chatId = r['chat_id'] as String;
           final id = r['id'] as String;
+          if (_plain(chatId) || chatById(chatId) == null) continue; // channel posts stay public
           try {
             final sk = await _sendKey(chatId);
             var meta = r['meta'] == null ? null : Map<String, dynamic>.from(r['meta'] as Map);
@@ -776,9 +792,12 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     return (path: np, key: key);
   }
 
+  /// A channel: its posts are public announcements, never sealed.
+  bool _plain(String chatId) => chatById(chatId)?.isChannel ?? false;
+
   /// Opening a chat: give the key to members who joined or set up keys since.
   void _shareKeysSoon(String chatId) {
-    if (!E2E.instance.ready) return;
+    if (!E2E.instance.ready || _plain(chatId)) return;
     _sendKeys.remove(chatId);
     unawaited(_sendKey(chatId).then((_) {}, onError: (_) {}));
   }
@@ -852,6 +871,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   void _onSignedOut() {
     _channel?.unsubscribe();
     _channel = null;
+    _typingCh?.unsubscribe();
+    _typingCh = null;
     me = null;
     chats = [];
     chatsLoaded = false;
@@ -874,8 +895,85 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     } catch (_) {}
   }
 
+  // ── Typing ("typing…"), like Telegram / WhatsApp ───────────────────────
+  // Each person listens on their own private channel; whoever types in a
+  // chat tells the other members there (the server lets only people who
+  // share a chat send to it — v12). Nothing is stored anywhere.
+  RealtimeChannel? _typingCh;
+  final Map<String, RealtimeChannel> _typingOut = {};
+  final Map<String, DateTime> _typedAt = {}; // chat → when I last told them
+
+  /// chat id → (person → until when they count as typing)
+  final Map<String, Map<String, DateTime>> typing = {};
+  Timer? _typingTick;
+
+  void _subscribeTyping() {
+    _typingCh?.unsubscribe();
+    _typingCh = _sb.channel('typing:${myId!}', opts: const RealtimeChannelConfig(private: true)).onBroadcast(event: 't', callback: _onTyping).subscribe();
+  }
+
+  void _onTyping(Map<String, dynamic> p) {
+    final data = p['payload'] is Map ? Map<String, dynamic>.from(p['payload'] as Map) : p;
+    final c = data['c'], u = data['u'];
+    if (c is! String || u is! String || u == myId || chatById(c) == null) return;
+    typing.putIfAbsent(c, () => {})[u] = DateTime.now().add(const Duration(seconds: 6));
+    _typingTick ??= Timer.periodic(const Duration(seconds: 1), (_) => _expireTyping());
+    notifyListeners();
+  }
+
+  void _expireTyping() {
+    final now = DateTime.now();
+    var changed = false;
+    for (final m in typing.values) {
+      final n = m.length;
+      m.removeWhere((_, until) => until.isBefore(now));
+      changed |= m.length != n;
+    }
+    typing.removeWhere((_, m) => m.isEmpty);
+    if (typing.isEmpty) {
+      _typingTick?.cancel();
+      _typingTick = null;
+    }
+    if (changed) notifyListeners();
+  }
+
+  /// Who is typing in [chat] right now (not me).
+  List<Profile> typingIn(Chat chat) => [
+    for (final id in typing[chat.id]?.keys ?? const <String>[])
+      if (memberById(chat, id) case final p?) p,
+  ];
+
+  /// "typing…" / "Ahmad is typing…" / null.
+  String? typingText(Chat chat) {
+    final who = typingIn(chat);
+    if (who.isEmpty) return null;
+    if (!chat.isGroup) return s.get('typing');
+    return s.get('typing_name', {'name': who.first.name});
+  }
+
+  /// The composer changed: tell the others, at most every 4 seconds.
+  void userTyping(Chat chat) {
+    if (myId == null || chat.isSaved || chat.isChannel) return;
+    final last = _typedAt[chat.id];
+    if (last != null && DateTime.now().difference(last) < const Duration(seconds: 4)) return;
+    _typedAt[chat.id] = DateTime.now();
+    final others = chat.members.where((m) => m.id != myId).take(30);
+    for (final m in others) {
+      final ch = _typingOut[m.id] ??= _sb.channel('typing:${m.id}', opts: const RealtimeChannelConfig(private: true));
+      unawaited(ch.httpSend(event: 't', payload: {'c': chat.id, 'u': myId}).catchError((_) {}));
+    }
+  }
+
+  void _stopTypingOf(String chatId, String userId) {
+    if (typing[chatId]?.remove(userId) != null) {
+      typing.removeWhere((_, m) => m.isEmpty);
+      notifyListeners();
+    }
+  }
+
   // ── Realtime ─────────────────────────────────────────────────────────────
   void _subscribe() {
+    _subscribeTyping();
     _channel?.unsubscribe();
     _channel = _sb
         .channel('paigham-${myId!}')
@@ -923,7 +1021,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         });
   }
 
-  void _onMessage(Message m) {
+  void _onMessage(Message m, {bool notify = true}) {
+    _stopTypingOf(m.chatId, m.senderId); // their message arrived: no longer typing
     _persistSoon(m.chatId);
     final list = _messages[m.chatId];
     if (list != null) {
@@ -950,7 +1049,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       }
       // Like Telegram: a new message brings an archived chat back unless it is muted.
       if (chat.archived && !chat.muted) unawaited(setArchived(chat, false));
-      if (!chat.muted) {
+      if (!chat.muted && notify) {
         _incoming.add(m);
         _notify(chat, m);
       }
@@ -1340,8 +1439,8 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   List<Message>? messagesOf(String chatId) => _messages[chatId];
   final Set<String> _diskLoaded = {};
 
-  Future<void> loadMessages(String chatId) async {
-    unawaited(_loadReactions(chatId));
+  /// The chat's messages saved on the phone (once per run): instant, offline.
+  Future<void> _loadDisk(String chatId) async {
     final cacheName = '${_cachePrefix}_m_$chatId';
     if (_diskLoaded.add(chatId)) {
       // last seen messages first, from the phone — instant, and works offline
@@ -1357,6 +1456,32 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
         } catch (_) {}
       }
     }
+  }
+
+  /// Messages pushes brought while the app was away (already opened on the
+  /// phone): into the chat list and the chat before anything is fetched.
+  Future<void> _drainInbox() async {
+    List<Map<String, dynamic>> rows;
+    try {
+      rows = await PushInbox.take();
+    } catch (_) {
+      return;
+    }
+    for (final r in rows) {
+      try {
+        final m = Message.fromJson(r);
+        if (chatById(m.chatId) == null) continue;
+        await _loadDisk(m.chatId);
+        _messages.putIfAbsent(m.chatId, () => []);
+        final known = _messages[m.chatId]!.any((x) => x.id == m.id);
+        if (!known) _onMessage(m, notify: false);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> loadMessages(String chatId) async {
+    unawaited(_loadReactions(chatId));
+    await _loadDisk(chatId);
     try {
       final cleared = chatById(chatId)?.clearedAt;
       var q = _sb.from('messages').select().eq('chat_id', chatId);
@@ -1640,7 +1765,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       }
       final chatId = it['chat'] as String;
       final fields = Map<String, dynamic>.from(it['fields'] as Map);
-      if (E2E.instance.ready) {
+      if (E2E.instance.ready && !_plain(chatId)) {
         // seal the content: the server keeps only the kind, time and sizes
         final sk = await _sendKey(chatId);
         final payload = <String, dynamic>{
@@ -1874,7 +1999,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       } else {
         map[myId!] = emoji;
         notifyListeners();
-        if (E2E.instance.ready && _v9) {
+        if (E2E.instance.ready && _v9 && !chat.isChannel) {
           // the server only sees that someone reacted, not with what
           final sk = await _sendKey(chat.id);
           final cipher = await E2E.instance.seal(sk.key, {'e': emoji}, chatId: chat.id, msgId: 'r:${m.id}', senderId: myId!, keyId: sk.id);

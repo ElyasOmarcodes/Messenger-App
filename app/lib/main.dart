@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -28,17 +30,16 @@ Future<void> main() async {
   if (AppConfig.configured) {
     await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
   }
+  final controller = AppController();
+  final calls = CallController(controller);
+  // the first frame as early as possible; the rest right after it
+  runApp(PaighamApp(controller: controller, calls: calls));
   // Android phones with 90/120 Hz screens: Flutter apps often stay at 60 Hz
   // unless they ask, which makes scrolling feel less smooth than native apps.
   if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
-    try {
-      await FlutterDisplayMode.setHighRefreshRate();
-    } catch (_) {}
+    unawaited(FlutterDisplayMode.setHighRefreshRate().catchError((_) {}));
   }
   await Push.init(); // FCM (when configured): pushes for a closed app
-  final controller = AppController();
-  final calls = CallController(controller);
-  runApp(PaighamApp(controller: controller, calls: calls));
   controller.init();
   Notifier.instance.init(askPermission: false); // asked on its own page
 }

@@ -37,6 +37,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
   int _tab = 0; // 0 media, 1 files, 2 voice, 3 links
   bool _expanded = false; // big photo (tap or pull down on the avatar)
 
+  /// Scrolled past the name: a small bar (back, photo, name) pins at the top.
+  final _pinned = ValueNotifier<bool>(false);
+
+  @override
+  void dispose() {
+    _pinned.dispose();
+    super.dispose();
+  }
+
   void _setExpanded(bool v) {
     if (v == _expanded) return;
     HapticFeedback.selectionClick();
@@ -365,10 +374,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 crossAxisAlignment: big ? CrossAxisAlignment.start : CrossAxisAlignment.center,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text(
+                  NameLine(
                     title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
+                    verified: chat?.verified ?? false,
+                    badgeColor: big ? Colors.white : null,
                     style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800, color: big ? Colors.white : cs.onSurface),
                   ),
                   const SizedBox(height: 2),
@@ -416,80 +425,149 @@ class _ProfileScreenState extends State<ProfileScreen> {
       body: NotificationListener<ScrollUpdateNotification>(
         onNotification: (n) {
           // pull down past the top to open the big photo, scroll up to close it
+          if (n.metrics.axis == Axis.vertical) _pinned.value = n.metrics.pixels > (big ? headerH - pad.top - 120 : 150);
           if (photo != null && n.metrics.axis == Axis.vertical) {
             if (n.metrics.pixels < -60) _setExpanded(true);
             if (n.metrics.pixels > 40 && _expanded) _setExpanded(false);
           }
           return false;
         },
-        child: CustomScrollView(
-          physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-          slivers: [
-            SliverToBoxAdapter(child: header),
-            const SliverToBoxAdapter(child: SizedBox(height: 12)),
-            SliverToBoxAdapter(
-              child: _Section(
-                children: [
-                  if (widget._kind == _Kind.me) ...[
-                    _Info(icon: Icons.alternate_email_rounded, value: app.myEmail, label: context.tr('email'), ltr: true),
-                    _Info(
-                      icon: Icons.tag_rounded,
-                      value: app.me?.username != null ? '@${app.me!.username}' : context.tr('not_set'),
-                      label: context.tr('username'),
-                      ltr: app.me?.username != null,
-                      onTap: () => _edit(
-                        'username',
-                        app.me?.username ?? '',
-                        (v) => app.updateProfile(username: v),
-                        hint: context.tr('username_hint'),
-                        ltr: true,
-                        errorKey: 'username_taken',
-                      ),
-                    ),
-                  ],
-                  if (widget._kind == _Kind.me && app.me?.link != null)
-                    _Info(icon: Icons.link_rounded, value: app.me!.link!, label: context.tr('my_link'), ltr: true),
-                  if (widget._kind == _Kind.user) ...[
-                    _Info(icon: Icons.alternate_email_rounded, value: widget.profile!.email, label: context.tr('email'), ltr: true),
-                    if (widget.profile!.link != null) _Info(icon: Icons.link_rounded, value: widget.profile!.link!, label: context.tr('links'), ltr: true),
-                    if (widget.profile!.username != null)
-                      _Info(icon: Icons.tag_rounded, value: '@${widget.profile!.username}', label: context.tr('username'), ltr: true),
-                    ListTile(
-                      leading: const Icon(Icons.lock_rounded),
-                      title: Text(context.tr('safety_number')),
-                      subtitle: Text(context.tr('e2e_chat_note')),
-                      onTap: () => _showSafety(app, widget.profile!.id),
-                    ),
-                  ],
-                  if (widget._kind == _Kind.group && chat != null) ...[
-                    if (chat.description?.isNotEmpty == true)
-                      _Info(icon: Icons.info_outline_rounded, value: chat.description!, label: context.tr('description')),
-                    if (chat.link != null) _Info(icon: Icons.link_rounded, value: chat.link!, label: context.tr('public_link'), ltr: true),
-                    for (final m in chat.members)
-                      ListTile(
-                        leading: Avatar(seed: m.id, label: m.name, imageUrl: m.avatarUrl, size: 42),
-                        title: Text(m.id == app.myId ? '${m.name} (${context.tr('you')})' : m.name, style: const TextStyle(fontWeight: FontWeight.w600)),
-                        subtitle: Text(m.username != null ? '@${m.username}' : m.email, maxLines: 1, overflow: TextOverflow.ellipsis),
-                        trailing: m.isAdmin
-                            ? Text(
-                                context.tr(m.isOwner ? 'owner' : 'admin'),
-                                style: TextStyle(color: cs.primary, fontSize: 13, fontWeight: FontWeight.w600),
-                              )
-                            : null,
-                        onTap: m.id == app.myId ? null : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProfileScreen.user(profile: m))),
-                        onLongPress: m.id == app.myId ? null : () => showMemberActions(context, chat, m),
-                      ),
-                  ],
+        child: Stack(
+          children: [
+            CustomScrollView(
+              physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+              slivers: [
+                SliverToBoxAdapter(child: header),
+                const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                SliverToBoxAdapter(
+                  child: _Section(
+                    children: [
+                      if (widget._kind == _Kind.me) ...[
+                        _Info(icon: Icons.alternate_email_rounded, value: app.myEmail, label: context.tr('email'), ltr: true),
+                        _Info(
+                          icon: Icons.tag_rounded,
+                          value: app.me?.username != null ? '@${app.me!.username}' : context.tr('not_set'),
+                          label: context.tr('username'),
+                          ltr: app.me?.username != null,
+                          onTap: () => _edit(
+                            'username',
+                            app.me?.username ?? '',
+                            (v) => app.updateProfile(username: v),
+                            hint: context.tr('username_hint'),
+                            ltr: true,
+                            errorKey: 'username_taken',
+                          ),
+                        ),
+                      ],
+                      if (widget._kind == _Kind.me && app.me?.link != null)
+                        _Info(icon: Icons.link_rounded, value: app.me!.link!, label: context.tr('my_link'), ltr: true),
+                      if (widget._kind == _Kind.user) ...[
+                        _Info(icon: Icons.alternate_email_rounded, value: widget.profile!.email, label: context.tr('email'), ltr: true),
+                        if (widget.profile!.link != null) _Info(icon: Icons.link_rounded, value: widget.profile!.link!, label: context.tr('links'), ltr: true),
+                        if (widget.profile!.username != null)
+                          _Info(icon: Icons.tag_rounded, value: '@${widget.profile!.username}', label: context.tr('username'), ltr: true),
+                        ListTile(
+                          leading: const Icon(Icons.lock_rounded),
+                          title: Text(context.tr('safety_number')),
+                          subtitle: Text(context.tr('e2e_chat_note')),
+                          onTap: () => _showSafety(app, widget.profile!.id),
+                        ),
+                      ],
+                      if (widget._kind == _Kind.group && chat != null) ...[
+                        if (chat.description?.isNotEmpty == true)
+                          _Info(icon: Icons.info_outline_rounded, value: chat.description!, label: context.tr('description')),
+                        if (chat.link != null) _Info(icon: Icons.link_rounded, value: chat.link!, label: context.tr('public_link'), ltr: true),
+                        for (final m in chat.members)
+                          ListTile(
+                            leading: Avatar(seed: m.id, label: m.name, imageUrl: m.avatarUrl, size: 42),
+                            title: Text(m.id == app.myId ? '${m.name} (${context.tr('you')})' : m.name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                            subtitle: Text(m.username != null ? '@${m.username}' : m.email, maxLines: 1, overflow: TextOverflow.ellipsis),
+                            trailing: m.isAdmin
+                                ? Text(
+                                    context.tr(m.isOwner ? 'owner' : 'admin'),
+                                    style: TextStyle(color: cs.primary, fontSize: 13, fontWeight: FontWeight.w600),
+                                  )
+                                : null,
+                            onTap: m.id == app.myId
+                                ? null
+                                : () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => ProfileScreen.user(profile: m))),
+                            onLongPress: m.id == app.myId ? null : () => showMemberActions(context, chat, m),
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+                if (shared != null) ...[
+                  const SliverToBoxAdapter(child: SizedBox(height: 14)),
+                  SliverToBoxAdapter(child: _tabs(context, dark)),
+                  const SliverToBoxAdapter(child: SizedBox(height: 10)),
+                  ..._sharedSlivers(context, app, shared),
                 ],
+                SliverToBoxAdapter(child: SizedBox(height: widget._kind == _Kind.me ? 120 : 30)),
+              ],
+            ),
+            // the small pinned bar (Telegram): appears once the name scrolls away
+            Positioned(
+              left: 0,
+              right: 0,
+              top: 0,
+              child: ValueListenableBuilder<bool>(
+                valueListenable: _pinned,
+                builder: (context, on, child) => IgnorePointer(
+                  ignoring: !on,
+                  child: AnimatedSlide(
+                    offset: on ? Offset.zero : const Offset(0, -0.3),
+                    duration: const Duration(milliseconds: 180),
+                    curve: Curves.easeOut,
+                    child: AnimatedOpacity(opacity: on ? 1 : 0, duration: const Duration(milliseconds: 160), child: child),
+                  ),
+                ),
+                child: Material(
+                  color: Theme.of(context).scaffoldBackgroundColor,
+                  elevation: 0.6,
+                  shadowColor: Colors.black26,
+                  child: Padding(
+                    padding: EdgeInsets.only(top: pad.top),
+                    child: SizedBox(
+                      height: 56,
+                      child: Row(
+                        children: [
+                          if (canPop)
+                            IconButton(
+                              icon: const Icon(Icons.arrow_back_rounded),
+                              tooltip: context.tr('back'),
+                              onPressed: () => Navigator.of(context).maybePop(),
+                            )
+                          else
+                            const SizedBox(width: 16),
+                          Avatar(seed: seed, label: title, group: group, imageUrl: photo, size: 36),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                NameLine(
+                                  title,
+                                  verified: chat?.verified ?? false,
+                                  style: const TextStyle(fontSize: 16.5, fontWeight: FontWeight.w700),
+                                ),
+                                Text(
+                                  subtitle,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(fontSize: 13, color: cs.onSurfaceVariant),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
-            if (shared != null) ...[
-              const SliverToBoxAdapter(child: SizedBox(height: 14)),
-              SliverToBoxAdapter(child: _tabs(context, dark)),
-              const SliverToBoxAdapter(child: SizedBox(height: 10)),
-              ..._sharedSlivers(context, app, shared),
-            ],
-            SliverToBoxAdapter(child: SizedBox(height: widget._kind == _Kind.me ? 120 : 30)),
           ],
         ),
       ),

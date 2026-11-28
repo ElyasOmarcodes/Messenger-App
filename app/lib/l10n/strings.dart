@@ -364,6 +364,9 @@ class Strings {
     'join_group': {'ps': 'ګروپ ته ګډېدل', 'fa': 'پیوستن به گروه', 'en': 'Join group'},
     'open_group': {'ps': 'ګروپ پرانیستل', 'fa': 'باز کردن گروه', 'en': 'Open group'},
     'invalid_link': {'ps': 'دا لینک سم نه دی یا یې وخت تېر شوی', 'fa': 'این لینک معتبر نیست یا منقضی شده', 'en': 'This link is invalid or has expired'},
+    'typing': {'ps': 'لیکي…', 'fa': 'در حال نوشتن…', 'en': 'typing…'},
+    'typing_name': {'ps': '{name} لیکي…', 'fa': '{name} در حال نوشتن…', 'en': '{name} is typing…'},
+    'n_subscribers': {'ps': '{n} ګډونوال', 'fa': '{n} مشترک', 'en': '{n} subscribers'},
     'n_members': {'ps': '{n} غړي', 'fa': '{n} عضو', 'en': '{n} members'},
     'delete_group': {'ps': 'ګروپ ړنګول', 'fa': 'حذف گروه', 'en': 'Delete group'},
     'delete_group_q': {

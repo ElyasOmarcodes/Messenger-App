@@ -140,6 +140,19 @@ class SettingsScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 18),
+        // Telegram: Saved Messages at the top of Settings
+        _Group(
+          children: [
+            _Tile(
+              icon: Icons.bookmark_rounded,
+              color: const Color(0xFF3390EC),
+              title: context.tr('saved_messages'),
+              subtitle: context.tr('saved_sub'),
+              onTap: () => openSavedMessages(context),
+            ),
+          ],
+        ),
+        const SizedBox(height: 18),
         _Group(
           children: [
             _Tile(
