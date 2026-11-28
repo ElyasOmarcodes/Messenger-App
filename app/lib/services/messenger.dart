@@ -17,6 +17,7 @@ import '../widgets/rich_message.dart';
 import 'e2e.dart';
 import 'media_cache.dart';
 import 'notifier.dart';
+import 'push.dart';
 
 /// Result of an auth call: null on success, otherwise a translation key.
 typedef AuthError = String?;
@@ -45,6 +46,20 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
 
   /// Download photos automatically; otherwise they show a download button.
   bool autoPhotos = true;
+
+  /// Data saver (weak or costly internet): smaller photos when sending,
+  /// photos download on tap, lower-resolution video calls.
+  bool dataSaver = false;
+
+  void setDataSaver(bool v) {
+    dataSaver = v;
+    _prefs.setBool('data_saver', v);
+    if (v) setAutoPhotos(false);
+    notifyListeners();
+  }
+
+  /// Longest side and JPEG quality for photos we send (Telegram sends 1280 px).
+  ({double side, int quality}) get photoLimits => dataSaver ? (side: 1024, quality: 68) : (side: 1280, quality: 82);
 
   void setKeepDays(int d) {
     keepDays = d;
@@ -129,6 +144,51 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     foreground = state == AppLifecycleState.resumed;
     if (foreground && myId != null) _scheduleReload();
+    _presence(); // online now / last seen when leaving
+  }
+
+  // ── Presence: "online" while the app is open, else "last seen …" ─────────
+  Timer? _beat;
+
+  void _presence() {
+    _beat?.cancel();
+    if (myId == null) return;
+    unawaited(_touch());
+    if (foreground) _beat = Timer.periodic(const Duration(seconds: 60), (_) => _touch());
+  }
+
+  Future<void> _touch() async {
+    try {
+      await _sb.rpc('touch_presence').timeout(_net);
+    } catch (_) {}
+  }
+
+  /// Fresh "last seen" of one person (the open chat's header asks every minute).
+  Future<void> refreshPresence(Chat chat) async {
+    final peer = chat.isGroup ? null : chat.peer(myId ?? '');
+    if (peer == null) return;
+    try {
+      final row = await _sb.from('profiles').select('last_seen').eq('id', peer.id).maybeSingle().timeout(_net);
+      final v = row?['last_seen'] as String?;
+      if (v == null) return;
+      final i = chat.members.indexWhere((m) => m.id == peer.id);
+      if (i < 0) return;
+      final m = chat.members[i];
+      final seen = DateTime.parse(v).toLocal();
+      if (m.lastSeen == seen) return;
+      chat.members[i] = Profile(
+        id: m.id,
+        email: m.email,
+        displayName: m.displayName,
+        username: m.username,
+        avatarPath: m.avatarPath,
+        lastReadAt: m.lastReadAt,
+        role: m.role,
+        rights: m.rights,
+        lastSeen: seen,
+      );
+      notifyListeners();
+    } catch (_) {}
   }
 
   Future<void> init() async {
@@ -141,6 +201,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     keepDays = _prefs.getInt('keep_days') ?? 30;
     maxCacheMb = _prefs.getInt('max_cache_mb') ?? 3072;
     autoPhotos = _prefs.getBool('auto_photos') ?? true;
+    dataSaver = _prefs.getBool('data_saver') ?? false;
     await MediaCache.instance.init();
     // encrypted files are opened right after they are downloaded
     MediaCache.instance.transform = _openDownloaded;
@@ -260,6 +321,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   }
 
   Future<void> signOut() async {
+    await Push.stop();
     // a signed-out phone keeps no one's chats, and not the key either
     await MediaCache.instance.store.clearJson(_cachePrefix);
     await E2E.instance.forget();
@@ -288,6 +350,7 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
     notifyListeners();
     await _initKeys();
     _subscribe();
+    _presence();
     unawaited(_loadProfile());
     unawaited(loadStories());
     await reloadChats();
@@ -872,15 +935,17 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
       if (chat.archived && !chat.muted) unawaited(setArchived(chat, false));
       if (!chat.muted) {
         _incoming.add(m);
-        if (!foreground || openChatId != m.chatId) _notify(chat, m);
+        _notify(chat, m);
       }
     }
     _sortChats();
     notifyListeners();
   }
 
+  /// A system notification for a new message, unless that chat is open on
+  /// screen right now (also while the app is in front, like Telegram).
   void _notify(Chat chat, Message m) {
-    if (foreground) return; // in-app banner is shown instead
+    if (foreground && openChatId == chat.id) return;
     final sender = memberById(chat, m.senderId)?.name ?? '';
     Notifier.instance.show(
       id: chat.id.hashCode & 0x7fffffff,
@@ -971,8 +1036,19 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
           if (lm is Map && lm['cipher'] != null) e['last_message'] = await _open(Map<String, dynamic>.from(lm));
         }
       }
+      final before = {for (final c in chats) c.id: c.lastMessage?.id};
+      final hadChats = chats.isNotEmpty;
       chats = data.map((e) => Chat.fromJson(e as Map<String, dynamic>)).toList();
       unawaited(MediaCache.instance.store.writeJson('${_cachePrefix}_chats', data));
+      // Catch up on what the live connection missed (it is often cut while the
+      // app is in the background): fill open/loaded chats and notify.
+      for (final c in chats) {
+        final last = c.lastMessage;
+        if (last == null || before[c.id] == last.id) continue;
+        final list = _messages[c.id];
+        if (list != null && !list.any((x) => x.id == last.id)) unawaited(loadMessages(c.id));
+        if (hadChats && last.senderId != myId && !c.muted && before.containsKey(c.id)) _notify(c, last);
+      }
       _showOutboxInChats();
       final open = openChatId == null ? null : chatById(openChatId!);
       if (open != null) open.unread = 0;
@@ -1282,7 +1358,9 @@ class AppController extends ChangeNotifier with WidgetsBindingObserver {
   void openChat(String id) {
     openChatId = id;
     _shareKeysSoon(id);
-    if (_messages[id] == null || !_diskLoaded.contains(id)) loadMessages(id);
+    // always ask the server too: messages that came while the live
+    // connection was down (app in the background) would otherwise be missing
+    loadMessages(id);
     final c = chatById(id);
     if (c != null) markRead(c);
   }

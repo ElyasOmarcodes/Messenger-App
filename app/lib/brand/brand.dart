@@ -8,7 +8,7 @@ class Brand {
 
   static const String nameLatin = 'Paigham';
   static const String nameNative = 'پیغام';
-  static const String version = '0.14.0';
+  static const String version = '0.15.0';
 
   /// The app's own font. Turned off for a test: null = the phone's system
   /// font (plain text). To bring Vazirmatn back, set this to [vazirmatn].
@@ -136,7 +136,8 @@ class Brand {
           backgroundColor: primary,
           foregroundColor: Colors.white,
           minimumSize: const Size(64, 52),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+          // iOS 27 buttons are capsules
+          shape: const StadiumBorder(),
           textStyle: const TextStyle(fontFamily: fontFamily, fontSize: 16, fontWeight: FontWeight.w700),
         ),
       ),

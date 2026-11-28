@@ -14,7 +14,7 @@ class Notifier {
   bool _ready = false;
   void Function(String payload)? onTap;
 
-  Future<void> init() async {
+  Future<void> init({bool askPermission = true}) async {
     try {
       await _plugin.initialize(
         settings: const InitializationSettings(
@@ -29,7 +29,7 @@ class Notifier {
           if (r.payload != null) onTap?.call(r.payload!);
         },
       );
-      if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+      if (askPermission && !kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
         await _plugin.resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>()?.requestNotificationsPermission();
       }
       _ready = true;
@@ -50,9 +50,15 @@ class Notifier {
           android: AndroidNotificationDetails(
             call ? 'calls' : 'messages',
             call ? 'Calls' : 'Messages',
-            importance: Importance.high,
+            importance: call ? Importance.max : Importance.high,
             priority: Priority.high,
             category: call ? AndroidNotificationCategory.call : AndroidNotificationCategory.message,
+            // a ringing call fills the screen (also on the lock screen), and
+            // stops after 45 s like the call itself
+            fullScreenIntent: call,
+            ongoing: call,
+            timeoutAfter: call ? 45000 : null,
+            visibility: NotificationVisibility.private,
           ),
           iOS: const DarwinNotificationDetails(),
           macOS: const DarwinNotificationDetails(),

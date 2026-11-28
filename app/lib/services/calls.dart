@@ -50,14 +50,35 @@ class CallController extends ChangeNotifier {
 
   bool get busy => phase != CallPhase.idle && phase != CallPhase.ended;
 
-  static Map<String, dynamic> get _iceConfig => {
-    'iceServers': [
-      {
-        'urls': ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
-      },
-      if (AppConfig.turnUrl.isNotEmpty) {'urls': AppConfig.turnUrl, 'username': AppConfig.turnUser, 'credential': AppConfig.turnPass},
-    ],
-  };
+  // TURN relay: short-lived credentials from the "turn" Edge Function
+  // (coturn, REST auth). Needed behind carrier NAT (CGNAT), where most
+  // mobile calls cannot connect directly.
+  Map<String, dynamic>? _turn;
+  DateTime _turnUntil = DateTime(0);
+
+  Future<Map<String, dynamic>> _iceConfig() async {
+    if (_turn == null || DateTime.now().isAfter(_turnUntil)) {
+      try {
+        final r = await _sb.functions.invoke('turn').timeout(const Duration(seconds: 6));
+        final d = Map<String, dynamic>.from(r.data as Map);
+        if ((d['urls'] as List).isNotEmpty) {
+          _turn = {'urls': d['urls'], 'username': d['username'], 'credential': d['credential']};
+          _turnUntil = DateTime.now().add(Duration(seconds: ((d['ttl'] as num?) ?? 3600).toInt() - 300));
+        }
+      } catch (_) {
+        // no TURN function deployed (or offline): direct + STUN only
+      }
+    }
+    return {
+      'iceServers': [
+        {
+          'urls': ['stun:stun.l.google.com:19302', 'stun:stun1.l.google.com:19302'],
+        },
+        ?_turn,
+        if (AppConfig.turnUrl.isNotEmpty) {'urls': AppConfig.turnUrl, 'username': AppConfig.turnUser, 'credential': AppConfig.turnPass},
+      ],
+    };
+  }
 
   // ── Listening for incoming calls ─────────────────────────────────────────
   void start() {
@@ -68,6 +89,26 @@ class CallController extends ChangeNotifier {
         .onPostgresChanges(event: PostgresChangeEvent.insert, schema: 'public', table: 'calls', callback: (p) => _onCallInsert(p.newRecord))
         .onPostgresChanges(event: PostgresChangeEvent.update, schema: 'public', table: 'calls', callback: (p) => _onCallUpdate(p.newRecord))
         .subscribe();
+    unawaited(checkRinging());
+  }
+
+  /// Opened from a call notification (push) — or the app was asleep when
+  /// the call came: pick up a call that is still ringing for me.
+  Future<void> checkRinging() async {
+    final me = app.myId;
+    if (me == null || busy) return;
+    try {
+      final since = DateTime.now().toUtc().subtract(const Duration(seconds: 45)).toIso8601String();
+      final rows = await _sb
+          .from('calls')
+          .select()
+          .eq('callee_id', me)
+          .eq('status', 'ringing')
+          .gt('created_at', since)
+          .order('created_at', ascending: false)
+          .limit(1);
+      if (rows.isNotEmpty && !busy) _onCallInsert(rows.first);
+    } catch (_) {}
   }
 
   void stop() {
@@ -236,7 +277,10 @@ class CallController extends ChangeNotifier {
   Future<void> _openMedia() async {
     _local = await navigator.mediaDevices.getUserMedia({
       'audio': true,
-      'video': video ? {'facingMode': 'user', 'width': 640, 'height': 480} : false,
+      // data saver: a smaller picture uses much less of a weak connection
+      'video': video
+          ? {'facingMode': 'user', 'width': app.dataSaver ? 320 : 640, 'height': app.dataSaver ? 240 : 480, 'frameRate': app.dataSaver ? 15 : 24}
+          : false,
     });
     localRenderer.srcObject = _local;
     muted = false;
@@ -247,7 +291,7 @@ class CallController extends ChangeNotifier {
     _remoteSet = false;
     _pendingIce.clear();
     _seenSignals.clear();
-    final pc = await createPeerConnection(_iceConfig);
+    final pc = await createPeerConnection(await _iceConfig());
     _pc = pc;
     for (final t in _local!.getTracks()) {
       await pc.addTrack(t, _local!);

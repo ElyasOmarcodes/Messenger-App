@@ -1,0 +1,9 @@
+# Run on a small VPS with a public IP:  docker compose up -d
+services:
+  coturn:
+    image: coturn/coturn:4.6.3
+    restart: unless-stopped
+    network_mode: host          # TURN needs many UDP ports; host networking is simplest
+    volumes:
+      - ./turnserver.conf:/etc/coturn/turnserver.conf:ro
+      # - /etc/letsencrypt:/etc/letsencrypt:ro

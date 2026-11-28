@@ -87,11 +87,22 @@ class _ChatScreenState extends State<ChatScreen> {
     if (_app == null) {
       _app = AppScope.read(context);
       WidgetsBinding.instance.addPostFrameCallback((_) => _app!.openChat(widget.chatId));
+      // "online / last seen" in the header stays fresh while the chat is open
+      void presence() {
+        final c = _app!.chatById(widget.chatId);
+        if (c != null) _app!.refreshPresence(c);
+      }
+
+      WidgetsBinding.instance.addPostFrameCallback((_) => presence());
+      _presenceTimer = Timer.periodic(const Duration(seconds: 45), (_) => presence());
     }
   }
 
+  Timer? _presenceTimer;
+
   @override
   void dispose() {
+    _presenceTimer?.cancel();
     _app?.closeChat(widget.chatId);
     _input.dispose();
     _focus.dispose();
@@ -160,10 +171,13 @@ class _ChatScreenState extends State<ChatScreen> {
     List<XFile> files;
     try {
       if (camera) {
-        final f = await picker.pickImage(source: ImageSource.camera, imageQuality: 85, maxWidth: 2560);
+        // compressed like Telegram before it is sent (smaller with data saver)
+        final lim = _app!.photoLimits;
+        final f = await picker.pickImage(source: ImageSource.camera, imageQuality: lim.quality, maxWidth: lim.side, maxHeight: lim.side);
         files = f == null ? [] : [f];
       } else {
-        files = await picker.pickMultiImage(imageQuality: 85, maxWidth: 2560, limit: 10);
+        final lim = _app!.photoLimits;
+        files = await picker.pickMultiImage(imageQuality: lim.quality, maxWidth: lim.side, maxHeight: lim.side, limit: 10);
       }
     } catch (_) {
       _toast(camera ? 'camera_failed' : 'err_generic');
@@ -675,10 +689,30 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   String _subtitle(AppController app, Chat c) {
-    if (c.isGroup) return '${context.digits(c.members.length)} ${context.tr('members')}';
+    if (c.isGroup) {
+      final on = c.members.where((m) => m.id != app.myId && m.online).length;
+      final n = '${context.digits(c.members.length)} ${context.tr('members')}';
+      return on > 0 ? '$n، ${context.digits(on)} ${context.tr('online_now')}' : n;
+    }
     final p = c.peer(app.myId ?? '');
     if (p == null) return '';
-    return p.username != null ? '@${p.username}' : p.email;
+    return lastSeenText(context, p);
+  }
+
+  /// Telegram-style: "online", "last seen just now / 5 minutes ago /
+  /// today at 14:20 / yesterday at … / on 3 Qaws".
+  static String lastSeenText(BuildContext context, Profile p) {
+    final s = Strings(context.lang);
+    final t = p.lastSeen;
+    if (t == null) return s.get('last_seen_recently');
+    if (p.online) return s.get('online_now');
+    final d = DateTime.now().difference(t);
+    if (d.inMinutes < 1) return s.get('last_seen_now');
+    if (d.inMinutes < 60) return s.get('last_seen_min', {'n': localDigits('${d.inMinutes}', context.lang)});
+    final at = hhmm(t, context.lang);
+    if (sameDay(t, DateTime.now())) return s.get('last_seen_today', {'t': at});
+    if (sameDay(t, DateTime.now().subtract(const Duration(days: 1)))) return s.get('last_seen_yesterday', {'t': at});
+    return s.get('last_seen_date', {'d': chatListTime(t, context.lang, s)});
   }
 
   // ── Build ────────────────────────────────────────────────────────────────
@@ -722,39 +756,42 @@ class _ChatScreenState extends State<ChatScreen> {
             elevation: 0,
             scrolledUnderElevation: 0,
             titleSpacing: widget.embedded ? 16 : 0,
-            title: LiquidGlass(
-              radius: 23,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(23),
-                onTap: () => _openInfo(app, chat),
-                child: Padding(
-                  padding: const EdgeInsetsDirectional.fromSTEB(3, 3, 14, 3),
-                  child: Row(
-                    children: [
-                      ChatAvatar(chat: chat, size: 40),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
+            // plain (no frame), like Telegram
+            title: InkWell(
+              borderRadius: BorderRadius.circular(23),
+              onTap: () => _openInfo(app, chat),
+              child: Padding(
+                padding: const EdgeInsetsDirectional.fromSTEB(3, 3, 14, 3),
+                child: Row(
+                  children: [
+                    ChatAvatar(chat: chat, size: 40),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
+                          ),
+                          if (!chat.isSaved)
                             Text(
-                              title,
+                              _subtitle(app, chat),
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-                            ),
-                            if (!chat.isSaved)
-                              Text(
-                                _subtitle(app, chat),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(fontSize: 13, fontWeight: FontWeight.w400, color: cs.onSurfaceVariant),
+                              // "online" in the accent colour, like Telegram
+                              style: TextStyle(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w400,
+                                color: !chat.isGroup && (chat.peer(app.myId ?? '')?.online ?? false) ? cs.primary : cs.onSurfaceVariant,
                               ),
-                          ],
-                        ),
+                            ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
@@ -1179,6 +1216,8 @@ class _ChatScreenState extends State<ChatScreen> {
     crossAxisAlignment: CrossAxisAlignment.end,
     children: [
       IconButton(
+        constraints: const BoxConstraints.tightFor(width: 46, height: 48),
+        padding: EdgeInsets.zero,
         tooltip: context.tr(_emoji ? 'keyboard' : 'emoji'),
         onPressed: () {
           setState(() => _emoji = !_emoji);
@@ -1195,7 +1234,7 @@ class _ChatScreenState extends State<ChatScreen> {
             turns: Tween(begin: 0.75, end: 1.0).animate(a),
             child: FadeTransition(opacity: a, child: c),
           ),
-          child: Icon(_emoji ? Icons.keyboard_rounded : CupertinoIcons.smiley, key: ValueKey(_emoji), color: cs.onSurfaceVariant),
+          child: Icon(_emoji ? Icons.keyboard_rounded : Icons.emoji_emotions_rounded, key: ValueKey(_emoji), color: cs.onSurfaceVariant, size: 26),
         ),
       ),
       Expanded(
@@ -1250,7 +1289,7 @@ class _ChatScreenState extends State<ChatScreen> {
               border: InputBorder.none,
               enabledBorder: InputBorder.none,
               focusedBorder: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(vertical: 13),
+              contentPadding: const EdgeInsets.symmetric(vertical: 14),
             ),
           ),
         ),
@@ -1262,9 +1301,11 @@ class _ChatScreenState extends State<ChatScreen> {
             ? const SizedBox(width: 10, key: ValueKey('gap'))
             : IconButton(
                 key: const ValueKey('attach'),
+                constraints: const BoxConstraints.tightFor(width: 46, height: 48),
+                padding: EdgeInsets.zero,
                 tooltip: context.tr('attach'),
                 onPressed: () => _attachMenu(chat),
-                icon: Icon(CupertinoIcons.paperclip, color: cs.onSurfaceVariant),
+                icon: Transform.rotate(angle: 0.6, child: Icon(Icons.attach_file_rounded, color: cs.onSurfaceVariant, size: 26)),
               ),
       ),
     ],
@@ -1329,7 +1370,7 @@ class _ChatScreenState extends State<ChatScreen> {
   Widget _actionButton(Chat chat, ColorScheme cs) {
     // no media allowed in this group: no voice notes either
     final sendMode = _canSend || _locked || _editing != null || !chat.can(AppScope.read(context).myId ?? '', 'media');
-    final icon = _locked ? CupertinoIcons.arrow_up : (_editing != null ? Icons.check_rounded : (sendMode ? CupertinoIcons.arrow_up : CupertinoIcons.mic_fill));
+    final icon = _locked ? Icons.send_rounded : (_editing != null ? Icons.check_rounded : (sendMode ? Icons.send_rounded : Icons.mic_rounded));
     final button = AnimatedScale(
       // pressed: a quick dip; recording: the big Telegram circle
       scale: _recording && !_locked ? 1.5 : (_pressing ? 0.86 : 1),

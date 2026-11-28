@@ -147,6 +147,13 @@ class _StorageScreenState extends State<StorageScreen> {
               onTap: () => _pick(context.tr('max_cache'), limits, app.maxCacheMb, app.setMaxCache),
             ),
             SwitchListTile.adaptive(
+              secondary: const Icon(Icons.network_check_rounded),
+              title: Text(context.tr('data_saver')),
+              subtitle: Text(context.tr('data_saver_sub')),
+              value: app.dataSaver,
+              onChanged: app.setDataSaver,
+            ),
+            SwitchListTile.adaptive(
               secondary: const Icon(Icons.photo_outlined),
               title: Text(context.tr('auto_photos')),
               subtitle: Text(context.tr('auto_photos_sub')),

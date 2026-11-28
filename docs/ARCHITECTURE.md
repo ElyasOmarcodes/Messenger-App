@@ -54,6 +54,7 @@ Run each file in `backend/supabase/migrations/` once, in order, in the Supabase 
 6. `20261129000000_paigham_v8.sql`: end-to-end encryption (`user_keys`, `key_backups`, `chat_keys`, `chat_key_state`, `messages.cipher` / `key_id`, `edit_message_e2e`). Until it is run, the app keeps working without encryption.
 7. `20261130000000_paigham_v9.sql`: nothing readable after a server break-in: sealed stories (`stories.cipher`, `story_keys`, `story_audience`), sealed reactions, `seal_old_message` for messages from before v8, and deleting one's own old attachment files.
 8. `20261201000000_paigham_v10.sql`: groups like Telegram: owner / admins with rights / members, group permissions (enforced on sending), remove and ban, invite links and public group links, description, delete group, `put_chat_keys`; members can no longer change their own role or a group's details.
+9. `20261202000000_paigham_v11.sql`: push notifications (`push_tokens`, `push_config`, trigger `push_notify` → Edge Function `push`) and presence (`profiles.last_seen`, `touch_presence`). Setup: docs/PUSH_AND_TURN.md.
 
 ## End-to-end encryption
 

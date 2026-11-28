@@ -54,8 +54,10 @@ class LiquidGlass extends StatelessWidget {
         useOwnLayer: false,
         quality: lg.GlassQuality.premium,
         shape: lg.LiquidRoundedSuperellipse(borderRadius: circle ? 999 : radius),
-        settings: dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light,
-        color: tint,
+        // a tint makes it "prominent" glass (e.g. the blue new-chat button)
+        settings: tint == null
+            ? (dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light)
+            : (dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light).copyWith(glassColor: tint!.withValues(alpha: 0.82)),
         child: inner,
       );
     }

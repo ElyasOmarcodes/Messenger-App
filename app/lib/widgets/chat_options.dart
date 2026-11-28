@@ -18,12 +18,38 @@ class ChatAvatar extends StatelessWidget {
     final app = AppScope.of(context);
     if (chat.isSaved) return SavedAvatar(size: size);
     final peer = chat.isGroup ? null : chat.peer(app.myId ?? '');
-    return Avatar(
+    final avatar = Avatar(
       seed: chat.isGroup ? chat.id : (peer?.id ?? chat.id),
       label: app.chatTitle(chat),
       group: chat.isGroup,
       imageUrl: chat.isGroup ? chat.avatarUrl : peer?.avatarUrl,
       size: size,
+    );
+    if (peer == null || !peer.online || size < 36) return avatar;
+    // online: a green dot at the corner, like Telegram / WhatsApp
+    final dot = size * 0.26;
+    return SizedBox(
+      width: size,
+      height: size,
+      child: Stack(
+        clipBehavior: Clip.none,
+        children: [
+          avatar,
+          PositionedDirectional(
+            end: size * 0.02,
+            bottom: size * 0.02,
+            child: Container(
+              width: dot,
+              height: dot,
+              decoration: BoxDecoration(
+                color: const Color(0xFF34C759),
+                shape: BoxShape.circle,
+                border: Border.all(color: Theme.of(context).scaffoldBackgroundColor, width: size * 0.045),
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

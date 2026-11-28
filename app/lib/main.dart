@@ -1,5 +1,7 @@
 import 'package:flutter/cupertino.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_displaymode/flutter_displaymode.dart';
 import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 import 'package:flutter_localizations/flutter_localizations.dart';
 
@@ -17,6 +19,7 @@ import 'screens/call_screen.dart';
 import 'services/calls.dart';
 import 'services/messenger.dart';
 import 'services/notifier.dart';
+import 'services/push.dart';
 import 'widgets/glass.dart';
 
 Future<void> main() async {
@@ -25,6 +28,14 @@ Future<void> main() async {
   if (AppConfig.configured) {
     await Supabase.initialize(url: AppConfig.supabaseUrl, publishableKey: AppConfig.supabaseAnonKey);
   }
+  // Android phones with 90/120 Hz screens: Flutter apps often stay at 60 Hz
+  // unless they ask, which makes scrolling feel less smooth than native apps.
+  if (!kIsWeb && defaultTargetPlatform == TargetPlatform.android) {
+    try {
+      await FlutterDisplayMode.setHighRefreshRate();
+    } catch (_) {}
+  }
+  await Push.init(); // FCM (when configured): pushes for a closed app
   final controller = AppController();
   final calls = CallController(controller);
   // Liquid Glass shaders (real refraction on Impeller; lighter shader on Skia/web)

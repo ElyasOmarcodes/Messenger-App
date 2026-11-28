@@ -283,7 +283,13 @@ class Strings {
     'night_mode': {'ps': 'شپې بڼه', 'fa': 'حالت شب', 'en': 'Night mode'},
     'appearance_sub': {'ps': 'رنګ او بڼه', 'fa': 'رنگ و نما', 'en': 'Colours and theme'},
     'account': {'ps': 'حساب', 'fa': 'حساب', 'en': 'Account'},
-    'online_now': {'ps': 'وصل', 'fa': 'آنلاین', 'en': 'online'},
+    'online_now': {'ps': 'آنلاین', 'fa': 'آنلاین', 'en': 'online'},
+    'last_seen_recently': {'ps': 'دا وروستیو کې لیدل شوی', 'fa': 'اخیراً دیده شده', 'en': 'last seen recently'},
+    'last_seen_now': {'ps': 'همدا اوس لیدل شوی', 'fa': 'همین حالا دیده شد', 'en': 'last seen just now'},
+    'last_seen_min': {'ps': '{n} دقیقې مخکې لیدل شوی', 'fa': '{n} دقیقه پیش دیده شد', 'en': 'last seen {n} min ago'},
+    'last_seen_today': {'ps': 'نن په {t} لیدل شوی', 'fa': 'امروز ساعت {t} دیده شد', 'en': 'last seen today at {t}'},
+    'last_seen_yesterday': {'ps': 'پرون په {t} لیدل شوی', 'fa': 'دیروز ساعت {t} دیده شد', 'en': 'last seen yesterday at {t}'},
+    'last_seen_date': {'ps': 'په {d} لیدل شوی', 'fa': '{d} دیده شد', 'en': 'last seen {d}'},
     'tap_profile': {'ps': 'د معلوماتو لپاره کېکاږئ', 'fa': 'برای اطلاعات بزنید', 'en': 'tap for info'},
     // v0.6: saved messages, chat options
     // v0.12: formatting, links, groups
@@ -448,6 +454,12 @@ class Strings {
     'keep_forever': {'ps': 'تل', 'fa': 'همیشه', 'en': 'Forever'},
     'max_cache': {'ps': 'د حافظې حد', 'fa': 'حداکثر حافظه', 'en': 'Max cache size'},
     'no_limit': {'ps': 'بې حده', 'fa': 'بدون محدودیت', 'en': 'No limit'},
+    'data_saver': {'ps': 'د انټرنېټ سپمول', 'fa': 'صرفه‌جویی در اینترنت', 'en': 'Data saver'},
+    'data_saver_sub': {
+      'ps': 'کمزوري انټرنېټ: کوچني انځورونه، په کېکاږلو ښکته کول، سپک ویډیو زنګ',
+      'fa': 'اینترنت ضعیف: عکس‌های کوچک‌تر، دانلود با لمس، تماس تصویری سبک',
+      'en': 'Weak internet: smaller photos, download on tap, lighter video calls',
+    },
     'auto_photos': {'ps': 'انځورونه پخپله ښکته شي', 'fa': 'دانلود خودکار عکس‌ها', 'en': 'Auto-download photos'},
     'auto_photos_sub': {
       'ps': 'که بند وي، انځور په ګوته وهلو ښکته کېږي',

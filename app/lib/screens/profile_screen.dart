@@ -1,6 +1,7 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:liquid_glass_widgets/liquid_glass_widgets.dart' as lg;
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -9,6 +10,7 @@ import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/messenger.dart';
 import '../widgets/avatar.dart';
+import '../widgets/glass.dart';
 import '../widgets/media_views.dart';
 import 'group_admin.dart';
 import 'call_screen.dart';
@@ -385,7 +387,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ),
           // action cards at the bottom of the header
-          Positioned(left: 12, right: 12, bottom: 12, height: 74, child: Row(children: actions)),
+          // the cards share one glass layer (one capture of the screen)
+          Positioned(
+            left: 12,
+            right: 12,
+            bottom: 12,
+            height: 74,
+            child: lg.AdaptiveLiquidGlassLayer(
+              quality: lg.GlassQuality.premium,
+              settings: dark ? lg.LiquidGlassSettings.ios27Dark : lg.LiquidGlassSettings.ios27Light,
+              child: Row(children: actions),
+            ),
+          ),
           // round buttons
           if (canPop)
             PositionedDirectional(
@@ -665,24 +678,22 @@ class _RoundButton extends StatelessWidget {
   final bool onBig;
   final String tooltip;
 
+  // iOS 27: a round Liquid Glass button (also over the big photo)
   @override
-  Widget build(BuildContext context) {
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return Tooltip(
-      message: tooltip,
+  Widget build(BuildContext context) => Tooltip(
+    message: tooltip,
+    child: LiquidGlass(
+      circle: true,
       child: Material(
-        color: onBig ? Colors.black.withValues(alpha: 0.30) : (dark ? const Color(0xCC202B38) : const Color(0xCCEEF1F5)),
-        shape: CircleBorder(
-          side: BorderSide(color: Colors.white.withValues(alpha: onBig ? 0.25 : (dark ? 0.08 : 0.6)), width: 0.8),
-        ),
+        type: MaterialType.transparency,
         child: InkWell(
           customBorder: const CircleBorder(),
           onTap: onTap,
           child: SizedBox(width: 44, height: 44, child: Icon(icon, color: onBig ? Colors.white : Theme.of(context).colorScheme.onSurface)),
         ),
       ),
-    );
-  }
+    ),
+  );
 }
 
 /// Rounded action card (message, mute, call, video…).
@@ -694,38 +705,36 @@ class _Action extends StatelessWidget {
   final bool danger;
   final bool onBig;
 
+  // iOS 27: Liquid Glass action cards (message, mute, call, video…)
   @override
   Widget build(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
     final fg = danger ? Brand.pomegranate : (onBig ? Colors.white : (dark ? Colors.white : Theme.of(context).colorScheme.primary));
-    final bg = onBig ? Colors.black.withValues(alpha: 0.32) : (dark ? const Color(0xFF202B38) : const Color(0xFFEEF1F5));
     return Expanded(
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 300),
-          decoration: BoxDecoration(
-            color: bg,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: onBig ? 0.18 : (dark ? 0.06 : 0.7)), width: 0.8),
-          ),
+        child: LiquidGlass(
+          radius: 18,
+          shadow: false,
           child: Material(
             type: MaterialType.transparency,
             child: InkWell(
-              borderRadius: BorderRadius.circular(16),
+              borderRadius: BorderRadius.circular(18),
               onTap: onTap,
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Icon(icon, color: fg, size: 25),
-                  const SizedBox(height: 5),
-                  Text(
-                    label,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(fontSize: 12.5, color: fg, fontWeight: FontWeight.w600),
-                  ),
-                ],
+              child: SizedBox.expand(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(icon, color: fg, size: 25),
+                    const SizedBox(height: 5),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(fontSize: 12.5, color: fg, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ),
               ),
             ),
           ),

@@ -188,7 +188,12 @@ Future<void> addStory(BuildContext context) async {
   String? name;
   if (choice != 'text_story') {
     try {
-      final f = await ImagePicker().pickImage(source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery, imageQuality: 85, maxWidth: 2160);
+      final f = await ImagePicker().pickImage(
+        source: choice == 'camera' ? ImageSource.camera : ImageSource.gallery,
+        imageQuality: AppScope.read(context).photoLimits.quality,
+        maxWidth: 1440,
+        maxHeight: 1440,
+      );
       if (f == null) return;
       bytes = await f.readAsBytes();
       name = f.name;

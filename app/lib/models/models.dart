@@ -4,7 +4,17 @@ import 'dart:typed_data';
 String avatarBaseUrl = '';
 
 class Profile {
-  Profile({required this.id, required this.email, required this.displayName, this.username, this.avatarPath, this.lastReadAt, this.role, this.rights});
+  Profile({
+    required this.id,
+    required this.email,
+    required this.displayName,
+    this.username,
+    this.avatarPath,
+    this.lastReadAt,
+    this.role,
+    this.rights,
+    this.lastSeen,
+  });
 
   final String id;
   final String email;
@@ -18,6 +28,12 @@ class Profile {
 
   /// An admin's rights (info, delete, ban, invite, pin, add, add_admins).
   final Map<String, dynamic>? rights;
+
+  /// When this person last had the app open (null: unknown / hidden).
+  final DateTime? lastSeen;
+
+  /// Online = the app was open within the last ~2 minutes (heartbeats).
+  bool get online => lastSeen != null && DateTime.now().difference(lastSeen!).inSeconds < 130;
 
   bool get isOwner => role == 'owner';
   bool get isAdmin => role == 'admin' || role == 'owner';
@@ -36,6 +52,7 @@ class Profile {
     lastReadAt: j['last_read_at'] == null ? null : DateTime.parse(j['last_read_at'] as String).toLocal(),
     role: j['role'] as String?,
     rights: j['rights'] == null ? null : Map<String, dynamic>.from(j['rights'] as Map),
+    lastSeen: j['last_seen'] == null ? null : DateTime.parse(j['last_seen'] as String).toLocal(),
   );
 
   /// Same shape as [Profile.fromJson], for the offline copy on the phone.
@@ -48,6 +65,7 @@ class Profile {
     'last_read_at': lastReadAt?.toUtc().toIso8601String(),
     'role': role,
     'rights': rights,
+    'last_seen': lastSeen?.toUtc().toIso8601String(),
   };
 }
 

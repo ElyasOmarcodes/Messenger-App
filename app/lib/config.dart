@@ -33,6 +33,16 @@ class AppConfig {
   static const turnUser = String.fromEnvironment('TURN_USER');
   static const turnPass = String.fromEnvironment('TURN_PASS');
 
+  /// Firebase Cloud Messaging (push when the app is closed). Values from the
+  /// Firebase console (Project settings → your apps); empty = no push.
+  /// --dart-define=FCM_PROJECT_ID=... FCM_SENDER_ID=... FCM_API_KEY=...
+  ///              FCM_ANDROID_APP_ID=... FCM_IOS_APP_ID=...
+  static const fcmProjectId = String.fromEnvironment('FCM_PROJECT_ID');
+  static const fcmSenderId = String.fromEnvironment('FCM_SENDER_ID');
+  static const fcmApiKey = String.fromEnvironment('FCM_API_KEY');
+  static const fcmAndroidAppId = String.fromEnvironment('FCM_ANDROID_APP_ID');
+  static const fcmIosAppId = String.fromEnvironment('FCM_IOS_APP_ID');
+
   /// Storage bucket for photos and files.
   static const attachmentsBucket = 'attachments';
 

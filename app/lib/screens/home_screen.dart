@@ -11,6 +11,7 @@ import '../l10n/strings.dart';
 import '../models/models.dart';
 import '../services/messenger.dart';
 import '../services/notifier.dart';
+import '../services/push.dart';
 import '../widgets/avatar.dart';
 import '../widgets/glass.dart';
 import 'call_screen.dart';
@@ -45,10 +46,18 @@ class _HomeScreenState extends State<HomeScreen> {
       _sub = AppScope.read(context).incoming.listen(_onIncoming);
       CallScope.read(context).start();
       Notifier.instance.onTap = (payload) {
-        if (!mounted || !payload.startsWith('chat:')) return;
-        final chat = AppScope.read(context).chatById(payload.substring(5));
-        if (chat != null) openChat(chat);
+        if (!mounted) return;
+        if (payload.startsWith('call:')) {
+          CallScope.read(context).checkRinging();
+          return;
+        }
+        if (!payload.startsWith('chat:')) return;
+        _openChatId(payload.substring(5));
       };
+      // pushes (Firebase) for when the app is closed or asleep
+      final app = AppScope.read(context);
+      final calls = CallScope.read(context);
+      Push.start(lang: app.lang.code, onMessage: app.reloadChats, onCall: calls.checkRinging, onOpenChat: _openChatId);
     }
   }
 
@@ -58,23 +67,18 @@ class _HomeScreenState extends State<HomeScreen> {
     super.dispose();
   }
 
-  void _onIncoming(Message m) {
-    if (!mounted) return;
+  // New messages raise a system notification (visible on every screen), so
+  // there is no in-app snackbar any more.
+  void _onIncoming(Message m) {}
+
+  Future<void> _openChatId(String id) async {
     final app = AppScope.read(context);
-    if (app.openChatId == m.chatId) return;
-    final chat = app.chatById(m.chatId);
-    if (chat == null) return;
-    final sender = app.memberById(chat, m.senderId)?.name ?? '';
-    final who = chat.isGroup ? '${app.chatTitle(chat)} · $sender' : sender;
-    ScaffoldMessenger.of(context)
-      ..hideCurrentSnackBar()
-      ..showSnackBar(
-        SnackBar(
-          content: Text('$who: ${app.previewOf(m)}', maxLines: 2, overflow: TextOverflow.ellipsis),
-          action: SnackBarAction(label: '›', textColor: Brand.blueBright, onPressed: () => openChat(chat)),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+    var chat = app.chatById(id);
+    if (chat == null) {
+      await app.reloadChats();
+      chat = app.chatById(id);
+    }
+    if (chat != null && mounted) openChat(chat);
   }
 
   bool get _wide => MediaQuery.sizeOf(context).width >= wideBreakpoint;
@@ -151,22 +155,41 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // small story camera above the main button (Telegram)
-                  SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: FloatingActionButton(
-                      heroTag: 'story-fab',
-                      elevation: 2,
-                      backgroundColor: Theme.of(context).colorScheme.surfaceContainerHigh,
-                      foregroundColor: Theme.of(context).colorScheme.onSurface,
-                      tooltip: context.tr('add_story'),
-                      onPressed: () => addStory(context),
-                      child: const Icon(Icons.photo_camera_outlined, size: 22),
+                  // iOS 27: Liquid Glass round buttons; the main one tinted (prominent)
+                  Tooltip(
+                    message: context.tr('add_story'),
+                    child: LiquidGlass(
+                      circle: true,
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => addStory(context),
+                          child: SizedBox(
+                            width: 46,
+                            height: 46,
+                            child: Icon(Icons.photo_camera_rounded, size: 22, color: Theme.of(context).colorScheme.onSurface),
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                   const SizedBox(height: 14),
-                  FloatingActionButton(heroTag: 'new-fab', onPressed: _newChat, tooltip: context.tr('new_chat'), child: const Icon(Icons.add_comment_rounded)),
+                  Tooltip(
+                    message: context.tr('new_chat'),
+                    child: LiquidGlass(
+                      circle: true,
+                      tint: Theme.of(context).colorScheme.primary,
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: _newChat,
+                          child: const SizedBox(width: 58, height: 58, child: Icon(Icons.add_comment_rounded, color: Colors.white, size: 26)),
+                        ),
+                      ),
+                    ),
+                  ),
                 ],
               ),
             )
