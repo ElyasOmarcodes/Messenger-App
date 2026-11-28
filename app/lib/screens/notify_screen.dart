@@ -5,6 +5,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 import '../l10n/strings.dart';
 import '../services/messenger.dart';
+import '../services/push.dart';
 
 /// Asks for what notifications need on Android, like WhatsApp's first-run
 /// page: (1) permission to show notifications (Android 13+), (2) freedom to
@@ -127,6 +128,17 @@ class _NotifyScreenState extends State<NotifyScreen> with WidgetsBindingObserver
               _Step(icon: Icons.notifications_rounded, title: context.tr('nf_allow'), sub: context.tr('nf_allow_sub'), done: _notif),
               const SizedBox(height: 10),
               _Step(icon: Icons.battery_charging_full_rounded, title: context.tr('nf_battery'), sub: context.tr('nf_battery_sub'), done: _battery),
+              const SizedBox(height: 10),
+              // this phone known to the server (gets pushes when closed)
+              ValueListenableBuilder<String>(
+                valueListenable: Push.status,
+                builder: (context, st, _) => _Step(
+                  icon: Icons.cloud_done_rounded,
+                  title: context.tr('nf_server'),
+                  sub: st == 'registered' ? context.tr('nf_server_sub') : (st.isEmpty ? '…' : st),
+                  done: st == 'registered',
+                ),
+              ),
               const SizedBox(height: 14),
               Text(
                 context.tr('nf_xiaomi'),

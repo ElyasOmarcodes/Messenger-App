@@ -246,6 +246,8 @@ class Strings {
       'fa': 'گوشی برنامه را نمی‌بندد تا اعلان زود برسد',
       'en': 'The phone will not stop the app, so alerts arrive on time',
     },
+    'nf_server': {'ps': 'په سرور کې ثبت', 'fa': 'ثبت در سرور', 'en': 'Registered on the server'},
+    'nf_server_sub': {'ps': 'خبرتیاوې حتی تړل شوي اپ ته رسېږي', 'fa': 'اعلان حتی به برنامهٔ بسته می‌رسد', 'en': 'Pushes reach even a closed app'},
     'nf_go': {'ps': 'اجازه ورکړئ', 'fa': 'اجازه دهید', 'en': 'Allow'},
     'nf_done': {'ps': 'بشپړ شو', 'fa': 'تمام شد', 'en': 'Done'},
     'nf_later': {'ps': 'وروسته', 'fa': 'بعداً', 'en': 'Later'},

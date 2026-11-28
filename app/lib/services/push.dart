@@ -46,16 +46,24 @@ class Push {
   }) async {
     if (!configured || _started) return;
     _started = true;
+    status.value = 'starting';
     try {
       final fm = FirebaseMessaging.instance;
       await fm.requestPermission();
       await fm.setForegroundNotificationPresentationOptions(alert: false, badge: true, sound: false);
-      // the token arrives (and later changes) through onRegistered
-      fm.onRegistered.listen((t) {
-        _token = t;
-        unawaited(_save(t, lang));
-      });
-      await fm.register();
+      // The classic FCM registration token (what the server's FCM v1 send
+      // expects). The newer register()/onRegistered gives an installation id
+      // instead, which never reached the server here, so phones stayed
+      // unregistered. Deprecated, but the proven path.
+      // ignore: deprecated_member_use
+      fm.onTokenRefresh.listen((t) => unawaited(_save(t, lang)));
+      // ignore: deprecated_member_use
+      final t = await fm.getToken();
+      if (t == null || t.isEmpty) {
+        status.value = 'no token from Firebase';
+      } else {
+        await _save(t, lang);
+      }
       // app open: the live connection usually has it already; this catches
       // what it missed (and never shows a second notification)
       FirebaseMessaging.onMessage.listen((m) => m.data['type'] == 'call' ? onCall() : onMessage());
@@ -68,13 +76,24 @@ class Push {
       FirebaseMessaging.onMessageOpenedApp.listen(opened);
       final first = await fm.getInitialMessage();
       if (first != null) opened(first);
-    } catch (_) {}
+    } catch (e) {
+      _started = false; // try again next time
+      status.value = 'error: $e';
+    }
   }
 
+  /// What happened when registering this phone for pushes ('registered',
+  /// or what went wrong); shown on the notifications page.
+  static final status = ValueNotifier<String>('');
+
   static Future<void> _save(String token, String lang) async {
+    _token = token;
     final sb = Supabase.instance.client;
     final uid = sb.auth.currentUser?.id;
-    if (uid == null) return;
+    if (uid == null) {
+      status.value = 'not signed in';
+      return;
+    }
     try {
       await sb.from('push_tokens').upsert({
         'token': token,
@@ -83,7 +102,10 @@ class Push {
         'lang': lang,
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       });
-    } catch (_) {}
+      status.value = 'registered';
+    } catch (e) {
+      status.value = 'server: $e';
+    }
   }
 
   /// Signing out: this phone stops getting that account's pushes.
